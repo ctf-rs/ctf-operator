@@ -11,10 +11,10 @@ use kube::{
 };
 use serde::de::DeserializeOwned;
 
-use crate::{crd, ctx::Ctx};
+use crate::crd;
 
 use kubert::lease::Claim;
-use std::{collections::hash_map::Entry, sync::Arc};
+use std::sync::Arc;
 use tokio::{
     sync::{mpsc, watch::Receiver},
     time::{self, Duration},

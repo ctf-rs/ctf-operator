@@ -27,21 +27,21 @@ pub struct EventSpec {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct EventStatus {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub ctfs: Vec<EventCtfStatus>,
+    pub competitions: Vec<EventCompetitionStatus>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub conditions: Vec<Condition>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
-pub enum CtfKind {
+pub enum CompetitionKind {
     Jeopardy,
     AttackDefense,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
-pub struct EventCtfStatus {
+pub struct EventCompetitionStatus {
     pub name: String,
-    pub kind: CtfKind,
+    pub kind: CompetitionKind,
     #[serde(default, skip_serializing_if = "Option::is_some")]
     pub namespace: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

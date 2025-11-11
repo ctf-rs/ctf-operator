@@ -3,11 +3,10 @@ use std::time::Duration;
 use anyhow::bail;
 use clap::Parser;
 use kube::runtime::watcher;
-use kubert::lease;
 use tokio::sync::mpsc;
 use tracing::{info_span, Instrument};
 
-use crate::{cli::Args, ctx::Ctx, runtime::IndexList};
+use crate::cli::Args;
 
 mod cli;
 mod controller;
@@ -65,16 +64,20 @@ async fn main() -> anyhow::Result<()> {
             .instrument(info_span!("instances")),
     );
 
-    let ctx = Ctx::new(&rt);
-
     let client = rt.client();
 
-    let ctf_controller_task = controller::jeopardy::Controller::new(
+    let ctf_controller = controller::jeopardy::Controller::new(
         claims,
         client,
         hostname,
         updates_rx,
         Duration::from_millis(args.patch_timeout_ms),
+    );
+
+    let ctf_controller_task = tokio::spawn(
+        ctf_controller
+            .run()
+            .instrument(info_span!("status_controller")),
     );
 
     tokio::select! {
@@ -97,22 +100,18 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        // Block the main thread on the shutdown signal. This won't complete until the watch stream
-        // stops (after pending Pod updates are logged). If a second signal is received before the watch
-        // stream completes, the future fails.
         res = rt.run() => {
             if res.is_err() {
                 bail!("aborted");
             }
         }
 
-        // // If the watch stream completes, exit gracefully
-        // res = ctf_controller_task  => match res {
-        //     Err(error) => bail!("ctf controller failed: {}", error),
-        //     Ok(()) => {
-        //         tracing::debug!("ctf controller completed");
-        //     }
-        // },
+        res = ctf_controller_task  => match res {
+            Err(error) => bail!("ctf controller failed: {}", error),
+            Ok(()) => {
+                tracing::debug!("ctf controller completed");
+            }
+        },
     }
 
     Ok(())
