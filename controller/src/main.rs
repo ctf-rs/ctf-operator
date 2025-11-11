@@ -1,7 +1,9 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::bail;
+use cfg_if::cfg_if;
 use clap::Parser;
+use k8s_openapi::chrono::{DateTime, Utc};
 use kube::runtime::watcher;
 use tokio::sync::mpsc;
 use tracing::{info_span, Instrument};
@@ -32,16 +34,28 @@ async fn main() -> anyhow::Result<()> {
         .build()
         .await?;
 
-    let hostname =
-        std::env::var("HOSTNAME").expect("Failed to fetch `HOSTNAME` environment variable");
+    cfg_if! {
+        if #[cfg(debug_assertions)] {
+            let hostname = "test".to_string();
+            let claim = kubert::lease::Claim {
+                holder: "test".to_string(),
+                expiry: DateTime::<Utc>::MAX_UTC,
+            };
+            let (_claims_tx, claims) = tokio::sync::watch::channel(Arc::new(claim));
 
-    let claims = crate::runtime::lease::init(
-        &rt,
-        &args.control_plane_namespace,
-        &args.ctf_deployment_name,
-        &hostname,
-    )
-    .await?;
+        } else {
+            let hostname =
+                std::env::var("HOSTNAME").expect("Failed to fetch `HOSTNAME` environment variable");
+
+            let claims = crate::runtime::lease::init(
+                &rt,
+                &args.control_plane_namespace,
+                &args.ctf_deployment_name,
+                &hostname,
+            )
+            .await?;
+        }
+    }
 
     let (updates_tx, updates_rx) = mpsc::channel(UPDATE_QUEUE_SIZE);
 
@@ -77,7 +91,7 @@ async fn main() -> anyhow::Result<()> {
     let ctf_controller_task = tokio::spawn(
         ctf_controller
             .run()
-            .instrument(info_span!("status_controller")),
+            .instrument(info_span!("jeopardy_controller")),
     );
 
     tokio::select! {

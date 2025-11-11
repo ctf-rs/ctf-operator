@@ -70,8 +70,7 @@ impl Namespace {
 
     #[inline]
     pub fn is_empty(&self) -> bool {
-        todo!()
-        //self.ctfs.is_empty() && self.challs.is_empty() && self.instances.is_empty()
+        self.ctfs.is_empty() && self.challs.is_empty() && self.instances.is_empty()
     }
 
     #[inline]

@@ -20,7 +20,7 @@ use tokio::{
     time::{self, Duration},
 };
 
-pub const JEOPARDY_CONTROLLER_NAME: &'static str = "ctf-controller";
+pub const JEOPARDY_CONTROLLER_NAME: &'static str = "jeopardy-controller";
 
 pub struct Controller {
     claims: Receiver<Arc<Claim>>,
@@ -47,46 +47,6 @@ impl Controller {
         }
     }
 
-    // /// Process updates received from the index; each update is a patch that
-    // /// should be applied to update the status of a route. A patch should
-    // /// only be applied if we are the holder of the write lease.
-    // pub async fn run(mut self) {
-    //     // Select between the write lease claim changing and receiving updates
-    //     // from the index. If the lease claim changes, then check if we are
-    //     // now the leader. If so, we should apply the patches received;
-    //     // otherwise, we should drain the updates queue but not apply any
-    //     // patches since another policy controller is responsible for that.
-    //     let mut was_leader = false;
-    //     loop {
-    //         // Refresh the state of the lease on each iteration to ensure we're
-    //         // checking expiration.
-    //         let is_leader = self.claims.borrow_and_update().is_current_for(&self.name);
-    //         if was_leader != is_leader {
-    //             tracing::info!(leader=%is_leader, "Status controller leadership change");
-    //         }
-    //         was_leader = is_leader;
-
-    //         tokio::select!(
-    //              biased;
-    //         res = self.claims.changed() => {
-    //             res.expect("Claims watch must not be dropped");
-    //         }Some(Update {
-    //             kind,patch
-    //         }) = self.updates.recv() => {
-    //             if is_leader {
-    //                 match kind{
-    //                     UpdateKind::Ctf(name,namespace) => self.patch::<crd::Ctf>(&name, &namespace, patch).await;,
-    //                     UpdateKind::Challenge(name,namespace) => todo!(),
-    //                     UpdateKind::Instance(name,namespace) => todo!(),
-    //                 }
-    //             }else {
-    //                 tracing::debug!(?kind,"Dropping patch because we are not the leader");
-    //                 self.metrics.patch_drops.inc();
-    //             }
-    //         })
-    //     }
-    // }
-    //
     pub async fn run(mut self) {
         let mut was_leader = false;
         loop {
