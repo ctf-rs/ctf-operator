@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
     CustomResource, Serialize, Deserialize, Default, Debug, PartialEq, Eq, Clone, JsonSchema,
 )]
 #[kube(
-    group = "ctf.rs",
+    group = "reservation.ctf.rs",
     version = "v1",
     kind = "PortClaim",
     plural = "claims",
@@ -19,9 +19,7 @@ use serde::{Deserialize, Serialize};
     derive = "Default",
     shortname = "pcl"
 )]
-pub struct PortClaimSpec {
-
-}
+pub struct PortClaimSpec {}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct PortClaimStatus {
@@ -31,10 +29,8 @@ pub struct PortClaimStatus {
     pub conditions: Vec<Condition>,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
-pub struct PortClaimRef
-{
+pub struct PortClaimRef {
     pub name: String,
     pub namespace: String,
 }

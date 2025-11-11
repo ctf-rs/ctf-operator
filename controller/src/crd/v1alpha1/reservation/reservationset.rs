@@ -9,7 +9,7 @@ use super::PortClaimRef;
     CustomResource, Serialize, Deserialize, Default, Debug, PartialEq, Eq, Clone, JsonSchema,
 )]
 #[kube(
-    group = "ctf.rs",
+    group = "reservation.ctf.rs",
     version = "v1",
     kind = "PortReservationSet",
     plural = "reservations",
