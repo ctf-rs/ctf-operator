@@ -31,6 +31,13 @@ pub struct CtfSpec {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
+pub struct CtfRef {
+    pub name: String,
+    #[serde(default)]
+    pub namespace: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct CtfStatus {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub challenges: Vec<CtfChallengeStatus>,

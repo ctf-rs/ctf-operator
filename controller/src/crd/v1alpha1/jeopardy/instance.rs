@@ -3,9 +3,9 @@ use kube::CustomResource;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::crd::v1alpha1::{Flag, Service, Volume};
+use crate::crd::v1alpha1::{ChallengeRef, CtfRef};
 
-#[derive(CustomResource, Serialize, Deserialize, Debug, PartialEq, Eq, Clone, JsonSchema)]
+#[derive(CustomResource, Serialize, Deserialize, Debug, PartialEq, Clone, JsonSchema)]
 #[kube(
     group = "jeopardy.ctf.rs",
     version = "v1alpha1",
@@ -19,19 +19,21 @@ use crate::crd::v1alpha1::{Flag, Service, Volume};
     plural = "insts"
 )]
 pub struct InstanceSpec {
-    #[serde(rename = "fullName")]
-    pub full_name: String,
-    pub description: String,
-    pub flags: Vec<Flag>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub services: Vec<Service>,
-    #[serde(default)]
-    pub volumes: Vec<Volume>,
+    ctf: CtfRef,
+    challenge: ChallengeRef,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct InstanceStatus {
-    pub flag: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub flags: Vec<FlagsStatus>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conditions: Vec<Condition>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
+pub struct FlagsStatus {
+    pub name: String,
+    pub value: Option<String>,
     pub conditions: Vec<Condition>,
 }

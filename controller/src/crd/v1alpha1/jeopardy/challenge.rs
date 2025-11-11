@@ -30,6 +30,13 @@ pub struct ChallengeSpec {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
+pub struct ChallengeRef {
+    pub name: String,
+    #[serde(default)]
+    pub namespace: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct ChallengeStatus {
     pub flag: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
