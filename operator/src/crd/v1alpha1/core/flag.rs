@@ -25,6 +25,7 @@ pub struct FlagSpec {
     pub format: FlagFormat,
     #[serde(default)]
     pub body: String,
+    pub random: Option<FlagRandomRules>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
@@ -46,9 +47,11 @@ pub enum FlagFormat {
 }
 
 #[derive(Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]
-pub struct FlagBodyRules {
-    #[serde(rename = "maxLength", default = "default_max_length")]
-    pub max_length: u8,
+pub struct FlagRandomRules {
+    #[serde(rename = "concat", default)]
+    pub concat: Option<char>,
+    #[serde(default = "default_max_length")]
+    pub len: u8,
     #[serde(default = "default_upper")]
     pub upper: bool,
     #[serde(default = "default_lower")]
@@ -81,5 +84,5 @@ fn default_digits() -> bool {
 
 #[allow(dead_code)]
 fn default_special_chars() -> String {
-    "_-?!".into()
+    "".into()
 }

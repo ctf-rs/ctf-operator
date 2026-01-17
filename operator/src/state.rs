@@ -1,7 +1,10 @@
-use kube::{Client, runtime::events::Reporter};
+use kube::{
+    Client,
+    runtime::events::{Recorder, Reporter},
+};
 use std::sync::Arc;
 
-use crate::{Metrics, OPERATOR_NAME};
+use crate::{Context, Metrics, OPERATOR_NAME};
 
 #[derive(Clone)]
 pub struct State {
@@ -23,5 +26,13 @@ impl State {
             reporter: Arc::new(reporter),
             metrics: Arc::new(Metrics::default()),
         }
+    }
+
+    pub async fn to_context(&self, client: Client) -> Arc<Context> {
+        Arc::new(Context {
+            client: client.clone(),
+            recorder: Recorder::new(client, self.reporter.as_ref().to_owned()),
+            metrics: self.metrics.clone(),
+        })
     }
 }

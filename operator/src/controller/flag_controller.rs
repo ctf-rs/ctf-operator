@@ -2,8 +2,10 @@ use crate::v1alpha1::{Flag, FlagFormat, FlagStatus};
 use crate::{Context, Result, upsert_condition};
 use jiff::Timestamp;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
+use rand::Rng;
 use std::sync::Arc;
 use std::time::Duration;
+use tracing::info;
 
 use kube::Resource;
 use kube::core::object::HasStatus;
@@ -20,11 +22,15 @@ impl Controller<Flag> for FlagController {
         let eflag = get_evaluated_flag(&flag);
 
         let eflag = match eflag {
-            None => return create_flag(&flag, &ctx).await,
+            None => {
+                info!("Creating flag");
+                return create_flag(&flag, &ctx).await;
+            }
             Some(eflag) => eflag,
         };
 
         if !validate_flag(&flag, &eflag) {
+            info!("Recreating flag");
             return create_flag(&flag, &ctx).await;
         }
 
@@ -139,7 +145,37 @@ fn gen_flag_validation_condition(flag: &Flag) -> Condition {
 
 fn generate_flag(flag: &Flag) -> String {
     let prefix = &flag.spec.prefix;
-    let body = &flag.spec.body;
+    let mut body = flag.spec.body.to_owned();
+
+    if let Some(rand) = &flag.spec.random {
+        if let Some(c) = rand.concat {
+            body.push(c);
+        }
+
+        let mut alphabet = String::new();
+        if rand.digits {
+            alphabet.push_str("0123456789");
+        }
+        if rand.upper {
+            alphabet.push_str("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        }
+        if rand.lower {
+            alphabet.push_str("abcdefghijklmnopqrstuvwxyz");
+        }
+        if rand.lower {
+            alphabet.push_str(&rand.special_chars);
+        }
+
+        let mut rng = rand::rng();
+        let value: String = (0..rand.len)
+            .map(|_| {
+                let idx = rng.random_range(0..alphabet.len());
+                alphabet.as_bytes()[idx] as char
+            })
+            .collect();
+        debug_assert_eq!(value.len(), rand.len as usize);
+        body.push_str(&value);
+    }
 
     match flag.spec.format {
         FlagFormat::Curly => format!("{prefix}{{{body}}}"),
@@ -155,11 +191,51 @@ fn validate_flag(flag: &Flag, flag_str: &str) -> bool {
     let body = &flag.spec.body;
 
     // TODO: Regex check after instancing is added
-    match flag.spec.format {
-        FlagFormat::Curly => format!("{prefix}{{{body}}}") == flag_str,
-        FlagFormat::Round => format!("{prefix}({body})") == flag_str,
-        FlagFormat::Square => format!("{prefix}[{body}]") == flag_str,
-        FlagFormat::Angle => format!("{prefix}<{body}>") == flag_str,
-        FlagFormat::Underscore => format!("{prefix}_{body}") == flag_str,
+    let (mut start, end) = match flag.spec.format {
+        FlagFormat::Curly => (format!("{prefix}{{{body}"), "}"),
+        FlagFormat::Round => (format!("{prefix}({body}"), ")"),
+        FlagFormat::Square => (format!("{prefix}[{body}"), "]"),
+        FlagFormat::Angle => (format!("{prefix}<{body}"), ">"),
+        FlagFormat::Underscore => (format!("{prefix}_{body}"), ""),
+    };
+
+    if let Some(Some(c)) = flag.spec.random.as_ref().map(|r| r.concat) {
+        start.push(c);
     }
+
+    let rand_len = flag.spec.random.as_ref().map(|r| r.len).unwrap_or_default() as usize;
+
+    if flag_str.len() != start.len() + end.len() + rand_len {
+        return false;
+    }
+
+    if !flag_str.starts_with(&start) || !flag_str.ends_with(end) {
+        return false;
+    }
+
+    if let Some(rand) = &flag.spec.random {
+        let rand_str = &flag_str[start.len()..start.len() + rand.len as usize];
+        debug_assert_eq!(flag_str, &format!("{start}{rand_str}{end}"));
+        for c in rand_str.chars() {
+            if rand.digits && c.is_digit(10) {
+                continue;
+            }
+
+            if rand.upper && c.is_uppercase() {
+                continue;
+            }
+
+            if rand.lower && c.is_lowercase() {
+                continue;
+            }
+
+            if rand.special_chars.contains(c) {
+                continue;
+            }
+
+            return false;
+        }
+    }
+
+    true
 }
