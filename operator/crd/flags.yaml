@@ -22,7 +22,6 @@ spec:
           spec:
             properties:
               body:
-                default: ''
                 type: string
               format:
                 default: curly
@@ -33,6 +32,14 @@ spec:
                 - angle
                 - underscore
                 type: string
+              options:
+                default:
+                  ignoreCase: false
+                properties:
+                  ignoreCase:
+                    default: false
+                    type: boolean
+                type: object
               prefix:
                 type: string
               random:
@@ -63,6 +70,7 @@ spec:
                     type: boolean
                 type: object
             required:
+            - body
             - prefix
             type: object
           status:

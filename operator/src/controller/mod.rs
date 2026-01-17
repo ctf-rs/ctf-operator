@@ -37,47 +37,53 @@ where
 
     const ERROR_RECONCILE_REQUEUE_TIME: u64 = 60; // 1 minute
 
-    async fn patch_status_namespaced<S>(resource: &Res, ctx: &Context, status: S) -> Result<()>
+    fn patch_status_namespaced<S>(
+        resource: &Res,
+        ctx: &Context,
+        status: S,
+    ) -> impl std::future::Future<Output = Result<()>>
     where
         S: Serialize,
         Res: Resource<Scope = NamespaceResourceScope> + DeserializeOwned,
     {
-        let client = ctx.client.clone();
-        let ns = resource.namespace().unwrap();
-        let name = resource.name_any();
-        let api: Api<Res> = Api::namespaced(client, &ns);
+        async move {
+            let client = ctx.client.clone();
+            let ns = resource.namespace().unwrap();
+            let name = resource.name_any();
+            let api: Api<Res> = Api::namespaced(client, &ns);
 
-        let patch = Patch::Apply(json!({
-            "apiVersion": format!("{}/{}", Res::group(&Res::DynamicType::default()), Res::version(&Res::DynamicType::default())),
-            "kind": Res::kind(&Res::DynamicType::default()),
-            "status": status
-        }));
+            let patch = Patch::Apply(json!({
+                "apiVersion": format!("{}/{}", Res::group(&Res::DynamicType::default()), Res::version(&Res::DynamicType::default())),
+                "kind": Res::kind(&Res::DynamicType::default()),
+                "status": status
+            }));
 
-        let pp = PatchParams::apply(FlagController::NAME).force();
-        api.patch_status(&name, &pp, &patch)
-            .await
-            .map_err(Error::KubeError)?;
-        Ok(())
+            let pp = PatchParams::apply(FlagController::NAME).force();
+            api.patch_status(&name, &pp, &patch)
+                .await
+                .map_err(Error::KubeError)?;
+            Ok(())
+        }
     }
 
-    async fn run(state: State)
+    fn run(state: State) -> impl std::future::Future<Output = ()> + Send
     where
         Res: Resource<Scope = NamespaceResourceScope> + DeserializeOwned,
     {
-        let client = Client::try_default()
-            .await
-            .expect("failed to create kube Client");
+        async move {
+            let client = Client::try_default()
+                .await
+                .expect("failed to create kube Client");
 
-        let api = Api::<Res>::all(client.clone());
-        let ctx = state.to_context(client).await;
-        kube::runtime::Controller::new(api, watcher::Config::default().any_semantic())
-            .shutdown_on_signal()
-            .run(Self::kube_reconcile, Self::kube_error_policy, ctx)
-            .filter_map(|x| async move { std::result::Result::ok(x) })
-            .for_each(|_| futures::future::ready(()))
-            .await;
-
-        todo!()
+            let api = Api::<Res>::all(client.clone());
+            let ctx = state.to_context(client).await;
+            kube::runtime::Controller::new(api, watcher::Config::default().any_semantic())
+                .shutdown_on_signal()
+                .run(Self::kube_reconcile, Self::kube_error_policy, ctx)
+                .filter_map(|x| async move { std::result::Result::ok(x) })
+                .for_each(|_| futures::future::ready(()))
+                .await;
+        }
     }
 
     #[instrument(skip(ctx, resource), fields(trace_id))]

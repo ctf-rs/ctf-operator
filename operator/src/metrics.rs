@@ -1,5 +1,5 @@
-use crate::{Error, v1alpha1::*};
-use kube::{Resource, ResourceExt};
+use crate::Error;
+use kube::Resource;
 use opentelemetry::trace::TraceId;
 use prometheus_client::{
     encoding::EncodeLabelSet,

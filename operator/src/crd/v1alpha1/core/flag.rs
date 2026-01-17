@@ -23,9 +23,11 @@ pub struct FlagSpec {
     pub prefix: String,
     #[serde(default)]
     pub format: FlagFormat,
-    #[serde(default)]
     pub body: String,
+    #[serde(default)]
     pub random: Option<FlagRandomRules>,
+    #[serde(default)]
+    pub options: FlagOptions,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
@@ -39,11 +41,11 @@ pub struct FlagStatus {
 #[serde(rename_all = "kebab-case")]
 pub enum FlagFormat {
     #[default]
-    Curly, // PREFIX{body}
-    Round,      // PREFIX(body)
-    Square,     // PREFIX[body]
-    Angle,      // PREFIX<body>
-    Underscore, // PREFIX_body
+    Curly, // prefix{body}
+    Round,      // prefix(body)
+    Square,     // prefix[body]
+    Angle,      // prefix<body>
+    Underscore, // prefix_body
 }
 
 #[derive(Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]
@@ -60,6 +62,12 @@ pub struct FlagRandomRules {
     pub digits: bool,
     #[serde(rename = "specialChars", default = "default_special_chars")]
     pub special_chars: String,
+}
+
+#[derive(Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FlagOptions {
+    #[serde(rename = "ignoreCase", default)]
+    pub ignore_case: bool,
 }
 
 #[allow(dead_code)]
