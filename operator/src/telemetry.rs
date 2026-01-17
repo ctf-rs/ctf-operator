@@ -43,7 +43,7 @@ fn init_tracer() -> SdkTracer {
 }
 
 /// Initialize tracing
-pub async fn init() {
+pub async fn init_telemetry() {
     // Setup tracing layers
     #[cfg(feature = "telemetry")]
     let otel = tracing_opentelemetry::OpenTelemetryLayer::new(init_tracer());

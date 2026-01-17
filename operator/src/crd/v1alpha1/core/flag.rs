@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
     CustomResource, Serialize, Deserialize, Default, Debug, PartialEq, Eq, Clone, JsonSchema,
 )]
 #[kube(
-    group = "flag.operator.ctf.rs",
-    version = "v1",
+    group = "operator.ctf.rs",
+    version = "v1alpha1",
     kind = "Flag",
     plural = "flags",
     root = "Flag",
@@ -22,9 +22,9 @@ use serde::{Deserialize, Serialize};
 pub struct FlagSpec {
     pub prefix: String,
     #[serde(default)]
-    pub braces: FlagBraces,
+    pub format: FlagFormat,
     #[serde(default)]
-    pub body: FlagBodyRules,
+    pub body: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
@@ -36,13 +36,13 @@ pub struct FlagStatus {
 
 #[derive(Debug, Default, Clone, Copy, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub enum FlagBraces {
+pub enum FlagFormat {
     #[default]
-    Curly, // { ... }
-    Round,  // ( ... )
-    Square, // [ ... ]
-    Angle,  // < ... >
-    None,
+    Curly, // PREFIX{body}
+    Round,      // PREFIX(body)
+    Square,     // PREFIX[body]
+    Angle,      // PREFIX<body>
+    Underscore, // PREFIX_body
 }
 
 #[derive(Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]
