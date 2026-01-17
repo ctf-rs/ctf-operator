@@ -62,7 +62,7 @@ spec:
                   lower:
                     default: true
                     type: boolean
-                  specialChars:
+                  special:
                     default: ''
                     type: string
                   upper:

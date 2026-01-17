@@ -60,8 +60,8 @@ pub struct FlagRandomRules {
     pub lower: bool,
     #[serde(default = "default_digits")]
     pub digits: bool,
-    #[serde(rename = "specialChars", default = "default_special_chars")]
-    pub special_chars: String,
+    #[serde(default = "default_special_chars")]
+    pub special: String,
 }
 
 #[derive(Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]

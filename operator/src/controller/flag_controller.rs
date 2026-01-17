@@ -163,7 +163,7 @@ fn generate_flag(flag: &Flag) -> String {
             alphabet.push_str("abcdefghijklmnopqrstuvwxyz");
         }
         if rand.lower {
-            alphabet.push_str(&rand.special_chars);
+            alphabet.push_str(&rand.special);
         }
 
         let mut rng = rand::rng();
@@ -229,7 +229,7 @@ fn validate_flag(flag: &Flag, flag_str: &str) -> bool {
                 continue;
             }
 
-            if rand.special_chars.contains(c) {
+            if rand.special.contains(c) {
                 continue;
             }
 
