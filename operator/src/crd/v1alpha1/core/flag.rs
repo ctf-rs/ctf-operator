@@ -1,0 +1,85 @@
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
+use kube::CustomResource;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+#[derive(
+    CustomResource, Serialize, Deserialize, Default, Debug, PartialEq, Eq, Clone, JsonSchema,
+)]
+#[kube(
+    group = "flag.operator.ctf.rs",
+    version = "v1",
+    kind = "Flag",
+    plural = "flags",
+    root = "Flag",
+    namespaced,
+    doc = "Custom resource representing a Flag",
+    status = "FlagStatus",
+    derive = "PartialEq",
+    derive = "Default",
+    shortname = "flag"
+)]
+pub struct FlagSpec {
+    pub prefix: String,
+    #[serde(default)]
+    pub braces: FlagBraces,
+    #[serde(default)]
+    pub body: FlagBodyRules,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
+pub struct FlagStatus {
+    pub flag: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conditions: Vec<Condition>,
+}
+
+#[derive(Debug, Default, Clone, Copy, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum FlagBraces {
+    #[default]
+    Curly, // { ... }
+    Round,  // ( ... )
+    Square, // [ ... ]
+    Angle,  // < ... >
+    None,
+}
+
+#[derive(Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FlagBodyRules {
+    #[serde(rename = "maxLength", default = "default_max_length")]
+    pub max_length: u8,
+    #[serde(default = "default_upper")]
+    pub upper: bool,
+    #[serde(default = "default_lower")]
+    pub lower: bool,
+    #[serde(default = "default_digits")]
+    pub digits: bool,
+    #[serde(rename = "specialChars", default = "default_special_chars")]
+    pub special_chars: String,
+}
+
+#[allow(dead_code)]
+fn default_max_length() -> u8 {
+    32
+}
+
+#[allow(dead_code)]
+fn default_upper() -> bool {
+    true
+}
+
+#[allow(dead_code)]
+fn default_lower() -> bool {
+    true
+}
+
+#[allow(dead_code)]
+fn default_digits() -> bool {
+    true
+}
+
+#[allow(dead_code)]
+fn default_special_chars() -> String {
+    "_-?!".into()
+}
