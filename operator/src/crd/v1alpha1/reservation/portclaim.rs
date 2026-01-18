@@ -3,34 +3,42 @@ use kube::CustomResource;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(
-    CustomResource, Serialize, Deserialize, Default, Debug, PartialEq, Eq, Clone, JsonSchema,
-)]
+use crate::v1alpha1::ReservationRef;
+
+#[derive(CustomResource, Serialize, Deserialize, Debug, PartialEq, Clone, JsonSchema)]
 #[kube(
-    group = "reservation.ctf.rs",
-    version = "v1",
+    group = "operator.ctf.rs",
+    version = "v1alpha1",
     kind = "PortClaim",
-    plural = "claims",
+    plural = "portclaims",
     root = "PortClaim",
     namespaced,
     doc = "Custom resource representing a PortClaim",
     status = "PortClaimStatus",
     derive = "PartialEq",
-    derive = "Default",
-    shortname = "pcl"
+    shortname = "port",
+    selectable = ".spec.reservation.name",
+    selectable = ".spec.reservation.namespace",
+    selectable = ".status.reservation.name",
+    selectable = ".status.reservation.namespace"
 )]
-pub struct PortClaimSpec {}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
-pub struct PortClaimStatus {
-    pub claim: String,
-    pub port: Option<u16>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub conditions: Vec<Condition>,
+pub struct PortClaimSpec {
+    pub reservation: ReservationRef,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
-pub struct PortClaimRef {
+pub struct PortClaimStatus {
+    #[serde(default)]
+    pub port: Option<u16>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conditions: Vec<Condition>,
+    pub reservation: Option<PortClaimReservationStatus>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
+pub struct PortClaimReservationStatus {
     pub name: String,
-    pub namespace: String,
+    pub namespace: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conditions: Vec<Condition>,
 }

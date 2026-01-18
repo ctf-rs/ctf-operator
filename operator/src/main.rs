@@ -1,7 +1,8 @@
 use clap::Parser;
 use ctf_operator::{
-    Args, Command, Controller, CrdArgs, FlagController, OperatorArgs, State, init_telemetry,
-    v1alpha1::Flag,
+    Args, Command, Controller, CrdArgs, FlagController, OperatorArgs, PortClaimController,
+    ReservationSetController, State, init_telemetry,
+    v1alpha1::{Flag, PortClaim, ReservationSet},
 };
 use kube::CustomResourceExt;
 
@@ -21,15 +22,34 @@ async fn start_operator(_args: OperatorArgs) -> anyhow::Result<()> {
 
     let state = State::new();
 
-    FlagController::run(state.clone()).await;
+    let flag_controller = FlagController::run(state.clone());
+    let reservation_controller = ReservationSetController::run(state.clone());
+    let portclaim_controller = PortClaimController::run(state.clone());
 
-    //tokio::join!(FlagController::run(state.clone()), ..).1?;
+    tokio::join!(
+        flag_controller,
+        reservation_controller,
+        portclaim_controller
+    );
     Ok(())
 }
 
 fn gen_crd(_args: CrdArgs) {
-    let crd = Flag::crd();
     std::fs::remove_dir_all("crd").unwrap();
     std::fs::create_dir_all("crd").unwrap();
-    std::fs::write("crd/flags.yaml", serde_yaml::to_string(&crd).unwrap()).unwrap();
+    std::fs::write(
+        "crd/flags.yaml",
+        serde_yaml::to_string(&Flag::crd()).unwrap(),
+    )
+    .unwrap();
+    std::fs::write(
+        "crd/reservationsets.yaml",
+        serde_yaml::to_string(&ReservationSet::crd()).unwrap(),
+    )
+    .unwrap();
+    std::fs::write(
+        "crd/portclaims.yaml",
+        serde_yaml::to_string(&PortClaim::crd()).unwrap(),
+    )
+    .unwrap();
 }

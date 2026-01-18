@@ -1,0 +1,8 @@
+apiVersion: operator.ctf.rs/v1alpha1
+kind: PortClaim
+metadata:
+  name: port1
+  namespace: default
+spec:
+  reservationRef:
+    name: example-reservation

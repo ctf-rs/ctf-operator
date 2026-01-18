@@ -1,8 +1,12 @@
 mod context;
 mod flag_controller;
+mod portclaim_controller;
+mod reservationset_controller;
 
 pub use context::*;
 pub use flag_controller::*;
+pub use portclaim_controller::*;
+pub use reservationset_controller::*;
 
 use crate::{Error, Result, State, get_trace_id};
 use futures::StreamExt;
@@ -66,6 +70,14 @@ where
         }
     }
 
+    fn kube_controller(client: Client) -> kube::runtime::Controller<Res>
+    where
+        Res: Resource<Scope = NamespaceResourceScope> + DeserializeOwned,
+    {
+        let api = Api::<Res>::all(client.clone());
+        kube::runtime::Controller::new(api, watcher::Config::default().any_semantic())
+    }
+
     fn run(state: State) -> impl std::future::Future<Output = ()> + Send
     where
         Res: Resource<Scope = NamespaceResourceScope> + DeserializeOwned,
@@ -75,9 +87,8 @@ where
                 .await
                 .expect("failed to create kube Client");
 
-            let api = Api::<Res>::all(client.clone());
-            let ctx = state.to_context(client).await;
-            kube::runtime::Controller::new(api, watcher::Config::default().any_semantic())
+            let ctx = state.to_context(client.clone()).await;
+            Self::kube_controller(client)
                 .shutdown_on_signal()
                 .run(Self::kube_reconcile, Self::kube_error_policy, ctx)
                 .filter_map(|x| async move { std::result::Result::ok(x) })
