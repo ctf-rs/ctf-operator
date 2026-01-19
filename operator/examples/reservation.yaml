@@ -5,4 +5,4 @@ metadata:
   namespace: default
 spec:
   start: 9000
-  end: 10000
+  end: 9000

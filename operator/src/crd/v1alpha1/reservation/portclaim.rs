@@ -39,6 +39,4 @@ pub struct PortClaimStatus {
 pub struct PortClaimReservationStatus {
     pub name: String,
     pub namespace: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub conditions: Vec<Condition>,
 }

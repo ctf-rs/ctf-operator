@@ -4,5 +4,5 @@ metadata:
   name: port1
   namespace: default
 spec:
-  reservationRef:
+  reservation:
     name: example-reservation

@@ -30,7 +30,7 @@ pub struct ReservationSetSpec {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct ReservationSetStatus {
-    pub claims: Vec<PortReservationSetClaimStatus>,
+    pub claims: Vec<ReservationSetClaimStatus>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub conditions: Vec<Condition>,
 }
@@ -42,9 +42,9 @@ pub struct ReservationRef {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
-pub struct PortReservationSetClaimStatus {
+pub struct ReservationSetClaimStatus {
     pub port: Option<u16>,
     pub name: String,
-    pub namespace: Option<String>,
+    pub namespace: String,
     pub conditions: Vec<Condition>,
 }

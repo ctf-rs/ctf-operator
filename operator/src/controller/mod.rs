@@ -126,14 +126,16 @@ where
     }
 }
 
-pub fn upsert_condition(conditions: &mut Vec<Condition>, mut new: Condition) {
+pub fn upsert_condition(conditions: &mut Vec<Condition>, mut new: Condition) -> bool {
     if let Some(existing) = conditions.iter_mut().find(|c| c.type_ == new.type_) {
         let state_changed = existing.status != new.status || existing.reason != new.reason;
         if !state_changed {
             new.last_transition_time = existing.last_transition_time.clone();
         }
         *existing = new;
+        state_changed
     } else {
         conditions.push(new);
+        true
     }
 }

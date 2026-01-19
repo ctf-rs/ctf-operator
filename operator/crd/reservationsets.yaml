@@ -76,7 +76,6 @@ spec:
                     name:
                       type: string
                     namespace:
-                      nullable: true
                       type: string
                     port:
                       format: uint16
@@ -87,6 +86,7 @@ spec:
                   required:
                   - conditions
                   - name
+                  - namespace
                   type: object
                 type: array
               conditions:

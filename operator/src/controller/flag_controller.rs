@@ -84,9 +84,7 @@ async fn create_flag(flag: &Flag, ctx: &Context) -> Result<Action> {
         //Reset flag
         status.flag = String::new();
         FlagController::patch_status_namespaced(flag, ctx, status).await?;
-        return Ok(Action::requeue(Duration::from_secs(
-            FlagController::ERROR_RECONCILE_REQUEUE_TIME,
-        )));
+        return Ok(Action::requeue(Duration::from_secs(0)));
     }
 
     status.flag = generate_flag(flag);
