@@ -173,9 +173,7 @@ async fn get_reserved_port(
         }
     };
 
-    let port = claim_status.port;
-
-    match port {
+    match claim_status.port {
         Some(port) => {
             if status.port != Some(port) {
                 if status.port.is_none() {
