@@ -126,8 +126,15 @@ spec:
             type: object
         required:
         - spec
-        title: ReservationSet
+        title: ReservationSetValidated
         type: object
+        x-kubernetes-validations:
+        - message: start be larger or equal than 1024
+          rule: self.spec.start >= 1024
+        - message: end be smaller or equal than 49151
+          rule: self.spec.end <= 49151
+        - message: start must be smaller or equal than end
+          rule: self.spec.start <= self.spec.end
     served: true
     storage: true
     subresources:

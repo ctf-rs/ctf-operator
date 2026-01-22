@@ -8,6 +8,7 @@ use kube::runtime::{WatchStreamExt, watcher};
 use rand::{Rng, rng};
 use std::collections::HashSet;
 use std::sync::Arc;
+use tracing::info;
 
 use kube::runtime::controller::Action;
 use kube::{Api, Client, Resource, ResourceExt};
@@ -26,10 +27,11 @@ impl Controller<ReservationSet> for ReservationSetController {
         let ports_stream = watcher(ports, watcher::Config::default().any_semantic())
             .modify(|pc| {
                 pc.managed_fields_mut().clear();
-                if let Some(status) = &mut pc.status {
-                    status.conditions.clear();
-                    status.port = None;
-                }
+                pc.status = None;
+                // if let Some(status) = &mut pc.status {
+                //     status.conditions.clear();
+                //     status.port = None;
+                // }
             })
             .touched_objects();
 
@@ -37,23 +39,28 @@ impl Controller<ReservationSet> for ReservationSetController {
             .watches_stream(ports_stream, |m| {
                 let reservation = &m.spec.reservation;
                 let ns = m.namespace().unwrap_or_default();
-                let mut refs = vec![
+
+                vec![
                     ObjectRef::new(&reservation.name)
                         .within(reservation.namespace.as_ref().unwrap_or(&ns)),
-                ];
+                ]
+                // let mut refs = vec![
+                //     ObjectRef::new(&reservation.name)
+                //         .within(reservation.namespace.as_ref().unwrap_or(&ns)),
+                // ];
 
-                if let Some(Some(stat_reservation)) = m.status.map(|s| s.reservation) {
-                    if reservation.name != stat_reservation.name
-                        && reservation.namespace != stat_reservation.namespace
-                    {
-                        refs.push(
-                            ObjectRef::new(&stat_reservation.name)
-                                .within(stat_reservation.namespace.as_ref().unwrap_or(&ns)),
-                        );
-                    }
-                }
+                // if let Some(Some(stat_reservation)) = m.status.map(|s| s.reservation) {
+                //     if reservation.name != stat_reservation.name
+                //         && reservation.namespace != stat_reservation.namespace
+                //     {
+                //         refs.push(
+                //             ObjectRef::new(&stat_reservation.name)
+                //                 .within(stat_reservation.namespace.as_ref().unwrap_or(&ns)),
+                //         );
+                //     }
+                // }
 
-                refs
+                // refs
             })
     }
 
@@ -67,9 +74,11 @@ impl Controller<ReservationSet> for ReservationSetController {
             return Ok(Action::await_change());
         }
 
-        let linked_ports = get_linked_ports(&reservationset, &ctx).await?;
+        let linked_ports = get_linked_claims(&reservationset, &ctx).await?;
 
+        info!("aaa");
         prune_invalid_ports(&reservationset, &ctx, &mut status).await?;
+        info!("bbb");
         adjust_claims(&reservationset, &ctx, &mut status, &linked_ports).await?;
 
         let mut reserved_ports: HashSet<u16> =
@@ -217,7 +226,7 @@ async fn prune_invalid_ports(
     status.claims.retain(|c| match c.port {
         None => true,
         Some(port) => {
-            !(reservation.spec.start..=reservation.spec.end).contains(&port) || ports.insert(port)
+            (reservation.spec.start..=reservation.spec.end).contains(&port) && ports.insert(port)
         }
     });
 
@@ -300,7 +309,7 @@ fn random_free_port(lo: u16, hi: u16, reserved: &HashSet<u16>) -> Option<u16> {
     None
 }
 
-async fn get_linked_ports(
+async fn get_linked_claims(
     reservationset: &ReservationSet,
     ctx: &Context,
 ) -> crate::Result<Vec<PortClaim>> {

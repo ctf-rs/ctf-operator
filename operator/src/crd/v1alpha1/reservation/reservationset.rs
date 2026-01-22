@@ -1,9 +1,8 @@
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
-use kube::CustomResource;
-use schemars::JsonSchema;
+use kube::{CustomResource, KubeSchema};
 use serde::{Deserialize, Serialize};
 #[derive(
-    CustomResource, Serialize, Deserialize, Default, Debug, PartialEq, Eq, Clone, JsonSchema,
+    CustomResource, Serialize, Deserialize, Default, Debug, PartialEq, Eq, Clone, KubeSchema,
 )]
 #[kube(
     group = "operator.ctf.rs",
@@ -17,31 +16,31 @@ use serde::{Deserialize, Serialize};
     derive = "PartialEq",
     derive = "Default",
     shortname = "prs",
-    // rule = Rule::new("self.start == oldSelf.start").message("start field is immutable"),
-    // rule = Rule::new("self.end == oldSelf.end").message("end field is immutable"),
-    // rule = Rule::new("self.start >= 1024").message("start be larger than 1024"),
-    // rule = Rule::new("self.end < 30000").message("end be smaller than 30000"),
-    // rule = Rule::new("self.start >= self.end").message("start must be equal or smaller than end"),
+    validation = Rule::new("self.spec.start >= 1024").message("start be larger or equal than 1024"),
+    validation = Rule::new("self.spec.end <= 49151").message("end be smaller or equal than 49151"),
+    validation = Rule::new("self.spec.start <= self.spec.end").message("start must be smaller or equal than end"),
 )]
 pub struct ReservationSetSpec {
     pub start: u16,
     pub end: u16,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, KubeSchema)]
 pub struct ReservationSetStatus {
     pub claims: Vec<ReservationSetClaimStatus>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub conditions: Vec<Condition>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, KubeSchema)]
 pub struct ReservationRef {
+    #[x_kube(validation = Rule::new("self == oldSelf").message("name field is immutable"))]
     pub name: String,
+    #[x_kube(validation = Rule::new("self == oldSelf").message("namespace field is immutable"))]
     pub namespace: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, KubeSchema)]
 pub struct ReservationSetClaimStatus {
     pub port: Option<u16>,
     pub name: String,

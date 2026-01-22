@@ -5,4 +5,4 @@ metadata:
   namespace: default
 spec:
   reservation:
-    name: example-reservation
+    name: example-reservation2

@@ -29,7 +29,7 @@ async fn start_operator(_args: OperatorArgs) -> anyhow::Result<()> {
     tokio::join!(
         flag_controller,
         reservation_controller,
-        //portclaim_controller
+        portclaim_controller
     );
     Ok(())
 }
