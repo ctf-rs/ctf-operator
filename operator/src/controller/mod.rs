@@ -1,8 +1,10 @@
+mod container_controller;
 mod context;
 mod flag_controller;
 mod portclaim_controller;
 mod reservationset_controller;
 
+pub use container_controller::*;
 pub use context::*;
 pub use flag_controller::*;
 pub use portclaim_controller::*;

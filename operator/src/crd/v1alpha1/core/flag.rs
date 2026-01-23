@@ -1,10 +1,10 @@
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
-use kube::CustomResource;
+use kube::{CustomResource, KubeSchema};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(
-    CustomResource, Serialize, Deserialize, Default, Debug, PartialEq, Eq, Clone, JsonSchema,
+    CustomResource, Serialize, Deserialize, Default, Debug, PartialEq, Eq, Clone, KubeSchema,
 )]
 #[kube(
     group = "operator.ctf.rs",
@@ -30,7 +30,7 @@ pub struct FlagSpec {
     pub options: FlagOptions,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, KubeSchema)]
 pub struct FlagStatus {
     pub flag: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -48,7 +48,7 @@ pub enum FlagFormat {
     Underscore, // prefix_body
 }
 
-#[derive(Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, KubeSchema, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FlagRandomRules {
     #[serde(rename = "concat", default)]
     pub concat: Option<char>,
@@ -64,7 +64,7 @@ pub struct FlagRandomRules {
     pub special: String,
 }
 
-#[derive(Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, KubeSchema, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FlagOptions {
     #[serde(rename = "ignoreCase", default)]
     pub ignore_case: bool,
