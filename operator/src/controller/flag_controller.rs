@@ -1,5 +1,5 @@
-use crate::v1alpha1::{Flag, FlagFormat, FlagStatus};
-use crate::{Context, Result, upsert_condition};
+use crate::controller::{Context, Result, upsert_condition};
+use crate::crd::v1alpha1::{Flag, FlagFormat, FlagStatus};
 use jiff::Timestamp;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
 use rand::Rng;
@@ -11,7 +11,7 @@ use kube::Resource;
 use kube::core::object::HasStatus;
 use kube::runtime::controller::Action;
 
-use crate::Controller;
+use crate::controller::Controller;
 
 pub struct FlagController {}
 

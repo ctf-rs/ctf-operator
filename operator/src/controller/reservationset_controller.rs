@@ -1,5 +1,7 @@
-use crate::v1alpha1::{PortClaim, ReservationSet, ReservationSetClaimStatus, ReservationSetStatus};
-use crate::{Context, Result, upsert_condition};
+use crate::controller::{Context, Result, upsert_condition};
+use crate::crd::v1alpha1::{
+    PortClaim, ReservationSet, ReservationSetClaimStatus, ReservationSetStatus,
+};
 use jiff::Timestamp;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
 use kube::api::ListParams;
@@ -13,7 +15,7 @@ use tracing::info;
 use kube::runtime::controller::Action;
 use kube::{Api, Client, Resource, ResourceExt};
 
-use crate::Controller;
+use crate::controller::Controller;
 
 pub struct ReservationSetController {}
 

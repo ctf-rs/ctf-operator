@@ -1,8 +1,9 @@
 use clap::Parser;
 use ctf_operator::{
-    Args, Command, Controller, CrdArgs, FlagController, OperatorArgs, PortClaimController,
-    ReservationSetController, State, init_telemetry,
-    v1alpha1::{Flag, PortClaim, ReservationSet},
+    Args, Command, CrdArgs, OperatorArgs, State,
+    controller::{Controller, FlagController, PortClaimController, ReservationSetController},
+    crd::v1alpha1::{Flag, PortClaim, ReservationSet},
+    init_telemetry,
 };
 use kube::CustomResourceExt;
 

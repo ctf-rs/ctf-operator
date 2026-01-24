@@ -3,7 +3,7 @@ use kube::CustomResource;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::v1alpha1::{FlagFormat, FlagOptions, FlagRandomRules};
+use super::{FlagFormat, FlagOptions, FlagRandomRules};
 
 #[derive(
     CustomResource, Serialize, Deserialize, Default, Debug, PartialEq, Eq, Clone, JsonSchema,

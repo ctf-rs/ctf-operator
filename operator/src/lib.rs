@@ -1,13 +1,14 @@
+pub mod cache;
 mod cli;
-mod controller;
-mod crd;
+pub mod controller;
+pub mod crd;
+mod index;
 mod metrics;
 mod state;
 mod telemetry;
 
 pub use cli::*;
-pub use controller::*;
-pub use crd::*;
+pub use index::*;
 pub use metrics::*;
 pub use state::*;
 pub use telemetry::*;

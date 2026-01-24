@@ -1,5 +1,5 @@
-use crate::v1alpha1::{PortClaim, PortClaimStatus, ReservationSet};
-use crate::{Context, Result, upsert_condition};
+use crate::controller::{Context, Result, upsert_condition};
+use crate::crd::v1alpha1::{PortClaim, PortClaimStatus, ReservationSet};
 use jiff::Timestamp;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
 use kube::runtime::controller::Action;
@@ -8,7 +8,7 @@ use kube::runtime::{WatchStreamExt, watcher};
 use kube::{Api, Client, Resource, ResourceExt};
 use std::sync::Arc;
 
-use crate::Controller;
+use crate::controller::Controller;
 
 pub struct PortClaimController {}
 

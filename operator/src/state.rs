@@ -4,7 +4,7 @@ use kube::{
 };
 use std::sync::Arc;
 
-use crate::{Context, Metrics, OPERATOR_NAME};
+use crate::{Metrics, OPERATOR_NAME, controller::Context};
 
 #[derive(Clone)]
 pub struct State {

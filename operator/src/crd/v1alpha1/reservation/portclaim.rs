@@ -2,7 +2,7 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
 use kube::{CustomResource, KubeSchema};
 use serde::{Deserialize, Serialize};
 
-use crate::v1alpha1::ReservationRef;
+use super::ReservationRef;
 
 #[derive(KubeSchema, CustomResource, Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[kube(
