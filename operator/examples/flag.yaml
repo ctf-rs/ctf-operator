@@ -1,0 +1,11 @@
+apiVersion: operator.ctf.rs/v1alpha1
+kind: Flag
+metadata:
+  name: example-flag
+  namespace: default
+spec:
+  prefix: "SCC"
+  format: curly
+  body: test_flag_12345
+  random:
+    len: 8

@@ -1,0 +1,8 @@
+apiVersion: operator.ctf.rs/v1alpha1
+kind: ReservationSet
+metadata:
+  name: example-reservation
+  namespace: default
+spec:
+  start: 9000
+  end: 10000
