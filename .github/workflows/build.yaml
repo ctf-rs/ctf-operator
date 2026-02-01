@@ -6,7 +6,7 @@ jobs:
     name: Build image
     runs-on: github-actions-ctf-rs
     container:
-      image: ghcr.io/actions/runner-images/ubuntu24:latest
+      image: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
