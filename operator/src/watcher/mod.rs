@@ -1,3 +1,3 @@
-pub struct Watcher {
-    flag_stream: Stream,
-}
+// pub struct Watcher {
+//     flag_stream: Stream,
+// }
