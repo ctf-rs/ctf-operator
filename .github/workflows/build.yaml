@@ -6,7 +6,7 @@ jobs:
     name: Build image
     runs-on: github-actions-ctf-rs
     container:
-      image: ubuntu-24.04
+      image: quay.io/buildah/stable
 
     steps:
       - uses: actions/checkout@v4
