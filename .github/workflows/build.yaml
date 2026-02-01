@@ -1,22 +1,16 @@
-name: Build Image (Buildah)
+name: Build Image (Docker)
 on: [push]
 
 jobs:
   build:
     runs-on: github-actions-ctf-rs
-    container:
-      image: quay.io/buildah/stable
-    env:
-      BUILDAH_ISOLATION: chroot
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build image with Buildah
-        uses: redhat-actions/buildah-build@v2
-        with:
-          image: my-new-image
-          tags: v1,${{ github.sha }}
-          containerfiles: |
-            ./Dockerfile
-          context: .
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t my-new-image:v1 \
+            -t my-new-image:${{ github.sha }} \
+            .
