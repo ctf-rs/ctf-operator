@@ -6,6 +6,6 @@ metadata:
 spec:
   prefix: "SCC"
   format: curly
-  body: test_flag_1234
+  body: test_flag_12345
   random:
     len: 8

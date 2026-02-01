@@ -2,13 +2,13 @@ pub mod cache;
 mod cli;
 pub mod controller;
 pub mod crd;
-mod index;
+pub mod indexer;
 mod metrics;
 mod state;
 mod telemetry;
+pub mod watcher;
 
 pub use cli::*;
-pub use index::*;
 pub use metrics::*;
 pub use state::*;
 pub use telemetry::*;

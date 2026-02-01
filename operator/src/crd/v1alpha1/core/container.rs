@@ -18,7 +18,9 @@ use serde::{Deserialize, Serialize};
 )]
 pub struct ContainerSpec {
     pub image: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub flags: Vec<ContainerFlag>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ports: Vec<ContainerPort>,
 }
 
