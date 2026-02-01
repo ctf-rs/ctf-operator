@@ -1,22 +1,21 @@
-name: Build Image using Containerfile
+name: Build Image (Buildah)
 on: [push]
 
 jobs:
   build:
-    name: Build image
     runs-on: github-actions-ctf-rs
+
     container:
       image: quay.io/buildah/stable
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Buildah Action
+      - name: Build image with Buildah
         uses: redhat-actions/buildah-build@v2
         with:
           image: my-new-image
-          tags: v1 ${{ github.sha }}
+          tags: v1,${{ github.sha }}
           containerfiles: |
-            ./Containerfile
-          build-args: |
-            some_arg=some_value
+            ./Dockerfile
+          context: .
