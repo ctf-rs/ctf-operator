@@ -4,9 +4,10 @@ on: [push]
 jobs:
   build:
     runs-on: github-actions-ctf-rs
-
     container:
       image: quay.io/buildah/stable
+    env:
+      BUILDAH_ISOLATION: chroot
 
     steps:
       - uses: actions/checkout@v4
