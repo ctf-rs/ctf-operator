@@ -38,18 +38,6 @@ jobs:
             registry.ctf.rs/ctf/operator:latest
             registry.ctf.rs/ctf/operator:${{ github.sha }}
 
-      - name: Read Harbor creds from Vault
-        id: vault
-        uses: hashicorp/vault-action@v3
-        with:
-          url: http://vault.vault:8200
-          method: kubernetes
-          kubernetesTokenPath: /var/run/secrets/vault/token
-          role: arc-github-actions-ctf-rs-runner
-          secrets: |
-            harbor/creds/github-actions-ctf-rs robot_account_name | HARBOR_USER ;
-            harbor/creds/github-actions-ctf-rs robot_account_secret | HARBOR_PASS
-
       - name: Login to registry.ctf.rs
         uses: docker/login-action@v3
         with:
