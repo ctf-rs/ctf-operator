@@ -12,6 +12,7 @@ jobs:
         with:
           url: http://vault.vault:8200
           method: kubernetes
+          kubernetesTokenPath: /var/run/secrets/vault/token
           role: arc-github-actions-ctf-rs-runner
           secrets: |
             harbor/creds/github-actions-ctf-rs robot_account_name | HARBOR_USER ;
