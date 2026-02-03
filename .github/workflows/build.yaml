@@ -20,12 +20,11 @@ jobs:
         with:
           context: .
           platforms: linux/amd64
+          load: true
           push: false
           tags: |
             registry.ctf.rs/ctf/operator:latest
             registry.ctf.rs/ctf/operator:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Read Harbor creds from Vault
         id: vault
@@ -55,4 +54,3 @@ jobs:
           tags: |
             registry.ctf.rs/ctf/operator:latest
             registry.ctf.rs/ctf/operator:${{ github.sha }}
-          cache-from: type=gha
