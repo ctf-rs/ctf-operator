@@ -15,6 +15,18 @@ jobs:
             [registry."docker.io"]
               mirrors = ["registry.ctf.rs/docker-hub"]
 
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          tags: |
+            registry.ctf.rs/ctf/operator:latest
+            registry.ctf.rs/ctf/operator:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Read Harbor creds from Vault
         id: vault
         uses: hashicorp/vault-action@v3
@@ -34,10 +46,13 @@ jobs:
           username: ${{ steps.vault.outputs.HARBOR_USER }}
           password: ${{ steps.vault.outputs.HARBOR_PASS }}
 
-      - uses: docker/build-push-action@v6
+      - name: Push image
+        uses: docker/build-push-action@v6
         with:
+          context: .
           platforms: linux/amd64
           push: true
           tags: |
             registry.ctf.rs/ctf/operator:latest
             registry.ctf.rs/ctf/operator:${{ github.sha }}
+          cache-from: type=gha
