@@ -7,9 +7,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-        with:
-          image: "registry.ctf.rs/docker-hub/tonistiigi/binfmt:latest"
       - uses: docker/setup-buildx-action@v3
         with:
           driver-opts: |
@@ -18,9 +15,10 @@ jobs:
             [registry."docker.io"]
               mirrors = ["registry.ctf.rs/docker-hub"]
 
-      - name: Build Docker image
-        run: |
-          docker build \
-            -t my-new-image:v1 \
-            -t my-new-image:${{ github.sha }} \
-            .
+      - uses: docker/build-push-action@v6
+        with:
+          platforms: linux/amd64
+          push: false
+          tags: |
+            registry.ctf.rs/ctf/operator:latest
+            registry.ctf.rs/ctf/operator:${{ github.sha }}
