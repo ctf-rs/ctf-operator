@@ -6,6 +6,16 @@ jobs:
     runs-on: github-actions-ctf-rs
 
     steps:
+      - name: Read Harbor creds from Vault
+        id: vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: http://vault.vault:8200
+          method: kubernetes
+          role: arc-github-actions-ctf-rs-runner
+          secrets: |
+            harbor/creds/github-actions-ctf-rs robot_account_name | HARBOR_USER ;
+            harbor/creds/github-actions-ctf-rs robot_account_secret | HARBOR_PASS
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
         with:
