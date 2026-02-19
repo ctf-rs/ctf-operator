@@ -1,8 +1,10 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::sync::Arc;
 use std::{hash::Hash, time::Duration};
 
-use futures::Stream;
+use futures::stream::BoxStream;
+use futures::{Stream, StreamExt};
 use kube::Resource;
 use kube::api::ListParams;
 use kube::runtime::WatchStreamExt;
@@ -46,6 +48,25 @@ where
 
     pub fn subscribe(&self) -> Option<ReflectHandle<K>> {
         self.writer.subscribe()
+    }
+
+    //TODO: add new _stream_owned fn variants _stream kube-rs apis depend on Result<K, watcher::Error>
+    pub fn subscribe_modified<F>(
+        &self,
+        mut f: F,
+    ) -> Option<BoxStream<'static, Result<K, watcher::Error>>>
+    where
+        K: Send + Sync + 'static,
+        F: FnMut(&mut K) + Send + 'static,
+    {
+        self.subscribe().map(move |h| {
+            h.map(move |arc: Arc<K>| {
+                let mut k = (*arc).clone();
+                f(&mut k);
+                Ok(k)
+            })
+            .boxed()
+        })
     }
 
     pub fn store(&self) -> Store<K> {

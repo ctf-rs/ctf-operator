@@ -88,59 +88,34 @@ async fn start_operator(_args: OperatorArgs) -> anyhow::Result<()> {
         Watcher::new(reservations_api, watcher::Config::default(), store_buf_size);
     let pods_watcher = Watcher::new(pods_api, watcher::Config::default(), store_buf_size);
 
-    let flags_controller = Controller::new(&flags_watcher)?;
-    let containers_controller = Controller::new(&containers_watcher)?
-        .watches(&ports_watcher, |a| vec![])?
-        .watches(&flags_watcher, |a| vec![])?
-        .owns(&pods_watcher);
-
-    let ports_controller = Controller::new(&ports_watcher)?
-        .watches(&ports_watcher, |a| vec![])?
-        .watches(&flags_watcher, |a| vec![])?;
-    let reservations_controller = Controller::new(&reservations_watcher)?
-        .watches(&ports_watcher, |a| vec![])?
-        .watches(&flags_watcher, |a| vec![])?;
-
-    let flags = flags_watcher.store();
-    let containers = containers_watcher.store();
-    let ports = ports_watcher.store();
-    let reservations = reservations_watcher.store();
-
-    let flags_controller_stream = flags_watcher
-        .subscribe()
-        .context("Failed to create flags stream")?;
-    let containers_controller_stream = containers_watcher
-        .subscribe()
-        .context("Failed to create containers stream")?;
-    let ports_controller_stream = ports_watcher
-        .subscribe()
-        .context("Failed to create ports stream")?;
-    let reservations_controller_stream = reservations_watcher
-        .subscribe()
-        .context("Failed to create reservations stream")?;
-
-    let flags_controller =
-        kube::runtime::Controller::for_shared_stream(flags_controller_stream, flags);
+    let flags_controller = Controller::new("flag-controller".to_string(), &flags_watcher)?;
     let containers_controller =
-        kube::runtime::Controller::for_shared_stream(containers_controller_stream, containers);
-    let ports_controller =
-        kube::runtime::Controller::for_shared_stream(ports_controller_stream, ports);
-    let reservations_controller =
-        kube::runtime::Controller::for_shared_stream(reservations_controller_stream, reservations);
+        Controller::new("container-controller".to_string(), &containers_watcher)?
+            .watches(&ports_watcher, |port| vec![])?
+            .watches(&flags_watcher, |a| vec![])?
+            .owns(&pods_watcher)?;
 
-    let mut waiter = Waiter::builder()
+    let ports_controller = Controller::new("portclaim-controller".to_string(), &ports_watcher)?
+        .watches(&ports_watcher, |a| vec![])?
+        .watches(&flags_watcher, |a| vec![])?;
+    let reservations_controller = Controller::new(
+        "reservationset-controller".to_string(),
+        &reservations_watcher,
+    )?
+    .watches(&ports_watcher, |a| vec![])?
+    .watches(&flags_watcher, |a| vec![])?;
+
+    Waiter::builder()
         .watcher(flags_watcher)
         .watcher(containers_watcher)
         .watcher(ports_watcher)
-        .watcher(reservations_watcher);
-
-    info!("Preparing cache");
-    waiter.wait_ready().await?;
-
-    //POKRENI KONTROLRE
-
-    info!("Cache loaded");
-    waiter.wait().await?;
+        .watcher(reservations_watcher)
+        .controller(flags_controller)
+        .controller(containers_controller)
+        .controller(ports_controller)
+        .controller(reservations_controller)
+        .run()
+        .await?;
 
     // tokio::join!(
     //     flags_controller,

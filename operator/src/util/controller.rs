@@ -25,10 +25,13 @@ pub enum ControllerError {
     SubscribeFailed,
 }
 
+const ERROR_RECONCILE_REQUEUE_TIME: u64 = 60; // 1 minute
+
 pub struct Controller<K: 'static + Resource + Clone + Debug + DeserializeOwned>
 where
     K::DynamicType: Default + Eq + Hash + Clone + Debug,
 {
+    name: String,
     controller: kube::runtime::Controller<K>,
 }
 
@@ -36,12 +39,13 @@ impl<K: 'static + Resource + Clone + Debug + DeserializeOwned + Send + Sync> Con
 where
     K::DynamicType: Default + Eq + Hash + Clone + Debug,
 {
-    pub fn new(watcher: &Watcher<K>) -> Result<Self, ControllerError> {
+    pub fn new(name: String, watcher: &Watcher<K>) -> Result<Self, ControllerError> {
         let controller_stream = watcher
             .subscribe()
             .ok_or(ControllerError::SubscribeFailed)?;
 
         Ok(Self {
+            name,
             controller: kube::runtime::Controller::for_shared_stream(
                 controller_stream,
                 watcher.store(),
@@ -63,11 +67,36 @@ where
             .subscribe()
             .ok_or(ControllerError::SubscribeFailed)?;
 
+        let name = self.name;
         let controller = self
             .controller
             .watches_shared_stream(watches_stream, mapper);
 
-        Ok(Self { controller })
+        Ok(Self { name, controller })
+    }
+
+    pub fn watches_modified<
+        W: 'static + Resource + Clone + Debug + DeserializeOwned + Send + Sync,
+        I,
+    >(
+        self,
+        watcher: &Watcher<W>,
+        modifier: impl FnMut(&mut W) + Send + 'static,
+        mapper: impl Fn(W) -> I + Sync + Send + 'static,
+    ) -> Result<Self, ControllerError>
+    where
+        W::DynamicType: Default + Eq + Hash + Clone + Debug,
+        I: 'static + IntoIterator<Item = ObjectRef<K>>,
+        I::IntoIter: Send,
+    {
+        let watches_stream = watcher
+            .subscribe_modified(modifier)
+            .ok_or(ControllerError::SubscribeFailed)?;
+
+        let name = self.name;
+        let controller = self.controller.watches_stream(watches_stream, mapper);
+
+        Ok(Self { name, controller })
     }
 
     pub fn owns<
@@ -80,8 +109,11 @@ where
             .subscribe()
             .ok_or(ControllerError::SubscribeFailed)?;
 
+        let name = self.name;
         let controller = self.controller.owns_shared_stream(watches_stream);
 
-        Ok(Self { controller })
+        Ok(Self { name, controller })
     }
+
+    pub async fn run(self) {}
 }
