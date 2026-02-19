@@ -1,19 +1,16 @@
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use std::sync::Arc;
-use std::{hash::Hash, time::Duration};
+use std::hash::Hash;
 
 use futures::stream::BoxStream;
 use futures::{Stream, StreamExt};
 use kube::Resource;
-use kube::api::ListParams;
 use kube::runtime::WatchStreamExt;
-use kube::runtime::utils::EventDecode;
 use kube::runtime::watcher::Event;
 use kube::{
-    Api, Client,
+    Api,
     runtime::{
-        reflector::{self, Lookup, ReflectHandle, Store, store::Writer},
+        reflector::{self, ReflectHandle, Store, store::Writer},
         watcher,
     },
 };

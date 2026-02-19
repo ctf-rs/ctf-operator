@@ -1,32 +1,16 @@
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::{hash::Hash, time::Duration};
+use std::hash::Hash;
 
 use futures::future::BoxFuture;
-use futures::{Stream, StreamExt};
+use futures::StreamExt;
 use kube::Resource;
-use kube::api::ListParams;
-use kube::runtime::WatchStreamExt;
 use kube::runtime::reflector::store::WriterDropped;
-use kube::runtime::utils::EventDecode;
-use kube::runtime::watcher::Event;
-use kube::{
-    Api, Client,
-    runtime::{
-        reflector::{self, Lookup, ReflectHandle, Store, store::Writer},
-        watcher,
-    },
-};
-use nameof::name_of;
 use serde::de::DeserializeOwned;
-use tokio::sync::Notify;
-use tokio::task::{JoinError, JoinHandle, JoinSet};
-use tokio::time::sleep;
+use tokio::task::{JoinError, JoinSet};
 use tracing::{info, trace};
 
-use super::indexer::{Index, WatchStreamIndexExt};
+use super::indexer::Index;
 
 use crate::util::{Controller, Watcher, gvk_string};
 use thiserror::Error;

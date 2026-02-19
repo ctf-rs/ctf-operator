@@ -1,23 +1,14 @@
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use std::sync::Arc;
-use std::{hash::Hash, time::Duration};
+use std::hash::Hash;
 
 use crate::util::Watcher;
-use futures::{Stream, StreamExt};
 use kube::Resource;
-use kube::api::ListParams;
-use kube::runtime::WatchStreamExt;
 use kube::runtime::reflector::ObjectRef;
-use kube::runtime::utils::EventDecode;
-use kube::{
-    Api, Client,
-    runtime::reflector::{self, Lookup, ReflectHandle, Store, store::Writer},
-};
+use kube::runtime::reflector::Lookup;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
 
-use super::indexer::{Index, WatchStreamIndexExt};
 
 #[derive(Debug, Error)]
 pub enum ControllerError {

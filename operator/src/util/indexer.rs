@@ -4,7 +4,7 @@ use kube::{
     Resource,
     runtime::{reflector::Lookup, watcher},
 };
-use std::{hash::Hash, sync::Arc};
+use std::hash::Hash;
 
 pub trait Index<K> {
     fn apply(&self, obj: K);

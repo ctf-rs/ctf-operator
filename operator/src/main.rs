@@ -1,23 +1,20 @@
 use std::sync::Arc;
 
-use anyhow::Context;
 use clap::Parser;
 use ctf_operator::{
     Args, Command, CrdArgs, OperatorArgs, State,
     crd::v1alpha1::{Container, Flag, PortClaim, ReservationSet},
     init_telemetry,
-    util::{Controller, Index, Waiter, WatchStreamIndexExt, Watcher, indexer},
+    util::{Controller, Index, Waiter, Watcher},
 };
-use futures::{StreamExt, TryStreamExt, lock::Mutex};
-use k8s_openapi::api::core::v1::{Pod, Service};
+use k8s_openapi::api::core::v1::Pod;
 use kube::{
-    Client, CustomResourceExt, ResourceExt,
-    runtime::{WatchStreamExt, reflector, watcher},
+    Client, CustomResourceExt,
+    runtime::watcher,
 };
 
 use parking_lot::RwLock;
-use stream_broadcast::StreamBroadcastExt;
-use tracing::{info, warn};
+use tracing::info;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -36,29 +33,29 @@ pub struct ServiceIndex {
 }
 
 impl Index<Container> for ServiceIndex {
-    fn apply(&self, obj: Container) {
+    fn apply(&self, _obj: Container) {
         info!("apply");
     }
 
-    fn delete(&self, obj: &Container) {
+    fn delete(&self, _obj: &Container) {
         info!("del");
     }
 
-    fn rehydrate(&self, objs: Vec<Container>) {
+    fn rehydrate(&self, _objs: Vec<Container>) {
         info!("rehydrate");
     }
 }
 
 impl Index<PortClaim> for ServiceIndex {
-    fn apply(&self, obj: PortClaim) {
+    fn apply(&self, _obj: PortClaim) {
         info!("apply");
     }
 
-    fn delete(&self, obj: &PortClaim) {
+    fn delete(&self, _obj: &PortClaim) {
         info!("del");
     }
 
-    fn rehydrate(&self, objs: Vec<PortClaim>) {
+    fn rehydrate(&self, _objs: Vec<PortClaim>) {
         info!("rehydrate");
     }
 }
@@ -66,7 +63,7 @@ impl Index<PortClaim> for ServiceIndex {
 async fn start_operator(_args: OperatorArgs) -> anyhow::Result<()> {
     init_telemetry().await;
 
-    let state = State::new();
+    let _state = State::new();
 
     let client = Client::try_default()
         .await
@@ -91,19 +88,19 @@ async fn start_operator(_args: OperatorArgs) -> anyhow::Result<()> {
     let flags_controller = Controller::new("flag-controller".to_string(), &flags_watcher)?;
     let containers_controller =
         Controller::new("container-controller".to_string(), &containers_watcher)?
-            .watches(&ports_watcher, |port| vec![])?
-            .watches(&flags_watcher, |a| vec![])?
+            .watches(&ports_watcher, |_port| vec![])?
+            .watches(&flags_watcher, |_a| vec![])?
             .owns(&pods_watcher)?;
 
     let ports_controller = Controller::new("portclaim-controller".to_string(), &ports_watcher)?
-        .watches(&ports_watcher, |a| vec![])?
-        .watches(&flags_watcher, |a| vec![])?;
+        .watches(&ports_watcher, |_a| vec![])?
+        .watches(&flags_watcher, |_a| vec![])?;
     let reservations_controller = Controller::new(
         "reservationset-controller".to_string(),
         &reservations_watcher,
     )?
-    .watches(&ports_watcher, |a| vec![])?
-    .watches(&flags_watcher, |a| vec![])?;
+    .watches(&ports_watcher, |_a| vec![])?
+    .watches(&flags_watcher, |_a| vec![])?;
 
     Waiter::builder()
         .watcher(flags_watcher)

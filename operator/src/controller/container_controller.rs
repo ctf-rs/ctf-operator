@@ -1,16 +1,8 @@
-use crate::controller::{Context, Result, upsert_condition};
-use crate::crd::v1alpha1::{Container, ContainerStatus, Flag};
-use jiff::Timestamp;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
-use kube::runtime::{WatchStreamExt, watcher};
-use rand::Rng;
+use crate::controller::{Context, Result};
+use crate::crd::v1alpha1::Container;
 use std::sync::Arc;
-use std::time::Duration;
-use tracing::info;
 
-use kube::core::object::HasStatus;
 use kube::runtime::controller::Action;
-use kube::{Api, Client, Resource, ResourceExt};
 
 use crate::controller::Controller;
 
@@ -50,7 +42,7 @@ impl Controller<Container> for ContainerController {
     //         })
     // }
 
-    async fn reconcile(flag: Arc<Container>, ctx: Arc<Context>) -> Result<Action> {
+    async fn reconcile(_flag: Arc<Container>, _ctx: Arc<Context>) -> Result<Action> {
         Ok(Action::await_change())
     }
 }
