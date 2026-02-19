@@ -4,10 +4,9 @@ use anyhow::Context;
 use clap::Parser;
 use ctf_operator::{
     Args, Command, CrdArgs, OperatorArgs, State,
-    controller::{Controller, FlagController, PortClaimController, ReservationSetController},
     crd::v1alpha1::{Container, Flag, PortClaim, ReservationSet},
     init_telemetry,
-    util::{Index, Waiter, WatchStreamIndexExt, Watcher, indexer},
+    util::{Controller, Index, Waiter, WatchStreamIndexExt, Watcher, indexer},
 };
 use futures::{StreamExt, TryStreamExt, lock::Mutex};
 use k8s_openapi::api::core::v1::{Pod, Service};
@@ -78,6 +77,7 @@ async fn start_operator(_args: OperatorArgs) -> anyhow::Result<()> {
     let ports_api: kube::Api<PortClaim> = kube::Api::namespaced(client.clone(), "default");
     let reservations_api: kube::Api<ReservationSet> =
         kube::Api::namespaced(client.clone(), "default");
+    let pods_api: kube::Api<Pod> = kube::Api::namespaced(client.clone(), "default");
 
     let store_buf_size = 0xFFFF;
     let flags_watcher = Watcher::new(flags_api, watcher::Config::default(), store_buf_size);
@@ -86,6 +86,20 @@ async fn start_operator(_args: OperatorArgs) -> anyhow::Result<()> {
     let ports_watcher = Watcher::new(ports_api, watcher::Config::default(), store_buf_size);
     let reservations_watcher =
         Watcher::new(reservations_api, watcher::Config::default(), store_buf_size);
+    let pods_watcher = Watcher::new(pods_api, watcher::Config::default(), store_buf_size);
+
+    let flags_controller = Controller::new(&flags_watcher)?;
+    let containers_controller = Controller::new(&containers_watcher)?
+        .watches(&ports_watcher, |a| vec![])?
+        .watches(&flags_watcher, |a| vec![])?
+        .owns(&pods_watcher);
+
+    let ports_controller = Controller::new(&ports_watcher)?
+        .watches(&ports_watcher, |a| vec![])?
+        .watches(&flags_watcher, |a| vec![])?;
+    let reservations_controller = Controller::new(&reservations_watcher)?
+        .watches(&ports_watcher, |a| vec![])?
+        .watches(&flags_watcher, |a| vec![])?;
 
     let flags = flags_watcher.store();
     let containers = containers_watcher.store();
@@ -122,15 +136,18 @@ async fn start_operator(_args: OperatorArgs) -> anyhow::Result<()> {
 
     info!("Preparing cache");
     waiter.wait_ready().await?;
+
+    //POKRENI KONTROLRE
+
     info!("Cache loaded");
     waiter.wait().await?;
 
-    tokio::join!(
-        flags_controller,
-        containers_controller,
-        ports_controller,
-        reservations_controller
-    );
+    // tokio::join!(
+    //     flags_controller,
+    //     containers_controller,
+    //     ports_controller,
+    //     reservations_controller
+    // );
 
     // let subscriber_buf_sz = 100;
     // let (container_reader, container_writer) =

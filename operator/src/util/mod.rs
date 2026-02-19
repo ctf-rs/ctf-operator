@@ -1,11 +1,14 @@
+mod controller;
 mod indexer;
 mod waiter;
 mod watcher;
 
+pub use controller::*;
 pub use indexer::*;
-use kube::Resource;
 pub use waiter::*;
 pub use watcher::*;
+
+use kube::Resource;
 
 fn gvk_string<K: Resource>() -> String
 where
