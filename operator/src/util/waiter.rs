@@ -77,26 +77,22 @@ impl Waiter {
         Ok(())
     }
 
-    pub fn start_watchers(&mut self) {
+    fn start_watchers(&mut self) {
         for fut in self.pending_watchers.drain(..) {
             self.tasks.spawn(fut);
         }
     }
 
-    pub fn start_controllers(&mut self) {
+    fn start_controllers(&mut self) {
         for fut in self.pending_controllers.drain(..) {
             self.tasks.spawn(fut);
         }
     }
 
-    pub async fn wait_ready(&mut self) -> Result<(), WaitReadyError> {
+    async fn wait_ready(&mut self) -> Result<(), WaitReadyError> {
         while let Some(res) = self.ready_tasks.join_next().await {
             res??;
         }
-        Ok(())
-    }
-
-    pub async fn wait(&mut self) -> Result<(), JoinError> {
         Ok(())
     }
 
