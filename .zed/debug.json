@@ -1,0 +1,21 @@
+// Project-local debug tasks
+//
+// For more documentation on how to configure debug tasks,
+// see: https://zed.dev/docs/debugger
+[
+  {
+    "adapter": "CodeLLDB",
+    "label": "cargo run -p ctf-operator operator",
+    "build": {
+      "label": "cargo build -p ctf-operator",
+      "command": "cargo",
+      "args": ["build", "--package", "ctf-operator"],
+      "cwd": "$ZED_WORKTREE_ROOT",
+    },
+    "sourceLanguages": ["rust"],
+    "request": "launch",
+    "program": "$ZED_WORKTREE_ROOT/target/debug/ctf-operator",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "args": ["operator"],
+  },
+]

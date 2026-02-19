@@ -1,0 +1,8 @@
+apiVersion: operator.ctf.rs/v1alpha1
+kind: ReservationSet
+metadata:
+  name: scc2025-finals
+  namespace: default
+spec:
+  start: 9600
+  end: 9700

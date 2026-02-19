@@ -2,10 +2,10 @@ pub mod cache;
 mod cli;
 pub mod controller;
 pub mod crd;
-pub mod indexer;
 mod metrics;
 mod state;
 mod telemetry;
+pub mod util;
 pub mod watcher;
 
 pub use cli::*;

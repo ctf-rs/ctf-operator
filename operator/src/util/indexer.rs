@@ -1,4 +1,3 @@
-//! Caches objects in memory
 use async_stream::stream;
 use futures::{Stream, StreamExt};
 use kube::{
@@ -60,7 +59,7 @@ pub trait WatchStreamIndexExt: Stream {
         K: Resource + Clone + 'static,
         K::DynamicType: Eq + std::hash::Hash + Clone,
     {
-        crate::indexer::indexer(index, self)
+        indexer(index, self)
     }
 }
 
