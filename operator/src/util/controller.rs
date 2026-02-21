@@ -80,12 +80,7 @@ impl<K: KubeObject> Controller<K> {
         Ok(Self { name, controller })
     }
 
-    pub fn owns<
-        W: 'static + Resource<DynamicType = ()> + Clone + Debug + DeserializeOwned + Send + Sync,
-    >(
-        self,
-        watcher: &Watcher<W>,
-    ) -> Result<Self, ControllerError> {
+    pub fn owns<W: KubeObject>(self, watcher: &Watcher<W>) -> Result<Self, ControllerError> {
         let watches_stream = watcher
             .subscribe()
             .ok_or(ControllerError::SubscribeFailed)?;
