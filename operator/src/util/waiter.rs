@@ -1,9 +1,9 @@
 use std::fmt::Debug;
-use std::sync::Arc;
 use std::hash::Hash;
+use std::sync::Arc;
 
-use futures::future::BoxFuture;
 use futures::StreamExt;
+use futures::future::BoxFuture;
 use kube::Resource;
 use kube::runtime::reflector::store::WriterDropped;
 use serde::de::DeserializeOwned;
@@ -12,7 +12,7 @@ use tracing::{info, trace};
 
 use super::indexer::Index;
 
-use crate::util::{Controller, Watcher, gvk_string};
+use crate::util::{Controller, KubeObject, Watcher};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -80,13 +80,7 @@ impl Waiter {
         Ok(())
     }
 
-    pub fn watcher<K: 'static + Resource + Clone + Debug + DeserializeOwned + Send + Sync>(
-        mut self,
-        watcher: Watcher<K>,
-    ) -> Self
-    where
-        K::DynamicType: Default + Eq + Hash + Clone + Debug + Send,
-    {
+    pub fn watcher<K: KubeObject>(mut self, watcher: Watcher<K>) -> Self {
         let store = watcher.store();
         self.ready_tasks
             .spawn(async move { store.wait_until_ready().await });
@@ -95,7 +89,7 @@ impl Waiter {
             watcher
                 .to_stream()
                 .for_each(|ev| async move {
-                    info!("Streamed event {:?} for Type {}", ev, gvk_string::<K>())
+                    //info!("Streamed event {:?} for Type {}", ev, gvk_string::<K>())
                 })
                 .await;
         }));
@@ -103,17 +97,11 @@ impl Waiter {
         self
     }
 
-    pub fn index_watcher<
-        K: 'static + Resource + Clone + Debug + DeserializeOwned + Send + Sync,
-        I: 'static + Index<K> + Send + Sync,
-    >(
+    pub fn index_watcher<K: KubeObject, I: 'static + Index<K> + Send + Sync>(
         mut self,
         watcher: Watcher<K>,
         index: Arc<I>,
-    ) -> Self
-    where
-        K::DynamicType: Default + Eq + Hash + Clone + Debug + Send,
-    {
+    ) -> Self {
         let store = watcher.store();
         self.ready_tasks
             .spawn(async move { store.wait_until_ready().await });
@@ -122,7 +110,7 @@ impl Waiter {
             watcher
                 .to_index_stream(index.as_ref())
                 .for_each(|ev| async move {
-                    trace!("Streamed event {:?} for Type {}", ev, gvk_string::<K>())
+                    //trace!("Streamed event {:?} for Type {}", ev, gvk_string::<K>())
                 })
                 .await;
         }));
@@ -130,16 +118,10 @@ impl Waiter {
         self
     }
 
-    pub fn controller<K: 'static + Resource + Clone + Debug + DeserializeOwned + Send + Sync>(
-        mut self,
-        controller: Controller<K>,
-    ) -> Self
-    where
-        K::DynamicType: Default + Eq + Hash + Clone + Debug + Send,
-    {
-        self.pending_controllers.push(Box::pin(async move {
-            controller.run().await;
-        }));
+    pub fn controller<K: KubeObject>(mut self, controller: Controller<K>) -> Self {
+        // self.pending_controllers.push(Box::pin(async move {
+        //     controller.run().await;
+        // }));
 
         self
     }

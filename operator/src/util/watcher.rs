@@ -1,6 +1,6 @@
 use std::fmt::Debug;
-use std::sync::Arc;
 use std::hash::Hash;
+use std::sync::Arc;
 
 use futures::stream::BoxStream;
 use futures::{Stream, StreamExt};
@@ -16,6 +16,8 @@ use kube::{
 };
 use serde::de::DeserializeOwned;
 
+use crate::util::KubeObject;
+
 use super::indexer::{Index, WatchStreamIndexExt};
 
 pub struct Watcher<K: 'static + Resource + Clone + Debug + DeserializeOwned>
@@ -28,10 +30,7 @@ where
     pub(crate) writer: Writer<K>,
 }
 
-impl<K: 'static + Resource + Clone + Debug + DeserializeOwned> Watcher<K>
-where
-    K::DynamicType: Default + Eq + Hash + Clone + Debug,
-{
+impl<K: KubeObject> Watcher<K> {
     pub fn new(api: Api<K>, config: watcher::Config, store_buf_size: usize) -> Self {
         let (store, writer) = reflector::store_shared::<K>(store_buf_size);
 

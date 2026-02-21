@@ -1,14 +1,17 @@
 use std::fmt::Debug;
-use std::sync::Arc;
 use std::hash::Hash;
+use std::pin::Pin;
+use std::sync::Arc;
 
+use crate::util::KubeObject;
 use crate::util::Watcher;
+use futures::StreamExt;
 use kube::Resource;
-use kube::runtime::reflector::ObjectRef;
+use kube::runtime::controller::Action;
 use kube::runtime::reflector::Lookup;
+use kube::runtime::reflector::ObjectRef;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
-
 
 #[derive(Debug, Error)]
 pub enum ControllerError {
@@ -16,20 +19,12 @@ pub enum ControllerError {
     SubscribeFailed,
 }
 
-const ERROR_RECONCILE_REQUEUE_TIME: u64 = 60; // 1 minute
-
-pub struct Controller<K: 'static + Resource + Clone + Debug + DeserializeOwned>
-where
-    K::DynamicType: Default + Eq + Hash + Clone + Debug,
-{
+pub struct Controller<K: KubeObject> {
     name: String,
     controller: kube::runtime::Controller<K>,
 }
 
-impl<K: 'static + Resource + Clone + Debug + DeserializeOwned + Send + Sync> Controller<K>
-where
-    K::DynamicType: Default + Eq + Hash + Clone + Debug,
-{
+impl<K: KubeObject> Controller<K> {
     pub fn new(name: String, watcher: &Watcher<K>) -> Result<Self, ControllerError> {
         let controller_stream = watcher
             .subscribe()
@@ -44,13 +39,12 @@ where
         })
     }
 
-    pub fn watches<W: 'static + Resource + Clone + Debug + DeserializeOwned + Send + Sync, I>(
+    pub fn watches<W: KubeObject, I>(
         self,
         watcher: &Watcher<W>,
         mapper: impl Fn(Arc<W>) -> I + Sync + Send + 'static,
     ) -> Result<Self, ControllerError>
     where
-        W::DynamicType: Default + Eq + Hash + Clone + Debug,
         I: 'static + IntoIterator<Item = ObjectRef<K>>,
         I::IntoIter: Send,
     {
@@ -66,17 +60,13 @@ where
         Ok(Self { name, controller })
     }
 
-    pub fn watches_modified<
-        W: 'static + Resource + Clone + Debug + DeserializeOwned + Send + Sync,
-        I,
-    >(
+    pub fn watches_modified<W: KubeObject, I>(
         self,
         watcher: &Watcher<W>,
         modifier: impl FnMut(&mut W) + Send + 'static,
         mapper: impl Fn(W) -> I + Sync + Send + 'static,
     ) -> Result<Self, ControllerError>
     where
-        W::DynamicType: Default + Eq + Hash + Clone + Debug,
         I: 'static + IntoIterator<Item = ObjectRef<K>>,
         I::IntoIter: Send,
     {
@@ -105,6 +95,77 @@ where
 
         Ok(Self { name, controller })
     }
-
-    pub async fn run(self) {}
 }
+
+//     pub async fn run<Ctx, ReconcileFn, ReconcileFut, Err, ErrorPolicyFn>(
+//         self,
+//         reconcile: ReconcileFn,
+//         error_policy: ErrorPolicyFn,
+//         ctx: Arc<Ctx>,
+//     ) where
+//         Ctx: Send + Sync + 'static,
+//         K::DynamicType: Unpin,
+//         // reconcile(obj, ctx) -> Future<Output = Result<Action, Err>>
+//         ReconcileFn: Fn(Arc<K>, Arc<Ctx>) -> ReconcileFut + Send + Sync + 'static,
+//         ReconcileFut: Future<Output = Result<Action, Err>> + Send + 'static,
+//         // error_policy(obj, err, ctx) -> Action
+//         ErrorPolicyFn: Fn(Arc<K>, &Err, Arc<Ctx>) -> Action + Send + Sync + 'static,
+//         Err: std::error::Error + Send + Sync + 'static,
+//     {
+//         self.controller
+//             .run(reconcile, error_policy, ctx)
+//             .for_each(|_| async move {})
+//             .await;
+//     }
+
+//     fn reconcile_internal<Ctx, ReconcileFn, ReconcileFut, Err>(
+//         name: String,
+//         reconcile: ReconcileFn,
+//     ) -> impl Fn(Arc<K>, Arc<Ctx>) -> Pin<Box<dyn Future<Output = Result<Action, Err>> + Send>>
+//     + Send
+//     + Sync
+//     + 'static
+//     where
+//         Ctx: Send + Sync + 'static,
+//         ReconcileFn: Fn(Arc<K>, Arc<Ctx>) -> ReconcileFut + Send + Sync + Clone + 'static,
+//         ReconcileFut: Future<Output = Result<Action, Err>> + Send + 'static,
+//         Err: std::error::Error + Send + Sync + 'static,
+//     {
+//         move |obj: Arc<K>, ctx: Arc<Ctx>| {
+//             let name = name.clone();
+//             Box::pin(async move {
+//                 // ---- default logic for every controller reconcile ----
+//                 tracing::debug!(controller = %name, "reconcile start");
+
+//                 let res = reconcile(obj, ctx).await;
+
+//                 match &res {
+//                     Ok(action) => tracing::debug!(controller = %name, ?action, "reconcile ok"),
+//                     Err(err) => tracing::warn!(controller = %name, error = %err, "reconcile error"),
+//                 }
+
+//                 res
+//             })
+//         }
+//     }
+
+//     fn error_policy_internal<Ctx, ErrorPolicyFn, Err>(
+//         name: String,
+//         error_policy: ErrorPolicyFn,
+//     ) -> impl Fn(Arc<K>, &Err, Arc<Ctx>) -> Action + Send + Sync + 'static
+//     where
+//         Ctx: Send + Sync + 'static,
+//         ErrorPolicyFn: Fn(Arc<K>, &Err, Arc<Ctx>) -> Action + Send + Sync + 'static,
+//         Err: std::error::Error + Send + Sync + 'static,
+//     {
+//         move |obj: Arc<K>, err: &Err, ctx: Arc<Ctx>| {
+//             // --- default logic for every error policy ---
+//             tracing::warn!(
+//                 controller = %name,
+//                 error = %err,
+//                 "error_policy invoked"
+//             );
+
+//             error_policy(obj, err, ctx)
+//         }
+//     }

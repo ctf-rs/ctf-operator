@@ -1,10 +1,8 @@
 use async_stream::stream;
 use futures::{Stream, StreamExt};
-use kube::{
-    Resource,
-    runtime::{reflector::Lookup, watcher},
-};
-use std::hash::Hash;
+use kube::runtime::watcher;
+
+use crate::util::KubeObject;
 
 pub trait Index<K> {
     fn apply(&self, obj: K);
@@ -12,10 +10,8 @@ pub trait Index<K> {
     fn rehydrate(&self, objs: Vec<K>);
 }
 
-pub fn indexer<K, I: Index<K>, W>(index: &I, stream: W) -> impl Stream<Item = W::Item>
+pub fn indexer<K: KubeObject, I: Index<K>, W>(index: &I, stream: W) -> impl Stream<Item = W::Item>
 where
-    K: Lookup + Clone,
-    K::DynamicType: Eq + Hash + Clone,
     W: Stream<Item = watcher::Result<watcher::Event<K>>>,
 {
     let mut stream = Box::pin(stream);
@@ -53,11 +49,9 @@ where
 
 /// Extension trait for streams returned by [`watcher`](watcher()) or [`reflector`](crate::reflector::reflector)
 pub trait WatchStreamIndexExt: Stream {
-    fn index<K, I: Index<K>>(self, index: &I) -> impl Stream<Item = Self::Item>
+    fn index<K: KubeObject, I: Index<K>>(self, index: &I) -> impl Stream<Item = Self::Item>
     where
         Self: Stream<Item = watcher::Result<watcher::Event<K>>> + Sized,
-        K: Resource + Clone + 'static,
-        K::DynamicType: Eq + std::hash::Hash + Clone,
     {
         indexer(index, self)
     }

@@ -5,24 +5,31 @@ mod watcher;
 
 pub use controller::*;
 pub use indexer::*;
+use kube::runtime::reflector::Lookup;
+use serde::de::DeserializeOwned;
 pub use waiter::*;
 pub use watcher::*;
 
-use kube::Resource;
+use std::fmt::Debug;
+use std::hash::Hash;
 
-fn gvk_string<K: Resource>() -> String
-where
-    K::DynamicType: Default,
+pub trait KubeObject:
+    'static + kube::Resource<DynamicType = ()> + Clone + Debug + DeserializeOwned + Send + Sync
 {
-    let dt = K::DynamicType::default();
+    fn gvk() -> String {
+        let group = Self::group(&());
+        let version = Self::version(&());
+        let kind = Self::kind(&());
 
-    let group = K::group(&dt);
-    let version = K::version(&dt);
-    let kind = K::kind(&dt);
-
-    if group.is_empty() {
-        format!("{}, {}", version, kind)
-    } else {
-        format!("{}/{}, {}", group, version, kind)
+        if group.is_empty() {
+            format!("{}, {}", version, kind)
+        } else {
+            format!("{}/{}, {}", group, version, kind)
+        }
     }
+}
+
+impl<T> KubeObject for T where
+    T: 'static + kube::Resource<DynamicType = ()> + Clone + Debug + DeserializeOwned + Send + Sync
+{
 }

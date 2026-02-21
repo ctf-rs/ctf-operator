@@ -8,10 +8,7 @@ use ctf_operator::{
     util::{Controller, Index, Waiter, Watcher},
 };
 use k8s_openapi::api::core::v1::Pod;
-use kube::{
-    Client, CustomResourceExt,
-    runtime::watcher,
-};
+use kube::{Client, CustomResourceExt, runtime::watcher};
 
 use parking_lot::RwLock;
 use tracing::info;
