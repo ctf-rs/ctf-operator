@@ -2,13 +2,16 @@ use std::sync::Arc;
 
 use clap::Parser;
 use ctf_operator::{
-    Args, Command, CrdArgs, OperatorArgs, State,
+    Args, Command, CrdArgs, Error, OperatorArgs, State,
     crd::v1alpha1::{Container, Flag, PortClaim, ReservationSet},
     init_telemetry,
-    util::{Controller, Index, Waiter, Watcher},
+    util::{ControllerRunner, Index, Reconciler, Waiter, Watcher},
 };
 use k8s_openapi::api::core::v1::Pod;
-use kube::{Client, CustomResourceExt, runtime::watcher};
+use kube::{
+    Client, CustomResourceExt,
+    runtime::{controller::Action, watcher},
+};
 
 use parking_lot::RwLock;
 use tracing::info;
@@ -25,35 +28,29 @@ async fn main() -> anyhow::Result<()> {
 }
 
 #[derive(Debug)]
-pub struct ServiceIndex {
-    pub val: Arc<RwLock<u32>>,
-}
+pub struct SharedIndex {}
 
-impl Index<Container> for ServiceIndex {
-    fn apply(&self, _obj: Container) {
+impl Index<Flag> for SharedIndex {
+    fn apply(&mut self, _obj: Flag) {
         info!("apply");
     }
 
-    fn delete(&self, _obj: &Container) {
+    fn delete(&mut self, _obj: &Flag) {
         info!("del");
     }
 
-    fn rehydrate(&self, _objs: Vec<Container>) {
+    fn rehydrate(&mut self, _objs: Vec<Flag>) {
         info!("rehydrate");
     }
 }
 
-impl Index<PortClaim> for ServiceIndex {
-    fn apply(&self, _obj: PortClaim) {
-        info!("apply");
-    }
+pub struct FlagReconciler {}
+impl Reconciler<Flag, (), Error> for FlagReconciler {
+    const NAME: &'static str = "flag-controller";
 
-    fn delete(&self, _obj: &PortClaim) {
-        info!("del");
-    }
-
-    fn rehydrate(&self, _objs: Vec<PortClaim>) {
-        info!("rehydrate");
+    async fn reconcile(flag: Arc<Flag>, ctx: Arc<()>) -> Result<Action, Error> {
+        info!("FLAG");
+        Ok(Action::await_change())
     }
 }
 
@@ -82,22 +79,24 @@ async fn start_operator(_args: OperatorArgs) -> anyhow::Result<()> {
         Watcher::new(reservations_api, watcher::Config::default(), store_buf_size);
     let pods_watcher = Watcher::new(pods_api, watcher::Config::default(), store_buf_size);
 
-    let flags_controller = Controller::new("flag-controller".to_string(), &flags_watcher)?;
-    let containers_controller =
-        Controller::new("container-controller".to_string(), &containers_watcher)?
-            .watches(&ports_watcher, |_port| vec![])?
-            .watches(&flags_watcher, |_a| vec![])?
-            .owns(&pods_watcher)?;
+    let flags_controller: ControllerRunner<_, _, _, FlagReconciler> =
+        ControllerRunner::new(Arc::new(()), &flags_watcher)?;
+    // let containers_controller =
+    //     ControllerRunner::new("container-controller".to_string(), &containers_watcher)?
+    //         .watches(&ports_watcher, |_port| vec![])?
+    //         .watches(&flags_watcher, |_a| vec![])?
+    //         .owns(&pods_watcher)?;
 
-    let ports_controller = Controller::new("portclaim-controller".to_string(), &ports_watcher)?
-        .watches(&ports_watcher, |_a| vec![])?
-        .watches(&flags_watcher, |_a| vec![])?;
-    let reservations_controller = Controller::new(
-        "reservationset-controller".to_string(),
-        &reservations_watcher,
-    )?
-    .watches(&ports_watcher, |_a| vec![])?
-    .watches(&flags_watcher, |_a| vec![])?;
+    // let ports_controller =
+    //     ControllerRunner::new("portclaim-controller".to_string(), &ports_watcher)?
+    //         .watches(&ports_watcher, |_a| vec![])?
+    //         .watches(&flags_watcher, |_a| vec![])?;
+    // let reservations_controller = ControllerRunner::new(
+    //     "reservationset-controller".to_string(),
+    //     &reservations_watcher,
+    // )?
+    // .watches(&ports_watcher, |_a| vec![])?
+    // .watches(&flags_watcher, |_a| vec![])?;
 
     Waiter::builder()
         .watcher(flags_watcher)
@@ -105,9 +104,9 @@ async fn start_operator(_args: OperatorArgs) -> anyhow::Result<()> {
         .watcher(ports_watcher)
         .watcher(reservations_watcher)
         .controller(flags_controller)
-        .controller(containers_controller)
-        .controller(ports_controller)
-        .controller(reservations_controller)
+        // .controller(containers_controller)
+        // .controller(ports_controller)
+        // .controller(reservations_controller)
         .run()
         .await?;
 

@@ -14,6 +14,7 @@ use kube::{
         watcher,
     },
 };
+use parking_lot::RwLock;
 use serde::de::DeserializeOwned;
 
 use crate::util::KubeObject;
@@ -78,7 +79,7 @@ impl<K: KubeObject> Watcher<K> {
 
     pub fn to_index_stream<I: Index<K>>(
         self,
-        index: &I,
+        index: Arc<RwLock<I>>,
     ) -> impl Stream<Item = Result<Event<K>, kube::runtime::watcher::Error>>
     where
         K: Send,

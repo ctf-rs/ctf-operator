@@ -1,16 +1,22 @@
+use std::sync::Arc;
+
 use async_stream::stream;
 use futures::{Stream, StreamExt};
 use kube::runtime::watcher;
+use parking_lot::RwLock;
 
 use crate::util::KubeObject;
 
 pub trait Index<K> {
-    fn apply(&self, obj: K);
-    fn delete(&self, obj: &K);
-    fn rehydrate(&self, objs: Vec<K>);
+    fn apply(&mut self, obj: K);
+    fn delete(&mut self, obj: &K);
+    fn rehydrate(&mut self, objs: Vec<K>);
 }
 
-pub fn indexer<K: KubeObject, I: Index<K>, W>(index: &I, stream: W) -> impl Stream<Item = W::Item>
+pub fn indexer<K: KubeObject, I: Index<K>, W>(
+    index: Arc<RwLock<I>>,
+    stream: W,
+) -> impl Stream<Item = W::Item>
 where
     W: Stream<Item = watcher::Result<watcher::Event<K>>>,
 {
@@ -22,10 +28,10 @@ where
                 Ok(ev) => {
                     match &ev {
                         watcher::Event::Apply(obj) => {
-                            index.apply(obj.clone());
+                            index.write().apply(obj.clone());
                         }
                         watcher::Event::Delete(obj) => {
-                            index.delete(&obj);
+                            index.write().delete(&obj);
                         }
                         watcher::Event::Init => {
                             buffer = Vec::new();
@@ -34,7 +40,7 @@ where
                             buffer.push(obj.clone());
                         }
                         watcher::Event::InitDone => {
-                            index.rehydrate(buffer);
+                            index.write().rehydrate(buffer);
                             buffer = Vec::new();
                         }
                     };
@@ -47,9 +53,11 @@ where
     }
 }
 
-/// Extension trait for streams returned by [`watcher`](watcher()) or [`reflector`](crate::reflector::reflector)
 pub trait WatchStreamIndexExt: Stream {
-    fn index<K: KubeObject, I: Index<K>>(self, index: &I) -> impl Stream<Item = Self::Item>
+    fn index<K: KubeObject, I: Index<K>>(
+        self,
+        index: Arc<RwLock<I>>,
+    ) -> impl Stream<Item = Self::Item>
     where
         Self: Stream<Item = watcher::Result<watcher::Event<K>>> + Sized,
     {
