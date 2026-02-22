@@ -3,7 +3,7 @@ use kube::CustomResource;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use super::{FlagFormat, FlagOptions, FlagRandomRules};
+use super::{FlagFormat, FlagMatchOptions, FlagRandomRules};
 
 #[derive(
     CustomResource, Serialize, Deserialize, Default, Debug, PartialEq, Eq, Clone, JsonSchema,
@@ -42,5 +42,5 @@ pub struct ChallengeFlag {
     #[serde(default)]
     pub random: Option<FlagRandomRules>,
     #[serde(default)]
-    pub options: Option<FlagOptions>,
+    pub options: Option<FlagMatchOptions>,
 }

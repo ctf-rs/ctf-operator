@@ -1,17 +1,22 @@
-mod controller_runner;
+mod condition;
+mod controller;
 mod indexer;
 mod reconciler;
 mod waiter;
 mod watcher;
 
-pub use controller_runner::*;
+pub use condition::*;
+pub use controller::*;
 pub use indexer::*;
+use kube::Client;
 pub use reconciler::*;
 pub use waiter::*;
 pub use watcher::*;
 
 use serde::de::DeserializeOwned;
 use std::fmt::Debug;
+
+use crate::OPERATOR_NAME;
 
 pub trait KubeObject:
     'static + kube::Resource<DynamicType = ()> + Clone + Debug + DeserializeOwned + Send + Sync
@@ -26,6 +31,13 @@ pub trait KubeObject:
         } else {
             format!("{}/{}, {}", group, version, kind)
         }
+    }
+
+    fn namespace_unchecked(&self) -> String {
+        self.meta()
+            .namespace
+            .clone()
+            .expect(".metadata.namespace missing")
     }
 }
 

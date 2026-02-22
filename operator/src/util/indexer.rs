@@ -1,11 +1,12 @@
-use std::sync::Arc;
-
 use async_stream::stream;
 use futures::{Stream, StreamExt};
 use kube::runtime::watcher;
 use parking_lot::RwLock;
+use std::sync::Arc;
 
 use crate::util::KubeObject;
+
+pub type SharedIndex<K> = Arc<RwLock<K>>;
 
 pub trait Index<K> {
     fn apply(&mut self, obj: K);
@@ -14,7 +15,7 @@ pub trait Index<K> {
 }
 
 pub fn indexer<K: KubeObject, I: Index<K>, W>(
-    index: Arc<RwLock<I>>,
+    index: SharedIndex<I>,
     stream: W,
 ) -> impl Stream<Item = W::Item>
 where
@@ -56,7 +57,7 @@ where
 pub trait WatchStreamIndexExt: Stream {
     fn index<K: KubeObject, I: Index<K>>(
         self,
-        index: Arc<RwLock<I>>,
+        index: SharedIndex<I>,
     ) -> impl Stream<Item = Self::Item>
     where
         Self: Stream<Item = watcher::Result<watcher::Event<K>>> + Sized,

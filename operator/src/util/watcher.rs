@@ -1,7 +1,3 @@
-use std::fmt::Debug;
-use std::hash::Hash;
-use std::sync::Arc;
-
 use futures::stream::BoxStream;
 use futures::{Stream, StreamExt};
 use kube::Resource;
@@ -14,10 +10,12 @@ use kube::{
         watcher,
     },
 };
-use parking_lot::RwLock;
 use serde::de::DeserializeOwned;
+use std::fmt::Debug;
+use std::hash::Hash;
+use std::sync::Arc;
 
-use crate::util::KubeObject;
+use crate::util::{KubeObject, SharedIndex};
 
 use super::indexer::{Index, WatchStreamIndexExt};
 
@@ -79,7 +77,7 @@ impl<K: KubeObject> Watcher<K> {
 
     pub fn to_index_stream<I: Index<K>>(
         self,
-        index: Arc<RwLock<I>>,
+        index: SharedIndex<I>,
     ) -> impl Stream<Item = Result<Event<K>, kube::runtime::watcher::Error>>
     where
         K: Send,

@@ -1,17 +1,12 @@
-use std::fmt::Debug;
-use std::sync::Arc;
-
+use super::indexer::Index;
+use crate::util::{Controller, KubeObject, Reconciler, SharedIndex, Watcher};
 use futures::StreamExt;
 use futures::future::BoxFuture;
 use kube::runtime::reflector::store::WriterDropped;
-use parking_lot::RwLock;
+use std::fmt::Debug;
+use thiserror::Error;
 use tokio::task::{JoinError, JoinSet};
 use tracing::{info, trace};
-
-use super::indexer::Index;
-
-use crate::util::{ControllerRunner, KubeObject, Reconciler, Watcher};
-use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum WaitReadyError {
@@ -87,7 +82,7 @@ impl Waiter {
             watcher
                 .to_stream()
                 .for_each(
-                    |ev| async move { info!("Streamed event {:?} for Type {}", ev, K::gvk()) },
+                    |ev| async move { trace!("Streamed event {:?} for Type {}", ev, K::gvk()) },
                 )
                 .await;
         }));
@@ -98,7 +93,7 @@ impl Waiter {
     pub fn index_watcher<K: KubeObject, I: 'static + Index<K> + Send + Sync>(
         mut self,
         watcher: Watcher<K>,
-        index: Arc<RwLock<I>>,
+        index: SharedIndex<I>,
     ) -> Self {
         let store = watcher.store();
         self.ready_tasks
@@ -116,15 +111,7 @@ impl Waiter {
         self
     }
 
-    pub fn controller<K: KubeObject, Err, Ctx, R: Reconciler<K, Ctx, Err>>(
-        mut self,
-        controller: ControllerRunner<K, Ctx, Err, R>,
-    ) -> Self
-    where
-        Err: std::error::Error + Send + Sync + 'static,
-        Ctx: Send + Sync + 'static,
-        R: Send + 'static,
-    {
+    pub fn controller<R: Reconciler>(mut self, controller: Controller<R>) -> Self {
         self.pending_controllers.push(Box::pin(async move {
             controller.run().await;
         }));

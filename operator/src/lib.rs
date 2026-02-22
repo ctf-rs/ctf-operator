@@ -3,10 +3,10 @@ mod cli;
 pub mod controller;
 pub mod crd;
 mod metrics;
+pub mod runtime;
 mod state;
 mod telemetry;
 pub mod util;
-pub mod watcher;
 
 pub use cli::*;
 pub use metrics::*;
@@ -17,27 +17,8 @@ use thiserror::Error;
 
 pub const OPERATOR_NAME: &'static str = "ctf-operator";
 
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("SerializationError: {0}")]
-    SerializationError(#[from] serde_json::Error),
-
-    #[error("Kube Error: {0}")]
-    KubeError(#[from] kube::Error),
-
-    #[error("Finalizer Error: {0}")]
-    // NB: awkward type because finalizer::Error embeds the reconciler error (which is this)
-    // so boxing this error to break cycles
-    FinalizerError(#[from] Box<kube::runtime::finalizer::Error<Error>>),
-
-    #[error("IllegalDocument")]
-    IllegalDocument,
-}
-
-pub type Result<T, E = crate::Error> = std::result::Result<T, E>;
-
-impl Error {
-    pub fn metric_label(&self) -> String {
-        format!("{self:?}").to_lowercase()
-    }
-}
+// impl Error {
+//     pub fn metric_label(&self) -> String {
+//         format!("{self:?}").to_lowercase()
+//     }
+// }

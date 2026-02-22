@@ -54,7 +54,7 @@ spec:
                     default: true
                     type: boolean
                   len:
-                    default: 32
+                    default: 8
                     format: uint8
                     maximum: 255.0
                     minimum: 0.0
@@ -78,45 +78,71 @@ spec:
             properties:
               conditions:
                 items:
-                  description: Condition contains details for one aspect of the current state of this API Resource.
                   properties:
-                    lastTransitionTime:
-                      description: lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                    lastProbeTime:
+                      description: Last time an KubeObject was probed for a condition.
                       format: date-time
+                      nullable: true
+                      type: string
+                    lastTransitionTime:
+                      description: Last time a condition transitioned from one status to another.
+                      format: date-time
+                      nullable: true
                       type: string
                     message:
-                      description: message is a human readable message indicating details about the transition. This may be an empty string.
+                      description: Human readable message that describes details about last transition.
+                      nullable: true
                       type: string
-                    observedGeneration:
-                      description: observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.
-                      format: int64
-                      type: integer
                     reason:
-                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.
+                      description: |-
+                        Unique one word reason in CamelCase that describes the reason for a
+                        transition.
+                      nullable: true
                       type: string
                     status:
-                      description: status of the condition, one of True, False, Unknown.
+                      description: |-
+                        Status of the condition.
+                        Can be True, False, Unknown
+                      enum:
+                      - 'True'
+                      - 'False'
+                      - Unknown
                       type: string
                     type:
-                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      description: Type of the condition
                       type: string
                   required:
-                  - lastTransitionTime
-                  - message
-                  - reason
                   - status
                   - type
                   type: object
                 type: array
               flag:
+                nullable: true
                 type: string
             required:
-            - flag
+            - conditions
             type: object
         required:
         - spec
-        title: Flag
+        title: FlagValidated
         type: object
+        x-kubernetes-validations:
+        - message: Flag prefix is empty
+          rule: self.spec.prefix != ''
+        - message: Flag prefix can only contain letters and numbers
+          rule: self.spec.prefix.matches('^[a-zA-Z0-9]+$')
+        - message: Flag prefix must be between 3 and 6 characters long
+          rule: size(self.spec.prefix) >= 3 && size(self.spec.prefix) <= 6
+        - message: Flag body is empty
+          rule: self.spec.body != ''
+        - message: Flag body cant be larger than 128 chars
+          rule: size(self.spec.body) < 128
+        - message: Flag random len must be non-zero
+          rule: '!has(self.spec.random) || self.spec.random.len != 0'
+        - message: Flag random cant be larger than 64
+          rule: '!has(self.spec.random) || self.spec.random.len < 64'
+        - message: Flag random cant be larger than 64
+          rule: '!has(self.spec.random) || self.spec.random.len < 64'
     served: true
     storage: true
     subresources:

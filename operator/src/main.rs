@@ -1,20 +1,8 @@
-use std::sync::Arc;
-
 use clap::Parser;
-use ctf_operator::{
-    Args, Command, CrdArgs, Error, OperatorArgs, State,
-    crd::v1alpha1::{Container, Flag, PortClaim, ReservationSet},
-    init_telemetry,
-    util::{ControllerRunner, Index, Reconciler, Waiter, Watcher},
-};
-use k8s_openapi::api::core::v1::Pod;
-use kube::{
-    Client, CustomResourceExt,
-    runtime::{controller::Action, watcher},
-};
 
-use parking_lot::RwLock;
-use tracing::info;
+use ctf_operator::crd::v1alpha1::{Container, Flag, PortClaim, ReservationSet};
+use ctf_operator::{Args, Command, CrdArgs, OperatorArgs, init_telemetry, runtime};
+use kube::CustomResourceExt;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -27,88 +15,64 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[derive(Debug)]
-pub struct SharedIndex {}
-
-impl Index<Flag> for SharedIndex {
-    fn apply(&mut self, _obj: Flag) {
-        info!("apply");
-    }
-
-    fn delete(&mut self, _obj: &Flag) {
-        info!("del");
-    }
-
-    fn rehydrate(&mut self, _objs: Vec<Flag>) {
-        info!("rehydrate");
-    }
-}
-
-pub struct FlagReconciler {}
-impl Reconciler<Flag, (), Error> for FlagReconciler {
-    const NAME: &'static str = "flag-controller";
-
-    async fn reconcile(flag: Arc<Flag>, ctx: Arc<()>) -> Result<Action, Error> {
-        info!("FLAG");
-        Ok(Action::await_change())
-    }
-}
-
 async fn start_operator(_args: OperatorArgs) -> anyhow::Result<()> {
     init_telemetry().await;
 
-    let _state = State::new();
+    runtime::run().await?;
 
-    let client = Client::try_default()
-        .await
-        .expect("failed to create kube Client");
+    // let _state = State::new();
 
-    let flags_api: kube::Api<Flag> = kube::Api::namespaced(client.clone(), "default");
-    let containers_api: kube::Api<Container> = kube::Api::namespaced(client.clone(), "default");
-    let ports_api: kube::Api<PortClaim> = kube::Api::namespaced(client.clone(), "default");
-    let reservations_api: kube::Api<ReservationSet> =
-        kube::Api::namespaced(client.clone(), "default");
-    let pods_api: kube::Api<Pod> = kube::Api::namespaced(client.clone(), "default");
+    // let client = Client::try_default()
+    //     .await
+    //     .expect("failed to create kube Client");
 
-    let store_buf_size = 0xFFFF;
-    let flags_watcher = Watcher::new(flags_api, watcher::Config::default(), store_buf_size);
-    let containers_watcher =
-        Watcher::new(containers_api, watcher::Config::default(), store_buf_size);
-    let ports_watcher = Watcher::new(ports_api, watcher::Config::default(), store_buf_size);
-    let reservations_watcher =
-        Watcher::new(reservations_api, watcher::Config::default(), store_buf_size);
-    let pods_watcher = Watcher::new(pods_api, watcher::Config::default(), store_buf_size);
+    // let index = SharedIndex {};
+    // let index = Arc::new(RwLock::new(index));
 
-    let flags_controller: ControllerRunner<_, _, _, FlagReconciler> =
-        ControllerRunner::new(Arc::new(()), &flags_watcher)?;
-    // let containers_controller =
-    //     ControllerRunner::new("container-controller".to_string(), &containers_watcher)?
-    //         .watches(&ports_watcher, |_port| vec![])?
-    //         .watches(&flags_watcher, |_a| vec![])?
-    //         .owns(&pods_watcher)?;
+    // let containers_api: kube::Api<Container> = kube::Api::namespaced(client.clone(), "default");
+    // let ports_api: kube::Api<PortClaim> = kube::Api::namespaced(client.clone(), "default");
+    // let reservations_api: kube::Api<ReservationSet> =
+    //     kube::Api::namespaced(client.clone(), "default");
+    // let pods_api: kube::Api<Pod> = kube::Api::namespaced(client.clone(), "default");
 
-    // let ports_controller =
-    //     ControllerRunner::new("portclaim-controller".to_string(), &ports_watcher)?
-    //         .watches(&ports_watcher, |_a| vec![])?
-    //         .watches(&flags_watcher, |_a| vec![])?;
-    // let reservations_controller = ControllerRunner::new(
-    //     "reservationset-controller".to_string(),
-    //     &reservations_watcher,
-    // )?
-    // .watches(&ports_watcher, |_a| vec![])?
-    // .watches(&flags_watcher, |_a| vec![])?;
+    // let containers_watcher =
+    //     Watcher::new(containers_api, watcher::Config::default(), store_buf_size);
+    // let ports_watcher = Watcher::new(ports_api, watcher::Config::default(), store_buf_size);
+    // let reservations_watcher =
+    //     Watcher::new(reservations_api, watcher::Config::default(), store_buf_size);
+    // let pods_watcher = Watcher::new(pods_api, watcher::Config::default(), store_buf_size);
 
-    Waiter::builder()
-        .watcher(flags_watcher)
-        .watcher(containers_watcher)
-        .watcher(ports_watcher)
-        .watcher(reservations_watcher)
-        .controller(flags_controller)
-        // .controller(containers_controller)
-        // .controller(ports_controller)
-        // .controller(reservations_controller)
-        .run()
-        .await?;
+    // let flags_controller: Controller<FlagReconciler> =
+    //     Controller::new(Arc::new(()), &flags_watcher)?;
+
+    // // let containers_controller =
+    // //     ControllerRunner::new("container-controller".to_string(), &containers_watcher)?
+    // //         .watches(&ports_watcher, |_port| vec![])?
+    // //         .watches(&flags_watcher, |_a| vec![])?
+    // //         .owns(&pods_watcher)?;
+
+    // // let ports_controller =
+    // //     ControllerRunner::new("portclaim-controller".to_string(), &ports_watcher)?
+    // //         .watches(&ports_watcher, |_a| vec![])?
+    // //         .watches(&flags_watcher, |_a| vec![])?;
+    // // let reservations_controller = ControllerRunner::new(
+    // //     "reservationset-controller".to_string(),
+    // //     &reservations_watcher,
+    // // )?
+    // // .watches(&ports_watcher, |_a| vec![])?
+    // // .watches(&flags_watcher, |_a| vec![])?;
+
+    // Waiter::builder()
+    //     .index_watcher(flags_watcher, index)
+    //     .watcher(containers_watcher)
+    //     .watcher(ports_watcher)
+    //     .watcher(reservations_watcher)
+    //     .controller(flags_controller)
+    //     // .controller(containers_controller)
+    //     // .controller(ports_controller)
+    //     // .controller(reservations_controller)
+    //     .run()
+    //     .await?;
 
     // tokio::join!(
     //     flags_controller,
