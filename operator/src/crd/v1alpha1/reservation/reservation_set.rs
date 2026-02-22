@@ -1,6 +1,7 @@
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
 use kube::{CustomResource, KubeSchema};
 use serde::{Deserialize, Serialize};
+
+use crate::util::Conditions;
 #[derive(
     CustomResource, Serialize, Deserialize, Default, Debug, PartialEq, Eq, Clone, KubeSchema,
 )]
@@ -8,6 +9,7 @@ use serde::{Deserialize, Serialize};
     group = "operator.ctf.rs",
     version = "v1alpha1",
     kind = "ReservationSet",
+    singular = "reservation",
     plural = "reservations",
     root = "ReservationSet",
     namespaced,
@@ -15,7 +17,7 @@ use serde::{Deserialize, Serialize};
     status = "ReservationSetStatus",
     derive = "PartialEq",
     derive = "Default",
-    shortname = "prs",
+    shortname = "res",
     validation = Rule::new("self.spec.start >= 1024").message("start be larger or equal than 1024"),
     validation = Rule::new("self.spec.end <= 49151").message("end be smaller or equal than 49151"),
     validation = Rule::new("self.spec.start <= self.spec.end").message("start must be smaller or equal than end"),
@@ -25,11 +27,10 @@ pub struct ReservationSetSpec {
     pub end: u16,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, KubeSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, KubeSchema, Default)]
 pub struct ReservationSetStatus {
     pub claims: Vec<ReservationSetClaimStatus>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub conditions: Vec<Condition>,
+    pub conditions: Conditions,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, KubeSchema)]
@@ -45,5 +46,5 @@ pub struct ReservationSetClaimStatus {
     pub port: Option<u16>,
     pub name: String,
     pub namespace: String,
-    pub conditions: Vec<Condition>,
+    pub conditions: Conditions,
 }

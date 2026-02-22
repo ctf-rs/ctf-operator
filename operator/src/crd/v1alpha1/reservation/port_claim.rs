@@ -1,6 +1,7 @@
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
 use kube::{CustomResource, KubeSchema};
 use serde::{Deserialize, Serialize};
+
+use crate::util::Conditions;
 
 use super::ReservationRef;
 
@@ -25,12 +26,11 @@ pub struct PortClaimSpec {
     pub reservation: ReservationRef,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, KubeSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, KubeSchema, Default)]
 pub struct PortClaimStatus {
     #[serde(default)]
     pub port: Option<u16>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub conditions: Vec<Condition>,
+    pub conditions: Conditions,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, KubeSchema)]

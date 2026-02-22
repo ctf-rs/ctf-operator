@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::runtime::flag::FlagIndex;
+use crate::runtime::{
+    core::flag::FlagIndex,
+    reservation::{port_claim::PortClaimIndex, reservation_set::ReservationSetIndex},
+};
 
 pub struct CtfIndex {
     pub by_ns: HashMap<String, NamespaceIndex>,
@@ -8,6 +11,8 @@ pub struct CtfIndex {
 
 pub struct NamespaceIndex {
     pub flag: FlagIndex,
+    pub reservation_set: ReservationSetIndex,
+    pub port_claim: PortClaimIndex,
 }
 
 impl CtfIndex {
@@ -40,10 +45,12 @@ impl NamespaceIndex {
     pub fn new() -> Self {
         Self {
             flag: FlagIndex::new(),
+            reservation_set: ReservationSetIndex::new(),
+            port_claim: PortClaimIndex::new(),
         }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.flag.is_empty()
+        self.flag.is_empty() && self.reservation_set.is_empty() && self.port_claim.is_empty()
     }
 }

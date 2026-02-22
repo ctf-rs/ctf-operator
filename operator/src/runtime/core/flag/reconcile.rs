@@ -35,6 +35,8 @@ impl Reconciler for FlagReconciler {
                 Self::generate(flag, &mut status);
                 Self::validate_flag(flag, &mut status);
             }
+        } else {
+            status.flag = None;
         }
 
         if flag.status.as_ref() != Some(&status) {
@@ -140,7 +142,7 @@ impl FlagReconciler {
     const VALIDATE_SPEC_MESSAGE_RANDOM_BAD_LEN: &'static str =
         "Flag random len cant be larger than 64";
     const VALIDATE_SPEC_MESSAGE_RANDOM_NOT_DISTINCT: &'static str =
-        "Flag random special chars contain unique characters";
+        "Flag random special must contain unique characters";
 
     fn validate_spec(flag: &Flag, status: &mut FlagStatus) -> bool {
         let spec = &flag.spec;

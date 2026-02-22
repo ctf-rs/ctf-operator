@@ -12,6 +12,8 @@ pub trait Index<K> {
     fn apply(&mut self, obj: K);
     fn delete(&mut self, obj: &K);
     fn rehydrate(&mut self, objs: Vec<K>);
+    fn index(&mut self) {}
+    fn index_relations(&mut self) {}
 }
 
 pub fn indexer<K: KubeObject, I: Index<K>, W>(
