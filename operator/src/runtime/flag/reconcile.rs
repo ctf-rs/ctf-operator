@@ -90,8 +90,14 @@ fn generate_flag(flag: &Flag) -> String {
         if rand.lower {
             alphabet.push_str("abcdefghijklmnopqrstuvwxyz");
         }
-        if rand.lower {
-            //TODO: Ignore duplicates from upper rules
+        if !rand.special.is_empty() {
+            // Discard duplicated chars
+            let mut set: HashSet<char> = alphabet.chars().collect();
+            for c in rand.special.chars() {
+                if set.insert(c) {
+                    alphabet.push(c);
+                }
+            }
             alphabet.push_str(&rand.special);
         }
 
