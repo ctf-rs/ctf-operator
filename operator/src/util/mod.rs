@@ -8,15 +8,12 @@ mod watcher;
 pub use condition::*;
 pub use controller::*;
 pub use indexer::*;
-use kube::Client;
 pub use reconciler::*;
 pub use waiter::*;
 pub use watcher::*;
 
 use serde::de::DeserializeOwned;
 use std::fmt::Debug;
-
-use crate::OPERATOR_NAME;
 
 pub trait KubeObject:
     'static + kube::Resource<DynamicType = ()> + Clone + Debug + DeserializeOwned + Send + Sync

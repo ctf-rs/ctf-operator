@@ -2,7 +2,7 @@ use kube::{CustomResource, KubeSchema};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::util::{Condition, Conditions};
+use crate::util::Conditions;
 
 #[derive(
     CustomResource, Serialize, Deserialize, Default, Debug, PartialEq, Eq, Clone, KubeSchema,

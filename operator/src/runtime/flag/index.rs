@@ -1,4 +1,4 @@
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::HashMap;
 
 use kube::ResourceExt;
 

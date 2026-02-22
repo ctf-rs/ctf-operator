@@ -13,8 +13,6 @@ pub use metrics::*;
 pub use state::*;
 pub use telemetry::*;
 
-use thiserror::Error;
-
 pub const OPERATOR_NAME: &'static str = "ctf-operator";
 
 // impl Error {
