@@ -4,5 +4,5 @@ metadata:
   name: scc2025-finals
   namespace: default
 spec:
-  start: 9600
+  start: 9700
   end: 9700

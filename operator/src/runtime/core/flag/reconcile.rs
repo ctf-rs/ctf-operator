@@ -10,6 +10,7 @@ use kube::runtime::controller::Action;
 use rand::Rng;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::info;
 
 pub struct FlagReconciler {}
@@ -39,11 +40,19 @@ impl Reconciler for FlagReconciler {
             status.flag = None;
         }
 
+        let conditions_true = status.conditions.all_true();
+
         if flag.status.as_ref() != Some(&status) {
             Self::patch_status_namespaced(flag, ctx.client.clone(), status).await?;
         }
 
-        Ok(Action::await_change())
+        if conditions_true {
+            Ok(Action::await_change())
+        } else {
+            Ok(Action::requeue(Duration::from_secs(
+                Self::ERROR_RECONCILE_REQUEUE_TIME,
+            )))
+        }
     }
 }
 

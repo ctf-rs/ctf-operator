@@ -8,6 +8,7 @@ use crate::{
 use kube::ResourceExt;
 use kube::runtime::controller::Action;
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::info;
 
 pub struct ReservationSetReconciler {}
@@ -33,11 +34,18 @@ impl Reconciler for ReservationSetReconciler {
             status.claims.clear();
         }
 
+        let conditions_true = status.conditions.all_true();
         if reservation_set.status.as_ref() != Some(&status) {
             Self::patch_status_namespaced(reservation_set, ctx.client.clone(), status).await?;
         }
 
-        Ok(Action::await_change())
+        if conditions_true {
+            Ok(Action::await_change())
+        } else {
+            Ok(Action::requeue(Duration::from_secs(
+                Self::ERROR_RECONCILE_REQUEUE_TIME,
+            )))
+        }
     }
 }
 

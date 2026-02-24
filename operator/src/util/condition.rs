@@ -45,6 +45,12 @@ impl Conditions {
         Self::default()
     }
 
+    pub fn all_true(&self) -> bool {
+        self.inner
+            .values()
+            .all(|condition| condition.status == ConditionStatus::True)
+    }
+
     pub fn get(&self, typ: &str) -> Option<&Condition> {
         self.inner.get(typ)
     }
