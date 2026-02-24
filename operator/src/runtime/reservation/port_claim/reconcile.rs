@@ -1,5 +1,4 @@
 use crate::crd::v1alpha1::{PortClaimStatus, ReservationSet};
-use crate::runtime::CtfResult;
 use crate::util::{ConditionStatus, KubeObject};
 use crate::{
     crd::v1alpha1::PortClaim,

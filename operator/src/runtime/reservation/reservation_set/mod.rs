@@ -1,7 +1,6 @@
 mod index;
 mod reconcile;
 
-pub use index::*;
 pub use reconcile::*;
 
 use crate::{
