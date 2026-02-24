@@ -13,7 +13,13 @@ spec:
     singular: reservation
   scope: Namespaced
   versions:
-  - additionalPrinterColumns: []
+  - additionalPrinterColumns:
+    - jsonPath: .spec.start
+      name: START
+      type: string
+    - jsonPath: .spec.end
+      name: END
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:

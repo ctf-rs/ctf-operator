@@ -18,6 +18,8 @@ use crate::util::Conditions;
     derive = "PartialEq",
     derive = "Default",
     shortname = "res",
+    printcolumn = r#"{"name":"START","type":"string","jsonPath":".spec.start"}"#,
+    printcolumn = r#"{"name":"END","type":"string","jsonPath":".spec.end"}"#,
     validation = Rule::new("self.spec.start >= 1024").message("start be larger or equal than 1024"),
     validation = Rule::new("self.spec.end <= 49151").message("end be smaller or equal than 49151"),
     validation = Rule::new("self.spec.start <= self.spec.end").message("start must be smaller or equal than end"),

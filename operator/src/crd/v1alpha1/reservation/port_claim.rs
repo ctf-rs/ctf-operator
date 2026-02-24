@@ -22,6 +22,7 @@ use super::ReservationRef;
     shortname = "port",
     selectable = ".spec.reservation.name",
     selectable = ".spec.reservation.namespace",
+    printcolumn = r#"{"name":"PORT","type":"string","jsonPath":".status.port"}"#,
     //TODO: enable reservation changing. Current limitation of Controller watch function not seeing property change
     validation = Rule::new("self.spec.reservation == oldSelf.spec.reservation").message("reservation field is immutable"),
 )]

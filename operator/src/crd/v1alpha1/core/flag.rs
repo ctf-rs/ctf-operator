@@ -19,6 +19,7 @@ use crate::util::Conditions;
     derive = "PartialEq",
     derive = "Default",
     shortname = "flag",
+    printcolumn = r#"{"name":"FLAG","type":"string","jsonPath":".status.flag"}"#,
     validation = Rule::new("self.spec.prefix != ''").message("Flag prefix is empty"),
     validation = Rule::new("self.spec.prefix.matches('^[a-zA-Z0-9]+$')").message("Flag prefix can only contain letters and numbers"),
     validation = Rule::new("size(self.spec.prefix) >= 3 && size(self.spec.prefix) <= 6").message("Flag prefix must be between 3 and 6 characters long"),

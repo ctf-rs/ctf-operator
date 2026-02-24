@@ -13,7 +13,10 @@ spec:
     singular: portclaim
   scope: Namespaced
   versions:
-  - additionalPrinterColumns: []
+  - additionalPrinterColumns:
+    - jsonPath: .status.port
+      name: PORT
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
