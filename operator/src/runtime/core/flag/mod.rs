@@ -1,7 +1,7 @@
-mod index;
+// mod index;
 mod reconcile;
 
-pub use index::*;
+// pub use index::*;
 pub use reconcile::*;
 
 use crate::{
@@ -30,8 +30,9 @@ impl Waiter {
         self,
         watcher: Watcher<Flag>,
         controller: Controller<FlagReconciler>,
-        index: SharedIndex<CtfIndex>,
+        _index: SharedIndex<CtfIndex>,
     ) -> Self {
-        self.index_watcher(watcher, index).controller(controller)
+        self.watcher(watcher).controller(controller)
+        //self.index_watcher(watcher, index).controller(controller)
     }
 }

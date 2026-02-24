@@ -19,11 +19,17 @@ pub async fn run() -> CtfResult<()> {
         .await
         .expect("failed to create kube Client");
 
-    let state = Arc::new(CtfState::new(client.clone(), index.clone()));
-
     let flag_watcher = core::flag::watcher(client.clone());
     let reservation_set_watcher = reservation::reservation_set::watcher(client.clone());
     let port_claim_watcher = reservation::port_claim::watcher(client.clone());
+
+    let state = Arc::new(CtfState::new(
+        client.clone(),
+        index.clone(),
+        flag_watcher.store(),
+        reservation_set_watcher.store(),
+        port_claim_watcher.store(),
+    ));
 
     let flag_controller = core::flag::controller(state.clone(), &flag_watcher)?;
     let reservation_set_controller = reservation::reservation_set::controller(
@@ -35,7 +41,7 @@ pub async fn run() -> CtfResult<()> {
         state.clone(),
         &port_claim_watcher,
         &reservation_set_watcher,
-        index.clone(),
+        state.clone(),
     )?;
 
     Waiter::builder()

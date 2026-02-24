@@ -1,7 +1,10 @@
-use kube::{CustomResource, KubeSchema};
+use kube::{CustomResource, KubeSchema, runtime::reflector::ObjectRef};
 use serde::{Deserialize, Serialize};
 
-use crate::util::Conditions;
+use crate::{
+    crd::v1alpha1::ReservationSet,
+    util::{Conditions, KubeObject},
+};
 
 use super::ReservationRef;
 
@@ -37,4 +40,18 @@ pub struct PortClaimStatus {
 pub struct PortClaimReservationStatus {
     pub name: String,
     pub namespace: String,
+}
+
+impl PortClaim {
+    pub fn spec_reservation_set_ref(&self) -> ObjectRef<ReservationSet> {
+        let namespace = self.namespace_unchecked();
+        ObjectRef::new(&self.spec.reservation.name).within(
+            &self
+                .spec
+                .reservation
+                .namespace
+                .as_ref()
+                .unwrap_or(&namespace),
+        )
+    }
 }
