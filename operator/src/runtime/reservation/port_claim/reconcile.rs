@@ -144,9 +144,24 @@ impl PortClaimReconciler {
         state: &CtfState,
     ) -> Option<u16> {
         let reservation_set_range = reservation_set.spec.start..=reservation_set.spec.end;
+        let reservation_set_ref = port_claim.spec_reservation_set_ref();
 
         if let Some(port) = status.port {
-            if reservation_set_range.contains(&port) {
+            let index = state.index.read();
+            let reserved_ports = match index.reserved_ports.get(&reservation_set_ref) {
+                Some(reserved_ports) => reserved_ports,
+                None => {
+                    status.conditions.set(
+                        Self::PORT_RESERVATION_CONDITION_TYPE,
+                        ConditionStatus::False,
+                        Self::PORT_RESERVATION_REASON_CACHE_MISSING,
+                        "",
+                    );
+                    return None;
+                }
+            };
+
+            if reservation_set_range.contains(&port) && reserved_ports.contains(&port) {
                 status.conditions.set(
                     Self::PORT_RESERVATION_CONDITION_TYPE,
                     ConditionStatus::True,
@@ -158,9 +173,9 @@ impl PortClaimReconciler {
 
             // Reservation changed range. Reset port
             status.port = None;
+            drop(index);
         }
 
-        let reservation_set_ref = port_claim.spec_reservation_set_ref();
         let mut index = state.index.write();
         let reserved_ports = match index.reserved_ports.get_mut(&reservation_set_ref) {
             Some(reserved_ports) => reserved_ports,
