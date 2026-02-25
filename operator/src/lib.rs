@@ -1,5 +1,4 @@
 mod cli;
-pub mod controller;
 pub mod crd;
 mod metrics;
 pub mod runtime;
