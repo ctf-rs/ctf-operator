@@ -1,6 +1,6 @@
 use clap::Parser;
 
-use ctf_operator::crd::v1alpha1::{Challenge, Flag, Jeopardy, PortClaim, ReservationSet};
+use ctf_operator::crd::v1alpha1::{Challenge, Flag, Instance, Jeopardy, PortClaim, ReservationSet};
 use ctf_operator::{Args, Command, CrdArgs, OperatorArgs, init_telemetry, runtime};
 use kube::CustomResourceExt;
 
@@ -49,6 +49,11 @@ fn gen_crd(_args: CrdArgs) {
     std::fs::write(
         "crd/challenges.yaml",
         serde_yaml::to_string(&Challenge::crd()).unwrap(),
+    )
+    .unwrap();
+    std::fs::write(
+        "crd/instances.yaml",
+        serde_yaml::to_string(&Instance::crd()).unwrap(),
     )
     .unwrap();
 }

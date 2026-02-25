@@ -1,0 +1,117 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: instances.operator.ctf.rs
+spec:
+  group: operator.ctf.rs
+  names:
+    categories: []
+    kind: Instance
+    plural: instances
+    shortNames:
+    - instance
+    singular: instance
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.challegeRef.name
+      name: Challenge
+      type: string
+    - jsonPath: .spec.userId
+      name: User ID
+      type: string
+    - jsonPath: .spec.userName
+      name: User Name
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Custom resource representing a Instance
+        properties:
+          spec:
+            properties:
+              challenge:
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    nullable: true
+                    type: string
+                required:
+                - name
+                type: object
+              spawner:
+                nullable: true
+                properties:
+                  id:
+                    format: uuid
+                    type: string
+                  kind:
+                    enum:
+                    - user
+                    - team
+                    type: string
+                  name:
+                    type: string
+                required:
+                - id
+                - kind
+                - name
+                type: object
+            required:
+            - challenge
+            type: object
+          status:
+            nullable: true
+            properties:
+              conditions:
+                items:
+                  properties:
+                    lastProbeTime:
+                      description: Last time an KubeObject was probed for a condition.
+                      format: date-time
+                      nullable: true
+                      type: string
+                    lastTransitionTime:
+                      description: Last time a condition transitioned from one status to another.
+                      format: date-time
+                      nullable: true
+                      type: string
+                    message:
+                      description: Human readable message that describes details about last transition.
+                      nullable: true
+                      type: string
+                    reason:
+                      description: |-
+                        Unique one word reason in CamelCase that describes the reason for a
+                        transition.
+                      nullable: true
+                      type: string
+                    status:
+                      description: |-
+                        Status of the condition.
+                        Can be True, False, Unknown
+                      enum:
+                      - 'True'
+                      - 'False'
+                      - Unknown
+                      type: string
+                    type:
+                      description: Type of the condition
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+            required:
+            - conditions
+            type: object
+        required:
+        - spec
+        title: Instance
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

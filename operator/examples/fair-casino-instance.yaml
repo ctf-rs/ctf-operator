@@ -1,0 +1,12 @@
+apiVersion: operator.ctf.rs/v1alpha1
+kind: Instance
+metadata:
+  name: fair-casino-instance
+  namespace: default
+spec:
+  challenge:
+    name: fair-casino
+  spawner:
+    id: 12de6c67-9f12-4a34-b220-ef5b2620edb8
+    name: Test
+    kind: user

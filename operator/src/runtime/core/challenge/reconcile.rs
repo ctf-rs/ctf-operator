@@ -397,7 +397,7 @@ fn is_u16_str(s: &str) -> bool {
 }
 
 #[allow(dead_code)]
-enum ChallengeParentRef {
+pub(crate) enum ChallengeParentRef {
     Jeopardy(Jeopardy),
 }
 
