@@ -94,8 +94,8 @@ pub struct JeopardyService {
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "PascalCase")]
 pub enum JeopardyServiceType {
-    #[default]
     ClusterIP,
+    #[default]
     NodePort,
     LoadBalancer,
 }
