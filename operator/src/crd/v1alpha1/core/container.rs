@@ -8,13 +8,13 @@ use serde::{Deserialize, Serialize};
     version = "v1alpha1",
     kind = "Container",
     plural = "containers",
+    shortname = "cont",
     root = "Container",
     namespaced,
     doc = "Custom resource representing a Container",
     status = "ContainerStatus",
     derive = "PartialEq",
-    derive = "Default",
-    shortname = "cont"
+    derive = "Default"
 )]
 pub struct ContainerSpec {
     pub image: String,

@@ -1,25 +1,25 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: reservations.operator.ctf.rs
+  name: reservationsets.operator.ctf.rs
 spec:
   group: operator.ctf.rs
   names:
     categories: []
     kind: ReservationSet
-    plural: reservations
+    plural: reservationsets
     shortNames:
-    - res
-    singular: reservation
+    - reservation
+    singular: reservationset
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
     - jsonPath: .spec.start
       name: START
-      type: string
+      type: integer
     - jsonPath: .spec.end
       name: END
-      type: string
+      type: integer
     name: v1alpha1
     schema:
       openAPIV3Schema:

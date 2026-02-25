@@ -16,7 +16,7 @@ spec:
   - additionalPrinterColumns:
     - jsonPath: .status.port
       name: PORT
-      type: string
+      type: integer
     name: v1alpha1
     schema:
       openAPIV3Schema:

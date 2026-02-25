@@ -20,6 +20,7 @@ pub async fn run() -> CtfResult<()> {
         .expect("failed to create kube Client");
 
     let flag_watcher = core::flag::watcher(client.clone());
+    let jeopardy_watcher = core::jeopardy::watcher(client.clone());
     let reservation_set_watcher = reservation::reservation_set::watcher(client.clone());
     let port_claim_watcher = reservation::port_claim::watcher(client.clone());
 
@@ -32,6 +33,8 @@ pub async fn run() -> CtfResult<()> {
     ));
 
     let flag_controller = core::flag::controller(state.clone(), &flag_watcher)?;
+    let jeopardy_controller =
+        core::jeopardy::controller(state.clone(), &jeopardy_watcher, &reservation_set_watcher)?;
     let reservation_set_controller = reservation::reservation_set::controller(
         state.clone(),
         &reservation_set_watcher,
@@ -46,6 +49,7 @@ pub async fn run() -> CtfResult<()> {
 
     Waiter::builder()
         .flag(flag_watcher, flag_controller, index.clone())
+        .jeopardy(jeopardy_watcher, jeopardy_controller, index.clone())
         .reservation_set(
             reservation_set_watcher,
             reservation_set_controller,

@@ -1,7 +1,8 @@
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition;
 use kube::CustomResource;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+use crate::util::Conditions;
 
 use super::{FlagFormat, FlagMatchOptions, FlagRandomRules};
 
@@ -27,8 +28,8 @@ pub struct ChallengeSpec {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct ChallengeStatus {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub conditions: Vec<Condition>,
+    #[serde(default)]
+    pub conditions: Conditions,
 }
 
 #[derive(Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]
