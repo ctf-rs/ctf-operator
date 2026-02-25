@@ -1,4 +1,6 @@
-use crate::crd::v1alpha1::{ChallengeContainer, ChallengeFlag, ChallengePort, ChallengeStatus};
+use crate::crd::v1alpha1::{
+    ChallengeContainer, ChallengeFlag, ChallengePort, ChallengeStatus, ContainerFlag,
+};
 use crate::util::{ConditionStatus, KubeObject, is_dns1123_label};
 use crate::{
     crd::v1alpha1::Challenge,
@@ -91,6 +93,16 @@ impl ChallengeReconciler {
         "There are multiple ports with same name";
     const VALIDATE_SPEC_MESSAGE_CONTAINER_NAME_INVALID: &'static str =
         "Port name is not valid DNS1123 Label";
+
+    const VALIDATE_SPEC_MESSAGE_CONTAINER_FLAG_UNKNOWN: &'static str =
+        "Container flag references unknown flag name";
+    const VALIDATE_SPEC_MESSAGE_CONTAINER_FLAG_DUPLICATE: &'static str =
+        "Container contains duplicate flag name";
+
+    const VALIDATE_SPEC_MESSAGE_CONTAINER_PORT_DUPLICATE: &'static str =
+        "Container contains duplicate port name";
+    const VALIDATE_SPEC_MESSAGE_CONTAINER_PORT_REF_INVALID: &'static str =
+        "Container port must be a u16 string (0-65535) or a valid spec port name";
 
     fn validate_spec(
         challenge: &Challenge,
@@ -285,6 +297,53 @@ impl ChallengeReconciler {
                 return None;
             }
 
+            if has_duplicate_by_key(&container.flags, |flag| &flag.name) {
+                status.conditions.set(
+                    Self::VALIDATE_SPEC_CONDITION_TYPE,
+                    ConditionStatus::False,
+                    Self::VALIDATE_SPEC_REASON_FAILED,
+                    Self::VALIDATE_SPEC_MESSAGE_CONTAINER_FLAG_DUPLICATE,
+                );
+                return None;
+            }
+
+            for flag in &container.flags {
+                if !flags.contains_key(&flag.name) {
+                    status.conditions.set(
+                        Self::VALIDATE_SPEC_CONDITION_TYPE,
+                        ConditionStatus::False,
+                        Self::VALIDATE_SPEC_REASON_FAILED,
+                        Self::VALIDATE_SPEC_MESSAGE_CONTAINER_FLAG_UNKNOWN,
+                    );
+                    return None;
+                }
+            }
+
+            if has_duplicate_by_key(&container.ports, |p| &p.name) {
+                status.conditions.set(
+                    Self::VALIDATE_SPEC_CONDITION_TYPE,
+                    ConditionStatus::False,
+                    Self::VALIDATE_SPEC_REASON_FAILED,
+                    Self::VALIDATE_SPEC_MESSAGE_CONTAINER_PORT_DUPLICATE,
+                );
+                return None;
+            }
+
+            for port in &container.ports {
+                let is_number = is_u16_str(&port.port);
+                let is_ref = ports.contains_key(&port.port);
+
+                if !(is_number || is_ref) {
+                    status.conditions.set(
+                        Self::VALIDATE_SPEC_CONDITION_TYPE,
+                        ConditionStatus::False,
+                        Self::VALIDATE_SPEC_REASON_FAILED,
+                        Self::VALIDATE_SPEC_MESSAGE_CONTAINER_PORT_REF_INVALID,
+                    );
+                    return None;
+                }
+            }
+
             if containers
                 .insert(container.name.clone(), container.clone())
                 .is_some()
@@ -319,107 +378,19 @@ fn has_duplicate_chars(s: &str) -> bool {
     false
 }
 
-// impl ChallengeReconciler {
-//     const RESERVATION_CONDITION_TYPE: &'static str = "ReservationSet";
-//     const RESERVATION_REASON_CREATED: &'static str = "Created";
+fn has_duplicate_by_key<'a, T, F>(items: &'a [T], mut key: F) -> bool
+where
+    F: FnMut(&'a T) -> &'a str,
+{
+    let mut seen = HashSet::<&str>::new();
+    for it in items {
+        if !seen.insert(key(it)) {
+            return true;
+        }
+    }
+    false
+}
 
-//     const RESERVATION_MESSAGE_NOT_READY: &'static str = "NotReady";
-//     const RESERVATION_MESSAGE_OWNER_REF: &'static str = "OwnerReferenceError";
-//     const RESERVATION_REASON_FAILED_TO_CREATE: &'static str = "FailedToCreate";
-
-//     async fn update_containers(
-//         challenge: &Challenge,
-//         status: &mut ChallengeStatus,
-//         state: &CtfState,
-//     ) -> bool {
-//         // let reservation_set_ref = challenge.reservation_set_ref();
-
-//         // let desired_spec = ReservationSetSpec {
-//         //     start: challenge.spec.expose.reservation.start,
-//         //     end: challenge.spec.expose.reservation.end,
-//         // };
-
-//         // if let Some(reservation_set) = state.reservation_sets.get(&reservation_set_ref) {
-//         //     if reservation_set.spec.start == desired_spec.start
-//         //         && reservation_set.spec.end == desired_spec.end
-//         //     {
-//         //         if let Some(conditions) = reservation_set.status.as_ref().map(|s| &s.conditions)
-//         //             && conditions.all_true()
-//         //         {
-//         //             status.conditions.set(
-//         //                 Self::RESERVATION_CONDITION_TYPE,
-//         //                 ConditionStatus::True,
-//         //                 Self::RESERVATION_REASON_CREATED,
-//         //                 "Existing",
-//         //             );
-//         //             return true;
-//         //         } else {
-//         //             status.conditions.set(
-//         //                 Self::RESERVATION_CONDITION_TYPE,
-//         //                 ConditionStatus::False,
-//         //                 Self::RESERVATION_MESSAGE_NOT_READY,
-//         //                 "",
-//         //             );
-//         //             return false;
-//         //         }
-//         //     }
-//         //     // else recreate ReservationSet
-//         // }
-
-//         // let owner_ref = match challenge.controller_owner_ref(&Default::default()) {
-//         //     Some(owner_ref) => owner_ref,
-//         //     None => {
-//         //         status.conditions.set(
-//         //             Self::RESERVATION_CONDITION_TYPE,
-//         //             ConditionStatus::False,
-//         //             Self::RESERVATION_MESSAGE_OWNER_REF,
-//         //             "",
-//         //         );
-//         //         return false;
-//         //     }
-//         // };
-
-//         // let reservation_set = ReservationSet {
-//         //     metadata: ObjectMeta {
-//         //         name: Some(reservation_set_ref.name),
-//         //         namespace: reservation_set_ref.namespace,
-//         //         owner_references: Some(vec![owner_ref]),
-//         //         ..Default::default()
-//         //     },
-//         //     spec: desired_spec,
-//         //     status: None,
-//         // };
-
-//         // let api: Api<ReservationSet> =
-//         //     Api::namespaced(state.client.clone(), &challenge.namespace_unchecked());
-
-//         // let pp = PatchParams::apply(Self::NAME).force();
-//         // if let Err(err) = api
-//         //     .patch(
-//         //         &reservation_set.name_unchecked(),
-//         //         &pp,
-//         //         &Patch::Apply(&reservation_set),
-//         //     )
-//         //     .await
-//         // {
-//         //     warn!(?err, "failed to apply ReservationSet for Challenge");
-//         //     status.conditions.set(
-//         //         Self::RESERVATION_CONDITION_TYPE,
-//         //         ConditionStatus::False,
-//         //         Self::RESERVATION_REASON_FAILED_TO_CREATE,
-//         //         err.to_string(),
-//         //     );
-//         //     return false;
-//         // }
-
-//         // status.conditions.set(
-//         //     Self::RESERVATION_CONDITION_TYPE,
-//         //     ConditionStatus::True,
-//         //     Self::RESERVATION_REASON_CREATED,
-//         //     "Created",
-//         // );
-//         // true
-//         //
-//         false
-//     }
-// }
+fn is_u16_str(s: &str) -> bool {
+    !s.is_empty() && s.parse::<u16>().is_ok()
+}
