@@ -129,11 +129,13 @@ pub struct ContainerFlag {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, Eq)]
+
 pub struct ContainerPort {
     pub name: String,
-    pub port: String,
-    #[serde(rename = "targetPort")]
-    pub target_port: u16,
+    #[serde(rename = "exposePort")]
+    pub expose_port: Option<String>,
+    #[serde(rename = "containerPort")]
+    pub container_port: u16,
 }
 
 impl Challenge {

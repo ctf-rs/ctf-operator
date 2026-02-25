@@ -1,6 +1,7 @@
 use crate::crd::v1alpha1::{
     ChallengeContainer, ChallengeFlag, ChallengePort, ChallengeStatus, Jeopardy,
 };
+use crate::runtime::reservation::{has_duplicate_by_key, has_duplicate_chars, is_u16_str};
 use crate::util::{ConditionStatus, KubeObject, is_dns1123_label};
 use crate::{
     crd::v1alpha1::Challenge,
@@ -10,7 +11,7 @@ use crate::{
 use kube::ResourceExt;
 use kube::runtime::controller::Action;
 use kube::runtime::reflector::Lookup;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
@@ -331,17 +332,19 @@ impl ChallengeReconciler {
             }
 
             for port in &container.ports {
-                let is_number = is_u16_str(&port.port);
-                let is_ref = ports.contains_key(&port.port);
+                if let Some(expose_port) = &port.expose_port {
+                    let is_number = is_u16_str(expose_port);
+                    let is_ref = ports.contains_key(expose_port);
 
-                if !(is_number || is_ref) {
-                    status.conditions.set(
-                        Self::VALIDATE_SPEC_CONDITION_TYPE,
-                        ConditionStatus::False,
-                        Self::VALIDATE_SPEC_REASON_FAILED,
-                        Self::VALIDATE_SPEC_MESSAGE_CONTAINER_PORT_REF_INVALID,
-                    );
-                    return None;
+                    if !(is_number || is_ref) {
+                        status.conditions.set(
+                            Self::VALIDATE_SPEC_CONDITION_TYPE,
+                            ConditionStatus::False,
+                            Self::VALIDATE_SPEC_REASON_FAILED,
+                            Self::VALIDATE_SPEC_MESSAGE_CONTAINER_PORT_REF_INVALID,
+                        );
+                        return None;
+                    }
                 }
             }
 
@@ -367,33 +370,6 @@ impl ChallengeReconciler {
         );
         Some((flags, ports, containers))
     }
-}
-
-fn has_duplicate_chars(s: &str) -> bool {
-    let mut seen = HashSet::new();
-    for c in s.chars() {
-        if !seen.insert(c) {
-            return true;
-        }
-    }
-    false
-}
-
-fn has_duplicate_by_key<'a, T, F>(items: &'a [T], mut key: F) -> bool
-where
-    F: FnMut(&'a T) -> &'a str,
-{
-    let mut seen = HashSet::<&str>::new();
-    for it in items {
-        if !seen.insert(key(it)) {
-            return true;
-        }
-    }
-    false
-}
-
-fn is_u16_str(s: &str) -> bool {
-    !s.is_empty() && s.parse::<u16>().is_ok()
 }
 
 #[allow(dead_code)]

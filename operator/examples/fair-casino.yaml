@@ -24,11 +24,11 @@ spec:
       type: nc
   containers:
     - name: fair-casino
-      image: harbor.data.ctf.rs/scc2025-finals/crypto-fair-casino:latest
+      image: registry.ctf.rs/scc2025-finals/crypto-fair-casino:latest
       flags:
         - name: flag
           env: FLAG
       ports:
         - name: shell
-          port: port
-          targetPort: 1337
+          exposePort: port
+          containerPort: 1337
