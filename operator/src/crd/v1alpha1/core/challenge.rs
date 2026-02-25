@@ -94,7 +94,7 @@ pub struct ChallengeFlag {
     #[serde(default)]
     pub random: Option<FlagRandomRules>,
     #[serde(default)]
-    pub options: Option<FlagMatchOptions>,
+    pub options: FlagMatchOptions,
 }
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]

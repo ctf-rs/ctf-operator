@@ -1,4 +1,4 @@
-use crate::crd::v1alpha1::{Challenge, Instance, InstanceStatus};
+use crate::crd::v1alpha1::{Challenge, Flag, FlagSpec, Instance, InstanceStatus, Jeopardy};
 use crate::runtime::core::challenge::ChallengeParentRef;
 use crate::runtime::{MANAGED_BY_LABEL, MANAGED_BY_VALUE};
 use crate::util::{ConditionStatus, KubeObject};
@@ -9,7 +9,7 @@ use crate::{
 use k8s_openapi::api::core::v1::Namespace;
 use kube::api::{ObjectMeta, Patch, PatchParams};
 use kube::runtime::controller::Action;
-use kube::runtime::reflector::Lookup;
+use kube::runtime::reflector::{Lookup, ObjectRef};
 use kube::{Api, Resource, ResourceExt};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -35,8 +35,10 @@ impl Reconciler for InstanceReconciler {
         let mut status = obj.as_ref().status.to_owned().unwrap_or_default();
 
         match Self::find_parent_ref(&instance, &mut status, &state) {
-            Some((_challenge, ChallengeParentRef::Jeopardy(_jeopardy))) => {
-                let _namespace = Self::update_reservation(&instance, &mut status, &state).await;
+            Some((challenge, ChallengeParentRef::Jeopardy(jeopardy))) => {
+                let _namespace = Self::update_namespace(&instance, &mut status, &state).await;
+                let _flags =
+                    Self::update_flags(instance, &mut status, &state, &jeopardy, &challenge).await;
             }
             None => {}
         };
@@ -184,7 +186,7 @@ impl InstanceReconciler {
     const NAMESPACE_MESSAGE_OWNER_REF: &'static str = "OwnerReferenceError";
     const NAMESPACE_REASON_FAILED_TO_CREATE: &'static str = "FailedToCreate";
 
-    async fn update_reservation(
+    async fn update_namespace(
         instance: &Instance,
         status: &mut InstanceStatus,
         state: &CtfState,
@@ -269,9 +271,141 @@ impl InstanceReconciler {
         status.conditions.set(
             Self::NAMESPACE_CONDITION_TYPE,
             ConditionStatus::True,
-            Self::NAMESPACE_REASON_CREATED,
+            Self::FLAG_REASON_CREATED,
             "Created",
         );
         true
+    }
+}
+
+impl InstanceReconciler {
+    const FLAG_CONDITION_TYPE: &'static str = "Flags";
+    const FLAG_REASON_CREATED: &'static str = "AllCreated";
+
+    const FLAG_MESSAGE_NOT_READY: &'static str = "NotReady";
+    const FLAG_REASON_FAILED_TO_CREATE: &'static str = "FailedToCreate";
+
+    pub const INSTANCE_NAME_LABEL: &str = "operator.ctf.rs/instance-name";
+    pub const INSTANCE_NAMESPACE_LABEL: &str = "operator.ctf.rs/instance-namespace";
+    pub const CHALLENGE_NAME_LABEL: &str = "operator.ctf.rs/challenge-name";
+    pub const CHALLENGE_NAMESPACE_LABEL: &str = "operator.ctf.rs/challenge-namespace";
+    pub const JEOPARDY_NAME_LABEL: &str = "operator.ctf.rs/jeopardy-name";
+    pub const JEOPARDY_NAMESPACE_LABEL: &str = "operator.ctf.rs/jeopardy-namespace";
+
+    async fn update_flags(
+        instance: &Instance,
+        status: &mut InstanceStatus,
+        state: &CtfState,
+        jeopardy: &Jeopardy,
+        challenge: &Challenge,
+    ) -> Option<Vec<Flag>> {
+        let flag_prefix = &jeopardy.spec.flag.prefix;
+        let flag_format = &jeopardy.spec.flag.format;
+        let flag_random = &jeopardy.spec.flag.random;
+
+        let namespace_ref = instance.target_namespace_ref();
+
+        let mut flags = Vec::new();
+
+        let mut labels = BTreeMap::new();
+        labels.insert(MANAGED_BY_LABEL.into(), MANAGED_BY_VALUE.into());
+
+        labels.insert(Self::INSTANCE_NAME_LABEL.into(), instance.name_unchecked());
+        labels.insert(
+            Self::INSTANCE_NAMESPACE_LABEL.into(),
+            instance.namespace_unchecked(),
+        );
+
+        labels.insert(
+            Self::CHALLENGE_NAME_LABEL.into(),
+            challenge.name_unchecked(),
+        );
+        labels.insert(
+            Self::CHALLENGE_NAMESPACE_LABEL.into(),
+            challenge.namespace_unchecked(),
+        );
+
+        labels.insert(Self::JEOPARDY_NAME_LABEL.into(), jeopardy.name_unchecked());
+        labels.insert(
+            Self::JEOPARDY_NAMESPACE_LABEL.into(),
+            jeopardy.namespace_unchecked(),
+        );
+
+        for flag_spec in &challenge.spec.flags {
+            let desired_spec = FlagSpec {
+                prefix: flag_spec.prefix.as_ref().unwrap_or(flag_prefix).clone(),
+                format: flag_spec.format.as_ref().unwrap_or(flag_format).clone(),
+                random: flag_spec.random.as_ref().or(flag_random.as_ref()).cloned(),
+                body: flag_spec.body.clone(),
+                options: flag_spec.options.clone(),
+            };
+
+            let flag_ref = ObjectRef::<Flag>::new(&flag_spec.name).within(&namespace_ref.name);
+            if let Some(flag) = &state.flags.get(&flag_ref)
+                && flag.metadata.labels.as_ref() == Some(&labels)
+                && flag.spec == desired_spec
+            {
+                flags.push(flag.as_ref().clone());
+                continue;
+            }
+
+            let flag = Flag {
+                metadata: ObjectMeta {
+                    name: Some(flag_ref.name),
+                    namespace: flag_ref.namespace,
+                    //owner_references: Some(vec![owner_ref.clone()]),
+                    labels: Some(labels.clone()),
+                    ..Default::default()
+                },
+                spec: desired_spec,
+                status: None,
+            };
+
+            let api: Api<Flag> = Api::namespaced(state.client.clone(), &namespace_ref.name);
+
+            let pp = PatchParams::apply(Self::NAME).force();
+            match api
+                .patch(&flag.name_unchecked(), &pp, &Patch::Apply(&flag))
+                .await
+            {
+                Err(err) => {
+                    warn!(?err, "failed to apply Flag for Instance");
+                    status.conditions.set(
+                        Self::FLAG_CONDITION_TYPE,
+                        ConditionStatus::False,
+                        Self::FLAG_REASON_FAILED_TO_CREATE,
+                        err.to_string(),
+                    );
+                    return None;
+                }
+                Ok(flag) => {
+                    flags.push(flag);
+                }
+            }
+        }
+
+        if !flags.iter().all(|f| {
+            f.status
+                .as_ref()
+                .map(|status| status.conditions.all_true())
+                .unwrap_or(false)
+        }) {
+            status.conditions.set(
+                Self::FLAG_CONDITION_TYPE,
+                ConditionStatus::False,
+                Self::FLAG_MESSAGE_NOT_READY,
+                "",
+            );
+            return None;
+        }
+
+        status.conditions.set(
+            Self::FLAG_CONDITION_TYPE,
+            ConditionStatus::True,
+            Self::FLAG_REASON_CREATED,
+            "Created",
+        );
+
+        Some(flags)
     }
 }

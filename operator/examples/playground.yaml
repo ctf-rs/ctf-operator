@@ -9,6 +9,7 @@ spec:
     prefix: SCC
     random:
       len: 8
+      concat: +
   expose:
     reservation:
       start: 10000
