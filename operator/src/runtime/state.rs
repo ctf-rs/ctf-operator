@@ -1,7 +1,7 @@
 use kube::{Client, runtime::reflector::Store};
 
 use crate::{
-    crd::v1alpha1::{Flag, PortClaim, ReservationSet},
+    crd::v1alpha1::{Challenge, Flag, Jeopardy, PortClaim, ReservationSet},
     runtime::index::CtfIndex,
     util::SharedIndex,
 };
@@ -12,6 +12,8 @@ pub struct CtfState {
     pub flags: Store<Flag>,
     pub reservation_sets: Store<ReservationSet>,
     pub port_claims: Store<PortClaim>,
+    pub jeopardy: Store<Jeopardy>,
+    pub challenges: Store<Challenge>,
 }
 
 impl CtfState {
@@ -21,6 +23,8 @@ impl CtfState {
         flags: Store<Flag>,
         reservation_sets: Store<ReservationSet>,
         port_claims: Store<PortClaim>,
+        jeopardy: Store<Jeopardy>,
+        challenges: Store<Challenge>,
     ) -> Self {
         Self {
             client,
@@ -28,6 +32,8 @@ impl CtfState {
             flags,
             reservation_sets,
             port_claims,
+            jeopardy,
+            challenges,
         }
     }
 }

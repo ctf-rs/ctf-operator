@@ -91,7 +91,7 @@ pub struct JeopardyService {
     pub service_type: JeopardyServiceType,
 }
 
-#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Default, Hash)]
 #[serde(rename_all = "PascalCase")]
 pub enum JeopardyServiceType {
     ClusterIP,

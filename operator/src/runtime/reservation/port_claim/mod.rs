@@ -25,24 +25,20 @@ pub fn controller(
     ctx: Arc<CtfState>,
     watcher: &Watcher<PortClaim>,
     reservation_set_watcher: &Watcher<ReservationSet>,
-    state: Arc<CtfState>,
 ) -> CtfResult<Controller<PortClaimReconciler>> {
-    Ok(
-        Controller::new(ctx, watcher)?.watches(
-            reservation_set_watcher,
-            move |reservation_set| {
-                let reservation_ref = &reservation_set.to_object_ref(Default::default());
-                // TODO: Optimize with index
-                state
-                    .port_claims
-                    .state()
-                    .into_iter()
-                    .filter(|port_claim| reservation_ref.eq(&port_claim.spec_reservation_set_ref()))
-                    .map(|port_claim| port_claim.to_object_ref(Default::default()))
-                    .collect::<Vec<_>>()
-            },
-        )?,
-    )
+    Ok(Controller::new(ctx.clone(), watcher)?.watches(
+        reservation_set_watcher,
+        move |reservation_set| {
+            let reservation_ref = &reservation_set.to_object_ref(Default::default());
+            // TODO: Optimize with index
+            ctx.port_claims
+                .state()
+                .into_iter()
+                .filter(|port_claim| reservation_ref.eq(&port_claim.spec_reservation_set_ref()))
+                .map(|port_claim| port_claim.to_object_ref(Default::default()))
+                .collect::<Vec<_>>()
+        },
+    )?)
 }
 
 impl Waiter {

@@ -12,6 +12,8 @@ pub use reconciler::*;
 pub use waiter::*;
 pub use watcher::*;
 
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::de::DeserializeOwned;
 use std::fmt::Debug;
 
@@ -41,4 +43,11 @@ pub trait KubeObject:
 impl<T> KubeObject for T where
     T: 'static + kube::Resource<DynamicType = ()> + Clone + Debug + DeserializeOwned + Send + Sync
 {
+}
+
+static DNS1123_LABEL: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$").unwrap());
+
+pub fn is_dns1123_label(name: &str) -> bool {
+    DNS1123_LABEL.is_match(name)
 }

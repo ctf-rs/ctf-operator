@@ -5,7 +5,7 @@ mod reconcile;
 pub use reconcile::*;
 
 use crate::{
-    crd::v1alpha1::{Jeopardy, ReservationSet},
+    crd::v1alpha1::{Challenge, Jeopardy, ReservationSet},
     runtime::{CtfIndex, CtfResult, CtfState},
     util::{Controller, SharedIndex, Waiter, Watcher},
 };
@@ -22,8 +22,13 @@ pub fn controller(
     ctx: Arc<CtfState>,
     watcher: &Watcher<Jeopardy>,
     reservation_set_watcher: &Watcher<ReservationSet>,
+    challenge_watcher: &Watcher<Challenge>,
 ) -> CtfResult<Controller<JeopardyReconciler>> {
-    Ok(Controller::new(ctx, watcher)?.owns(&reservation_set_watcher)?)
+    Ok(Controller::new(ctx, watcher)?
+        .owns(&reservation_set_watcher)?
+        .watches(&challenge_watcher, |challenge| {
+            challenge.spec_jeopardy_ref()
+        })?)
 }
 
 impl Waiter {
