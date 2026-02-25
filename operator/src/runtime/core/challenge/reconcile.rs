@@ -1,5 +1,5 @@
 use crate::crd::v1alpha1::{
-    ChallengeContainer, ChallengeFlag, ChallengePort, ChallengeStatus, ContainerFlag,
+    ChallengeContainer, ChallengeFlag, ChallengePort, ChallengeStatus, Jeopardy,
 };
 use crate::util::{ConditionStatus, KubeObject, is_dns1123_label};
 use crate::{
@@ -9,6 +9,7 @@ use crate::{
 };
 use kube::ResourceExt;
 use kube::runtime::controller::Action;
+use kube::runtime::reflector::Lookup;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
@@ -33,7 +34,7 @@ impl Reconciler for ChallengeReconciler {
         let mut status = obj.as_ref().status.to_owned().unwrap_or_default();
 
         if let Some((_flags, _ports, _containers)) = Self::validate_spec(challenge, &mut status) {
-            //&& Self::update_containers(challenge, &mut status, &state).await
+            let _parent = Self::find_parent_ref(&challenge, &mut status, &state);
         }
 
         let conditions_true = status.conditions.all_true();
@@ -393,4 +394,84 @@ where
 
 fn is_u16_str(s: &str) -> bool {
     !s.is_empty() && s.parse::<u16>().is_ok()
+}
+
+#[allow(dead_code)]
+enum ChallengeParentRef {
+    Jeopardy(Jeopardy),
+}
+
+impl ChallengeReconciler {
+    const PARENT_CONDITION_TYPE: &'static str = "Parent";
+    const PARENT_REASON_ATTACHED: &'static str = "Atached";
+    const PARENT_REASON_NOT_FOUND: &'static str = "NotFound";
+    const PARENT_REASON_MISSING_STATUS: &'static str = "MissingStatus";
+    const PARENT_REASON_MISSING_NOT_READY: &'static str = "NotReady";
+
+    const PARENT_REASON_UNSUPPORTED: &'static str = "Parent kind not supported";
+
+    fn find_parent_ref(
+        challenge: &Challenge,
+        status: &mut ChallengeStatus,
+        state: &CtfState,
+    ) -> Option<ChallengeParentRef> {
+        let parent = if let Some(jeopardy_ref) = challenge.spec_jeopardy_ref() {
+            let jeopardy = match state
+                .jeopardy
+                .find(|jeopardy| jeopardy_ref.eq(&jeopardy.to_object_ref(Default::default())))
+            {
+                Some(jeopardy) => jeopardy,
+                None => {
+                    status.conditions.set(
+                        Self::PARENT_CONDITION_TYPE,
+                        ConditionStatus::False,
+                        Self::PARENT_REASON_NOT_FOUND,
+                        "",
+                    );
+                    return None;
+                }
+            };
+
+            let jeopardy_status = match &jeopardy.status {
+                Some(jeopardy_status) => jeopardy_status,
+                None => {
+                    status.conditions.set(
+                        Self::PARENT_CONDITION_TYPE,
+                        ConditionStatus::False,
+                        Self::PARENT_REASON_MISSING_STATUS,
+                        "",
+                    );
+                    return None;
+                }
+            };
+
+            if !jeopardy_status.conditions.all_true() {
+                status.conditions.set(
+                    Self::PARENT_CONDITION_TYPE,
+                    ConditionStatus::False,
+                    Self::PARENT_REASON_MISSING_NOT_READY,
+                    "",
+                );
+                return None;
+            }
+
+            Some(ChallengeParentRef::Jeopardy(jeopardy.as_ref().clone()))
+        } else {
+            status.conditions.set(
+                Self::PARENT_CONDITION_TYPE,
+                ConditionStatus::False,
+                Self::PARENT_REASON_UNSUPPORTED,
+                "",
+            );
+            return None;
+        };
+
+        status.conditions.set(
+            Self::PARENT_CONDITION_TYPE,
+            ConditionStatus::True,
+            Self::PARENT_REASON_ATTACHED,
+            "",
+        );
+        parent
+    }
 }
