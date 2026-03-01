@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::Display};
 
 use kube::{CustomResource, ResourceExt, runtime::reflector::ObjectRef};
 use schemars::JsonSchema;
@@ -98,6 +98,16 @@ pub enum JeopardyServiceType {
     #[default]
     NodePort,
     LoadBalancer,
+}
+
+impl Display for JeopardyServiceType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            JeopardyServiceType::ClusterIP => write!(f, "ClusterIP"),
+            JeopardyServiceType::NodePort => write!(f, "NodePort"),
+            JeopardyServiceType::LoadBalancer => write!(f, "LoadBalancer"),
+        }
+    }
 }
 
 impl Jeopardy {

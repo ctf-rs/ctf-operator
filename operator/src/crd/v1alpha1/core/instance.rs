@@ -1,4 +1,4 @@
-use k8s_openapi::api::core::v1::Namespace;
+use k8s_openapi::api::core::v1::{Namespace, Service};
 use kube::{CustomResource, KubeSchema, ResourceExt, runtime::reflector::ObjectRef};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -69,5 +69,10 @@ impl Instance {
     pub fn target_namespace_ref(&self) -> ObjectRef<Namespace> {
         let name = self.name_unchecked();
         ObjectRef::new(&format!("ctf-instance-{name}"))
+    }
+
+    pub fn target_service_ref(&self) -> ObjectRef<Service> {
+        let name = self.name_unchecked();
+        ObjectRef::new(&name).within(&self.target_namespace_ref().name)
     }
 }

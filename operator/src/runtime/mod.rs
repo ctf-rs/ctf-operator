@@ -33,7 +33,7 @@ pub async fn run() -> CtfResult<()> {
     let challenges_watcher = core::challenge::watcher(client.clone());
     let instances_watcher = core::instance::watcher(client.clone());
     let instance_namespace_watcher = core::instance::namespace_watcher(client.clone());
-    let instance_pod_watcher = core::instance::pod_watcher(client.clone());
+    let instance_pod_watcher = core::instance::deployment_watcher(client.clone());
     let instance_service_watcher = core::instance::service_watcher(client.clone());
 
     let state = Arc::new(CtfState::new(

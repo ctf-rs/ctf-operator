@@ -1,7 +1,10 @@
 // mod index;
 mod reconcile;
 
-use k8s_openapi::api::core::v1::{Namespace, Pod, Service};
+use k8s_openapi::api::{
+    apps::v1::Deployment,
+    core::v1::{Namespace, Service},
+};
 // pub use index::*;
 pub use reconcile::*;
 
@@ -35,8 +38,8 @@ pub fn service_watcher(client: Client) -> Watcher<Service> {
     Watcher::new(api, managed_cfg(), 0xFFFF)
 }
 
-pub fn pod_watcher(client: Client) -> Watcher<Pod> {
-    let api: kube::Api<Pod> = kube::Api::all(client);
+pub fn deployment_watcher(client: Client) -> Watcher<Deployment> {
+    let api: kube::Api<Deployment> = kube::Api::all(client);
     Watcher::new(api, managed_cfg(), 0xFFFF)
 }
 
@@ -46,7 +49,7 @@ pub fn controller(
     jeopardy_watcher: &Watcher<Jeopardy>,
     challenge_watcher: &Watcher<Challenge>,
     namespace_watcher: &Watcher<Namespace>,
-    pod_watcher: &Watcher<Pod>,
+    deployment_watcher: &Watcher<Deployment>,
     service_watcher: &Watcher<Service>,
     flag_watcher: &Watcher<Flag>,
     port_claim_watcher: &Watcher<PortClaim>,
@@ -87,8 +90,8 @@ pub fn controller(
         .watches(&namespace_watcher, |namespace| {
             object_instance_ref(namespace.as_ref().metadata.labels.as_ref())
         })?
-        .watches(&pod_watcher, |pod| {
-            object_instance_ref(pod.as_ref().metadata.labels.as_ref())
+        .watches(&deployment_watcher, |deployment| {
+            object_instance_ref(deployment.as_ref().metadata.labels.as_ref())
         })?
         .watches(&service_watcher, |service| {
             object_instance_ref(service.as_ref().metadata.labels.as_ref())

@@ -1,0 +1,32 @@
+apiVersion: "cilium.io/v2"
+kind: CiliumNetworkPolicy
+metadata:
+  name: ctf-policy
+  namespace: ctf-instance-fair-casino-instance
+specs:
+  - endpointSelector: {}
+    ingress:
+      - fromEntities:
+          - world
+        toPorts:
+          - ports:
+              - port: "1337"
+                protocol: TCP
+      - fromEndpoints:
+          - {}
+    egress:
+      - toEndpoints:
+          - {}
+      - toEndpoints:
+          - matchLabels:
+              "k8s:io.kubernetes.pod.namespace": kube-system
+              "k8s:k8s-app": kube-dns
+        toPorts:
+          - ports:
+              - port: "53"
+                protocol: ANY
+            rules:
+              dns:
+                - matchPattern: "*"
+      - toEntities:
+          - world

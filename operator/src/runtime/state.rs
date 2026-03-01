@@ -1,4 +1,7 @@
-use k8s_openapi::api::core::v1::{Namespace, Pod, Service};
+use k8s_openapi::api::{
+    apps::v1::Deployment,
+    core::v1::{Namespace, Service},
+};
 use kube::{Client, runtime::reflector::Store};
 
 use crate::{
@@ -17,7 +20,7 @@ pub struct CtfState {
     pub challenges: Store<Challenge>,
     pub instances: Store<Instance>,
     pub instance_namespaces: Store<Namespace>,
-    pub instance_pods: Store<Pod>,
+    pub instance_deployments: Store<Deployment>,
     pub instance_services: Store<Service>,
 }
 
@@ -32,7 +35,7 @@ impl CtfState {
         challenges: Store<Challenge>,
         instances: Store<Instance>,
         instance_namespaces: Store<Namespace>,
-        instance_pods: Store<Pod>,
+        instance_deployments: Store<Deployment>,
         instance_services: Store<Service>,
     ) -> Self {
         Self {
@@ -45,7 +48,7 @@ impl CtfState {
             challenges,
             instances,
             instance_namespaces,
-            instance_pods,
+            instance_deployments,
             instance_services,
         }
     }

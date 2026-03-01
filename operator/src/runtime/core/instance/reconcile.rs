@@ -3,13 +3,19 @@ use crate::crd::v1alpha1::{
     ReservationRef,
 };
 use crate::runtime::core::challenge::ChallengeParentRef;
+use crate::runtime::reservation::{is_u16_str, port_claim};
 use crate::runtime::{MANAGED_BY_LABEL, MANAGED_BY_VALUE};
 use crate::util::{ConditionStatus, KubeObject};
 use crate::{
     runtime::{CtfError, CtfState},
     util::Reconciler,
 };
-use k8s_openapi::api::core::v1::{Container, Namespace, Pod, PodSpec};
+use k8s_openapi::api::apps::v1::{Deployment, DeploymentSpec};
+use k8s_openapi::api::core::v1::{
+    Container, Namespace, PodSpec, PodTemplateSpec, Service, ServicePort, ServiceSpec,
+};
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector;
+use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use kube::api::{ObjectMeta, Patch, PatchParams};
 use kube::runtime::controller::Action;
 use kube::runtime::reflector::{Lookup, ObjectRef};
@@ -50,7 +56,17 @@ impl Reconciler for InstanceReconciler {
                     if let Some(flags) = flags
                         && let Some(port_claims) = port_claims
                     {
-                        Self::update_pods(
+                        Self::update_deployments(
+                            instance,
+                            &mut status,
+                            &state,
+                            &jeopardy,
+                            &challenge,
+                            &flags,
+                            &port_claims,
+                        )
+                        .await;
+                        Self::update_service(
                             instance,
                             &mut status,
                             &state,
@@ -308,6 +324,8 @@ impl InstanceReconciler {
     pub const CHALLENGE_NAMESPACE_LABEL: &str = "operator.ctf.rs/challenge-namespace";
     pub const JEOPARDY_NAME_LABEL: &str = "operator.ctf.rs/jeopardy-name";
     pub const JEOPARDY_NAMESPACE_LABEL: &str = "operator.ctf.rs/jeopardy-namespace";
+
+    pub const JEOPARDY_CONTAINER_LABEL: &str = "operator.ctf.rs/container";
 }
 
 impl InstanceReconciler {
@@ -597,14 +615,14 @@ impl InstanceReconciler {
 }
 
 impl InstanceReconciler {
-    const POD_CONDITION_TYPE: &'static str = "PortClaims";
-    const POD_REASON_CREATED: &'static str = "AllCreated";
-    const POD_MESSAGE_NOT_READY: &'static str = "NotReady";
-    const POD_REASON_FAILED_TO_CREATE: &'static str = "FailedToCreate";
+    const DEPL_CONDITION_TYPE: &'static str = "Deployments";
+    const DEPL_REASON_CREATED: &'static str = "AllCreated";
+    const DEPL_MESSAGE_NOT_READY: &'static str = "NotReady";
+    const DEPL_REASON_FAILED_TO_CREATE: &'static str = "FailedToCreate";
 
-    const POD_REASON_FAILED_MISSING_FLAG: &'static str = "MissingFlag";
+    const DEPL_REASON_FAILED_MISSING_FLAG: &'static str = "MissingFlag";
 
-    async fn update_pods(
+    async fn update_deployments(
         instance: &Instance,
         status: &mut InstanceStatus,
         state: &CtfState,
@@ -612,10 +630,10 @@ impl InstanceReconciler {
         challenge: &Challenge,
         flags: &HashMap<String, Flag>,
         _port_claims: &HashMap<String, PortClaim>,
-    ) -> Option<Vec<Pod>> {
+    ) -> Option<Vec<Deployment>> {
         let namespace_ref = instance.target_namespace_ref();
 
-        let mut port_claims = Vec::new();
+        let mut deployments = Vec::new();
 
         let mut labels = BTreeMap::new();
         labels.insert(MANAGED_BY_LABEL.into(), MANAGED_BY_VALUE.into());
@@ -664,39 +682,63 @@ impl InstanceReconciler {
                     });
                 } else {
                     status.conditions.set(
-                        Self::POD_CONDITION_TYPE,
+                        Self::DEPL_CONDITION_TYPE,
                         ConditionStatus::False,
-                        Self::POD_REASON_FAILED_MISSING_FLAG,
+                        Self::DEPL_REASON_FAILED_MISSING_FLAG,
                         "",
                     );
                     return None;
                 }
             }
 
-            let desired_spec = PodSpec {
-                containers: vec![Container {
-                    name: container_spec.name.clone(),
-                    image: Some(container_spec.image.clone()),
-                    ports: Some(ports),
-                    env: Some(envs),
+            let mut pod_labels = labels.clone();
+            pod_labels.insert(
+                Self::JEOPARDY_CONTAINER_LABEL.into(),
+                container_spec.name.clone(),
+            );
+
+            let desired_spec = DeploymentSpec {
+                replicas: Some(1),
+                selector: LabelSelector {
+                    match_labels: Some(pod_labels.clone()),
                     ..Default::default()
-                }],
+                },
+                template: PodTemplateSpec {
+                    metadata: Some(ObjectMeta {
+                        labels: Some(pod_labels),
+                        ..Default::default()
+                    }),
+                    spec: Some(PodSpec {
+                        //TODO: Node Slector and Runtime class name
+                        node_selector: None,
+                        runtime_class_name: None,
+                        containers: vec![Container {
+                            name: container_spec.name.clone(),
+                            image: Some(container_spec.image.clone()),
+                            ports: Some(ports),
+                            env: Some(envs),
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    }),
+                },
                 ..Default::default()
             };
 
-            let pod_ref = ObjectRef::<Pod>::new(&container_spec.name).within(&namespace_ref.name);
-            if let Some(pod) = &state.instance_pods.get(&pod_ref)
+            let deployment_ref =
+                ObjectRef::<Deployment>::new(&container_spec.name).within(&namespace_ref.name);
+            if let Some(pod) = &state.instance_deployments.get(&deployment_ref)
                 && pod.metadata.labels.as_ref() == Some(&labels)
                 && pod.spec.as_ref() == Some(&desired_spec)
             {
-                port_claims.push(pod.as_ref().clone());
+                deployments.push(pod.as_ref().clone());
                 continue;
             }
 
-            let flag = Pod {
+            let flag = Deployment {
                 metadata: ObjectMeta {
-                    name: Some(pod_ref.name),
-                    namespace: pod_ref.namespace,
+                    name: Some(deployment_ref.name),
+                    namespace: deployment_ref.namespace,
                     //owner_references: Some(vec![owner_ref.clone()]),
                     labels: Some(labels.clone()),
                     ..Default::default()
@@ -705,7 +747,7 @@ impl InstanceReconciler {
                 status: None,
             };
 
-            let api: Api<Pod> = Api::namespaced(state.client.clone(), &namespace_ref.name);
+            let api: Api<Deployment> = Api::namespaced(state.client.clone(), &namespace_ref.name);
 
             let pp = PatchParams::apply(Self::NAME).force();
             match api
@@ -713,22 +755,22 @@ impl InstanceReconciler {
                 .await
             {
                 Err(err) => {
-                    warn!(?err, "failed to apply PortClaim for Instance");
+                    warn!(?err, "failed to apply Deployment for Instance");
                     status.conditions.set(
-                        Self::POD_CONDITION_TYPE,
+                        Self::DEPL_CONDITION_TYPE,
                         ConditionStatus::False,
-                        Self::POD_REASON_FAILED_TO_CREATE,
+                        Self::DEPL_REASON_FAILED_TO_CREATE,
                         err.to_string(),
                     );
                     return None;
                 }
                 Ok(flag) => {
-                    port_claims.push(flag);
+                    deployments.push(flag);
                 }
             }
         }
 
-        if !port_claims.iter().all(|f| {
+        if !deployments.iter().all(|f| {
             f.status
                 .as_ref()
                 .map(|status| {
@@ -741,21 +783,204 @@ impl InstanceReconciler {
                 .unwrap_or(false)
         }) {
             status.conditions.set(
-                Self::POD_CONDITION_TYPE,
+                Self::DEPL_CONDITION_TYPE,
                 ConditionStatus::False,
-                Self::POD_MESSAGE_NOT_READY,
+                Self::DEPL_MESSAGE_NOT_READY,
                 "",
             );
             return None;
         }
 
         status.conditions.set(
-            Self::POD_CONDITION_TYPE,
+            Self::DEPL_CONDITION_TYPE,
             ConditionStatus::True,
-            Self::POD_REASON_CREATED,
+            Self::DEPL_REASON_CREATED,
             "Created",
         );
 
-        Some(port_claims)
+        Some(deployments)
+    }
+}
+
+impl InstanceReconciler {
+    const SERVICE_CONDITION_TYPE: &'static str = "Service";
+    const SERVICE_REASON_CREATED: &'static str = "Created";
+    const SERVICE_MESSAGE_NOT_READY: &'static str = "NotReady";
+    const SERVICE_REASON_FAILED_TO_CREATE: &'static str = "FailedToCreate";
+
+    const SERVICE_REASON_FAILED_MISSING_PORT_CLAIM: &'static str = "MissingPortClaim";
+    const SERVICE_REASON_FAILED_PORT_CLAIM_NO_PORT: &'static str = "PortClaimNoPort";
+
+    async fn update_service(
+        instance: &Instance,
+        status: &mut InstanceStatus,
+        state: &CtfState,
+        jeopardy: &Jeopardy,
+        challenge: &Challenge,
+        flags: &HashMap<String, Flag>,
+        port_claims: &HashMap<String, PortClaim>,
+    ) -> Option<Service> {
+        let namespace_ref = instance.target_namespace_ref();
+
+        let mut labels = jeopardy.spec.expose.service_template.labels.clone();
+        let annotations = jeopardy.spec.expose.service_template.annotations.clone();
+        let service_type = jeopardy
+            .spec
+            .expose
+            .service_template
+            .service_type
+            .to_string();
+
+        let mut selector_labels = BTreeMap::<String, String>::new();
+        selector_labels.insert(MANAGED_BY_LABEL.into(), MANAGED_BY_VALUE.into());
+
+        selector_labels.insert(Self::INSTANCE_NAME_LABEL.into(), instance.name_unchecked());
+        selector_labels.insert(
+            Self::INSTANCE_NAMESPACE_LABEL.into(),
+            instance.namespace_unchecked(),
+        );
+
+        selector_labels.insert(
+            Self::CHALLENGE_NAME_LABEL.into(),
+            challenge.name_unchecked(),
+        );
+        selector_labels.insert(
+            Self::CHALLENGE_NAMESPACE_LABEL.into(),
+            challenge.namespace_unchecked(),
+        );
+
+        selector_labels.insert(Self::JEOPARDY_NAME_LABEL.into(), jeopardy.name_unchecked());
+        selector_labels.insert(
+            Self::JEOPARDY_NAMESPACE_LABEL.into(),
+            jeopardy.namespace_unchecked(),
+        );
+
+        for (key, value) in &selector_labels {
+            labels.insert(key.clone(), value.clone());
+        }
+
+        let service_ref = instance.target_service_ref();
+
+        let mut ports = Vec::<ServicePort>::new();
+
+        for container in &challenge.spec.containers {
+            for port in &container.ports {
+                if let Some(expose_port) = &port.expose_port {
+                    if let Some(expose_port) = expose_port.parse::<u16>().ok() {
+                        ports.push(ServicePort {
+                            port: expose_port as i32,
+                            target_port: Some(IntOrString::String(port.name.clone())),
+                            ..Default::default()
+                        });
+                    } else {
+                        if let Some(port_claim) = port_claims.get(expose_port) {
+                            if let Some(status) = &port_claim.status
+                                && let Some(port_claim_port) = status.port
+                            {
+                                ports.push(ServicePort {
+                                    port: port_claim_port as i32,
+                                    target_port: Some(IntOrString::String(port.name.clone())),
+                                    ..Default::default()
+                                });
+                            } else {
+                                status.conditions.set(
+                                    Self::SERVICE_CONDITION_TYPE,
+                                    ConditionStatus::False,
+                                    Self::SERVICE_REASON_FAILED_PORT_CLAIM_NO_PORT,
+                                    "",
+                                );
+                                return None;
+                            }
+                        } else {
+                            status.conditions.set(
+                                Self::SERVICE_CONDITION_TYPE,
+                                ConditionStatus::False,
+                                Self::SERVICE_REASON_FAILED_MISSING_PORT_CLAIM,
+                                "",
+                            );
+                            return None;
+                        }
+                    }
+                }
+            }
+        }
+
+        let desired_spec = ServiceSpec {
+            type_: Some(service_type),
+            selector: Some(selector_labels),
+            ports: Some(ports),
+            ..Default::default()
+        };
+
+        if let Some(service) = &state.instance_services.get(&service_ref)
+            && service.metadata.labels.as_ref() == Some(&labels)
+            && service.metadata.annotations.as_ref() == Some(&labels)
+            && service.spec.as_ref() == Some(&desired_spec)
+        {
+            if !service
+                .status
+                .as_ref()
+                .map(|status| {
+                    status
+                        .conditions
+                        .as_ref()
+                        .map(|c| c.iter().all(|c| c.status == "True"))
+                        .unwrap_or(false)
+                })
+                .unwrap_or(false)
+            {
+                status.conditions.set(
+                    Self::SERVICE_CONDITION_TYPE,
+                    ConditionStatus::False,
+                    Self::SERVICE_MESSAGE_NOT_READY,
+                    "",
+                );
+                return None;
+            }
+
+            return Some(service.as_ref().clone());
+        }
+
+        let service = Service {
+            metadata: ObjectMeta {
+                name: Some(service_ref.name),
+                namespace: service_ref.namespace,
+                //owner_references: Some(vec![owner_ref.clone()]),
+                labels: Some(labels.clone()),
+                annotations: Some(annotations.clone()),
+                ..Default::default()
+            },
+            spec: Some(desired_spec),
+            status: None,
+        };
+
+        let api: Api<Service> = Api::namespaced(state.client.clone(), &namespace_ref.name);
+
+        let pp = PatchParams::apply(Self::NAME).force();
+        let service = match api
+            .patch(&service.name_unchecked(), &pp, &Patch::Apply(&service))
+            .await
+        {
+            Err(err) => {
+                warn!(?err, "failed to apply Service for Instance");
+                status.conditions.set(
+                    Self::SERVICE_CONDITION_TYPE,
+                    ConditionStatus::False,
+                    Self::SERVICE_REASON_FAILED_TO_CREATE,
+                    err.to_string(),
+                );
+                return None;
+            }
+            Ok(service) => service,
+        };
+
+        status.conditions.set(
+            Self::SERVICE_CONDITION_TYPE,
+            ConditionStatus::True,
+            Self::SERVICE_REASON_CREATED,
+            "Created",
+        );
+
+        Some(service)
     }
 }

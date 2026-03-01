@@ -1,0 +1,8 @@
+apiVersion: operator.ctf.rs/v1alpha1
+kind: Instance
+metadata:
+  name: fair-casino-instance2
+  namespace: default
+spec:
+  challenge:
+    name: fair-casino
