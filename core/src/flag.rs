@@ -3,15 +3,25 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-#[derive(Serialize, Deserialize, Default, Debug, PartialEq, Eq, Clone, JsonSchema)]
+use crate::{ValidationError, ValidationResult};
+
+#[derive(
+    Serialize, Deserialize, Default, Debug, PartialEq, Eq, Clone, JsonSchema, garde::Validate,
+)]
 pub struct Flag {
+    #[garde(pattern(r"^[a-zA-Z0-9]+$"))]
+    #[garde(length(min = 3, max = 6))]
     pub prefix: String,
     #[serde(default)]
+    #[garde(skip)]
     pub format: FlagFormat,
+    #[garde(length(min = 1, max = 127))]
     pub body: String,
     #[serde(default)]
+    #[garde(dive)]
     pub random: Option<FlagRandomRules>,
     #[serde(default)]
+    #[garde(dive)]
     pub options: FlagMatchOptions,
 }
 
@@ -26,26 +36,47 @@ pub enum FlagFormat {
     Underscore, // prefix_body
 }
 
-#[derive(Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate,
+)]
 pub struct FlagRandomRules {
     #[serde(default = "default_random_len")]
-    #[garde(range(max = 64))]
+    #[garde(range(min = 1, max = 63))]
     pub len: u8,
     #[serde(default = "default_random_upper")]
+    #[garde(skip)]
     pub upper: bool,
     #[serde(default = "default_random_lower")]
+    #[garde(skip)]
     pub lower: bool,
     #[serde(default = "default_random_digits")]
+    #[garde(skip)]
     pub digits: bool,
     #[serde(default = "default_random_special_chars")]
     #[garde(ascii)]
+    #[garde(custom(validate_unique_chars))]
     pub special: String,
 }
 
-#[derive(Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate,
+)]
 pub struct FlagMatchOptions {
     #[serde(rename = "ignoreCase", default)]
+    #[garde(skip)]
     pub ignore_case: bool,
+}
+
+fn validate_unique_chars(value: &str, _: &()) -> garde::Result {
+    let mut seen = HashSet::new();
+    for c in value.chars() {
+        if !seen.insert(c) {
+            return Err(garde::Error::new(
+                "Flag random special must contain unique characters",
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -74,6 +105,10 @@ fn default_random_special_chars() -> String {
 }
 
 impl Flag {
+    pub fn validate_strict(&self) -> ValidationResult<()> {
+        garde::Validate::validate(self).map_err(ValidationError::from_garde)
+    }
+
     pub fn verify(&self, flag: &str) -> bool {
         let prefix = &self.prefix;
         let body = &self.body;

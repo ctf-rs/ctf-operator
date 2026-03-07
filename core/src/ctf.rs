@@ -3,39 +3,71 @@ use std::net::IpAddr;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{FlagFormat, FlagRandomRules};
+use crate::{FlagFormat, FlagRandomRules, ValidationError, ValidationResult};
 
-#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]
 pub struct Ctf {
     #[serde(default)]
+    #[garde(length(min = 1, max = 63))]
+    #[garde(pattern(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"))]
     pub name: String,
     #[serde(default, rename = "fullName")]
+    #[garde(length(min = 1))]
     pub full_name: String,
     #[serde(default)]
+    #[garde(skip)]
     pub description: Option<String>,
+    #[garde(dive)]
     pub flag: CtfFlag,
+    #[garde(dive)]
     pub network: CtfNetwork,
 }
 
-#[derive(Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate,
+)]
 pub struct CtfFlag {
     #[serde(default)]
+    #[garde(pattern(r"^[a-zA-Z0-9]+$"))]
+    #[garde(length(min = 3, max = 6))]
     pub prefix: String,
     #[serde(default)]
+    #[garde(skip)]
     pub format: FlagFormat,
     #[serde(default)]
+    #[garde(dive)]
     pub random: Option<FlagRandomRules>,
 }
 
-#[derive(Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate,
+)]
 pub struct CtfNetwork {
+    #[garde(dive)]
     pub ports: CtfPorts,
     #[serde(default)]
+    #[garde(skip)]
     pub ip: Option<IpAddr>,
 }
 
-#[derive(Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate,
+)]
 pub struct CtfPorts {
+    #[garde(range(min = 1024))]
     pub start: u16,
+    #[garde(range(max = 49151))]
     pub end: u16,
+}
+
+impl Ctf {
+    pub fn validate_strict(&self) -> ValidationResult<()> {
+        garde::Validate::validate(self).map_err(ValidationError::from_garde)?;
+
+        if self.network.ports.start > self.network.ports.end {
+            return Err(ValidationError::ServiceReservationStartGreaterThanEnd);
+        }
+
+        Ok(())
+    }
 }

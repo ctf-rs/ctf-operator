@@ -23,5 +23,7 @@ pub async fn read_challenge(path: PathBuf) -> anyhow::Result<Challenge> {
     }
 
     let data = tokio::fs::read_to_string(path).await?;
-    Ok(serde_saphyr::from_str(&data)?)
+    let challenge: Challenge = serde_saphyr::from_str(&data)?;
+    challenge.validate_strict()?;
+    Ok(challenge)
 }
