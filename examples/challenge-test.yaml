@@ -1,0 +1,32 @@
+name: challenge-test
+fullName: Challenge Test
+description: |
+  This is Test
+  Challenge
+authors:
+  - John Doe
+  - Jane Doe
+categories:
+  - misc
+  - rev
+tags:
+  - tag1
+  - tag2
+files:
+  - challenge-test/file.txt
+flags:
+  - name: flag
+    body: fake_flag
+containers:
+  - name: test
+    image:
+      type: dockerfile
+      path: challenge-test/Dockerfile
+    flags:
+      - name: flag
+        env: FLAG
+    ports:
+      - name: socat
+        type: netcat
+        expose: true
+        containerPort: 1337
