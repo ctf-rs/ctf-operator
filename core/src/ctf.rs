@@ -1,9 +1,14 @@
-use std::net::IpAddr;
+use std::{
+    net::IpAddr,
+    path::{Path, PathBuf},
+};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{FlagFormat, FlagRandomRules, ValidationError, ValidationResult};
+use crate::{
+    validate_relative_existing_file, FlagFormat, FlagRandomRules, ValidationError, ValidationResult,
+};
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]
 pub struct Ctf {
@@ -17,10 +22,25 @@ pub struct Ctf {
     #[serde(default)]
     #[garde(skip)]
     pub description: Option<String>,
+    #[serde(default)]
+    #[garde(dive)]
+    pub registry: Option<CtfRegistry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[garde(skip)]
+    pub challenges: Vec<PathBuf>,
     #[garde(dive)]
     pub flag: CtfFlag,
     #[garde(dive)]
     pub network: CtfNetwork,
+}
+
+#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]
+pub struct CtfRegistry {
+    #[garde(length(min = 1))]
+    #[garde(pattern(
+        r"^[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$"
+    ))]
+    pub url: String,
 }
 
 #[derive(
@@ -66,6 +86,22 @@ impl Ctf {
 
         if self.network.ports.start > self.network.ports.end {
             return Err(ValidationError::ServiceReservationStartGreaterThanEnd);
+        }
+
+        Ok(())
+    }
+
+    pub fn validate_strict_at(&self, ctf_yaml_path: &Path) -> ValidationResult<()> {
+        self.validate_strict()?;
+
+        let base_dir = ctf_yaml_path.parent().unwrap_or_else(|| Path::new("."));
+
+        for (idx, challenge_path) in self.challenges.iter().enumerate() {
+            validate_relative_existing_file(
+                base_dir,
+                challenge_path,
+                format!("challenges[{idx}]"),
+            )?;
         }
 
         Ok(())

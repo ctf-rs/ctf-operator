@@ -17,7 +17,10 @@ pub enum Command {
 #[derive(Debug, Parser)]
 pub struct BuildArgs {
     #[arg(index = 1)]
-    pub challenge: PathBuf,
+    pub ctf: PathBuf,
+
+    #[arg(short = 'c', long = "challenge")]
+    pub challenges: Vec<String>,
 
     #[arg(short, long, value_enum, default_value_t = Backend::Docker)]
     pub backend: Backend,
@@ -31,4 +34,5 @@ pub enum Backend {
     #[default]
     Docker,
     Buildah,
+    Podman,
 }

@@ -1,0 +1,17 @@
+name: playground
+fullName: Playground
+flag:
+  prefix: SCC
+  format: curly
+  random:
+    length: 8
+registry:
+  url: registry.ctf.rs/playground
+network:
+  ip: 10.4.10.1
+  ports:
+    start: 6000
+    end: 7000
+challenges:
+  - challenge-test.yaml
+  - challenge-test2.yaml

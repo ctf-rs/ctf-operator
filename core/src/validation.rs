@@ -1,3 +1,5 @@
+use std::path::{Component, Path};
+
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -20,6 +22,12 @@ pub enum ValidationError {
     DuplicateChallengePortName,
     #[error("Container env names must be unique")]
     DuplicateContainerEnv,
+    #[error("{field} path is invalid (must be relative and must not contain '..'): {path}")]
+    InvalidPath { field: String, path: String },
+    #[error("{field} file does not exist: {path}")]
+    FileNotFound { field: String, path: String },
+    #[error("{field} path is not a file: {path}")]
+    PathNotFile { field: String, path: String },
 }
 
 impl ValidationError {
@@ -33,3 +41,42 @@ impl ValidationError {
 }
 
 pub type ValidationResult<T> = Result<T, ValidationError>;
+
+pub(crate) fn validate_relative_existing_file(
+    base_dir: &Path,
+    rel_path: &Path,
+    field: impl Into<String>,
+) -> ValidationResult<()> {
+    let field = field.into();
+    let path_string = rel_path.display().to_string();
+
+    if rel_path.as_os_str().is_empty()
+        || rel_path.is_absolute()
+        || rel_path
+            .components()
+            .any(|c| matches!(c, Component::ParentDir))
+    {
+        return Err(ValidationError::InvalidPath {
+            field,
+            path: path_string,
+        });
+    }
+
+    let resolved = base_dir.join(rel_path);
+
+    if !resolved.exists() {
+        return Err(ValidationError::FileNotFound {
+            field,
+            path: path_string,
+        });
+    }
+
+    if !resolved.is_file() {
+        return Err(ValidationError::PathNotFile {
+            field,
+            path: path_string,
+        });
+    }
+
+    Ok(())
+}

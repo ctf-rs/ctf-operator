@@ -1,9 +1,13 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, path::PathBuf};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
 use crate::{
-    Ctf, Flag, FlagFormat, FlagMatchOptions, FlagRandomRules, ValidationError, ValidationResult,
+    validate_relative_existing_file, Ctf, Flag, FlagFormat, FlagMatchOptions, FlagRandomRules,
+    ValidationError, ValidationResult,
 };
 
 #[derive(
@@ -28,6 +32,9 @@ pub struct Challenge {
     #[serde(default)]
     #[garde(skip)]
     pub authors: HashSet<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[garde(skip)]
+    pub files: Vec<PathBuf>,
     #[garde(dive)]
     pub flags: Vec<ChallengeFlag>,
     #[garde(dive)]
@@ -204,6 +211,30 @@ impl Challenge {
                 if !challenge_port_names.insert(port.name.as_str()) {
                     return Err(ValidationError::DuplicateChallengePortName);
                 }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn validate_strict_at(&self, challenge_yaml_path: &Path) -> ValidationResult<()> {
+        self.validate_strict()?;
+
+        let base_dir = challenge_yaml_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."));
+
+        for (idx, file_path) in self.files.iter().enumerate() {
+            validate_relative_existing_file(base_dir, file_path, format!("files[{idx}]"))?;
+        }
+
+        for (idx, container) in self.containers.iter().enumerate() {
+            if let ContainerImage::Dockerfile { path } = &container.image {
+                validate_relative_existing_file(
+                    base_dir,
+                    path,
+                    format!("containers[{idx}].image.path"),
+                )?;
             }
         }
 
