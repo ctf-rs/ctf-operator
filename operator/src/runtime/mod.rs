@@ -1,97 +1,75 @@
 pub mod core;
 mod error;
-mod index;
-pub mod reservation;
 mod state;
 
 pub use error::*;
-pub use index::*;
 pub use state::*;
 
-use crate::util::{SharedIndex, Waiter};
-use kube::{Client, runtime::watcher::Config};
-use std::sync::Arc;
+use crate::util::{Waiter, Watcher};
+use k8s_openapi::api::{apps::v1::Deployment, core::v1::Service};
+use kube::{runtime::watcher::Config, Client};
+use std::{collections::HashSet, sync::Arc};
 
-pub const MANAGED_BY_LABEL: &str = "operator.ctf.rs/managed-by";
+pub const FINALIZER_NAME: &str = "operators.ctf.rs/finalizer";
+pub const MANAGED_BY_LABEL: &str = "operators.ctf.rs/managed-by";
 pub const MANAGED_BY_VALUE: &str = "ctf-operator";
+pub const LABEL_CTF: &str = "operators.ctf.rs/ctf";
+pub const LABEL_CHALLENGE: &str = "operators.ctf.rs/challenge";
+pub const LABEL_INSTANCE: &str = "operators.ctf.rs/instance";
+pub const LABEL_NAMESPACE: &str = "operators.ctf.rs/namespace";
 
-pub(crate) fn managed_cfg() -> Config {
-    Config::default().labels(&format!("{MANAGED_BY_LABEL}={MANAGED_BY_VALUE}"))
-}
+pub async fn run(namespaces: Vec<String>) -> CtfResult<()> {
+    let watched_namespaces = namespaces
+        .into_iter()
+        .filter(|ns| !ns.trim().is_empty())
+        .collect::<HashSet<_>>();
 
-pub async fn run() -> CtfResult<()> {
-    let index = SharedIndex::new(CtfIndex::new().into());
+    let client = Client::try_default().await?;
 
-    let client = Client::try_default()
-        .await
-        .expect("failed to create kube Client");
-
-    let reservation_set_watcher = reservation::reservation_set::watcher(client.clone());
-    let port_claim_watcher = reservation::port_claim::watcher(client.clone());
+    let ctf_watcher = core::ctf::watcher(client.clone());
+    let challenge_watcher = core::challenge::watcher(client.clone());
     let flag_watcher = core::flag::watcher(client.clone());
-    let jeopardy_watcher = core::jeopardy::watcher(client.clone());
-    let challenges_watcher = core::challenge::watcher(client.clone());
-    let instances_watcher = core::instance::watcher(client.clone());
-    let instance_namespace_watcher = core::instance::namespace_watcher(client.clone());
-    let instance_pod_watcher = core::instance::deployment_watcher(client.clone());
-    let instance_service_watcher = core::instance::service_watcher(client.clone());
+    let instance_watcher = core::instance::watcher(client.clone());
+
+    let deployment_api: kube::Api<Deployment> = kube::Api::all(client.clone());
+    let service_api: kube::Api<Service> = kube::Api::all(client.clone());
+    let deployment_watcher = Watcher::new(deployment_api, Config::default(), 0xFFFF);
+    let service_watcher = Watcher::new(service_api, Config::default(), 0xFFFF);
 
     let state = Arc::new(CtfState::new(
-        client.clone(),
-        index.clone(),
+        client,
+        watched_namespaces,
+        ctf_watcher.store(),
+        challenge_watcher.store(),
+        instance_watcher.store(),
         flag_watcher.store(),
-        reservation_set_watcher.store(),
-        port_claim_watcher.store(),
-        jeopardy_watcher.store(),
-        challenges_watcher.store(),
-        instances_watcher.store(),
-        instance_namespace_watcher.store(),
-        instance_pod_watcher.store(),
-        instance_service_watcher.store(),
+        deployment_watcher.store(),
+        service_watcher.store(),
     ));
 
+    let ctf_controller = core::ctf::controller(state.clone(), &ctf_watcher)?;
+    let challenge_controller = core::challenge::controller(state.clone(), &challenge_watcher)?;
     let flag_controller = core::flag::controller(state.clone(), &flag_watcher)?;
-    let jeopardy_controller = core::jeopardy::controller(
-        state.clone(),
-        &jeopardy_watcher,
-        &reservation_set_watcher,
-        &challenges_watcher,
-    )?;
-    let challenges_controller =
-        core::challenge::controller(state.clone(), &challenges_watcher, &jeopardy_watcher)?;
-    let instances_controller = core::instance::controller(
-        state.clone(),
-        &instances_watcher,
-        &jeopardy_watcher,
-        &challenges_watcher,
-        &instance_namespace_watcher,
-        &instance_pod_watcher,
-        &instance_service_watcher,
-        &flag_watcher,
-        &port_claim_watcher,
-    )?;
-    let reservation_set_controller = reservation::reservation_set::controller(
-        state.clone(),
-        &reservation_set_watcher,
-        &port_claim_watcher,
-    )?;
-    let port_claim_controller = reservation::port_claim::controller(
-        state.clone(),
-        &port_claim_watcher,
-        &reservation_set_watcher,
+    let instance_controller = core::instance::controller(
+        state,
+        &instance_watcher,
+        &ctf_watcher,
+        &challenge_watcher,
+        &deployment_watcher,
+        &service_watcher,
     )?;
 
     Waiter::builder()
-        .flag(flag_watcher, flag_controller, index.clone())
-        .jeopardy(jeopardy_watcher, jeopardy_controller, index.clone())
-        .challenge(challenges_watcher, challenges_controller, index.clone())
-        .instance(instances_watcher, instances_controller, index.clone())
-        .reservation_set(
-            reservation_set_watcher,
-            reservation_set_controller,
-            index.clone(),
-        )
-        .port_claim(port_claim_watcher, port_claim_controller, index.clone())
+        .watcher(ctf_watcher)
+        .watcher(challenge_watcher)
+        .watcher(flag_watcher)
+        .watcher(instance_watcher)
+        .watcher(deployment_watcher)
+        .watcher(service_watcher)
+        .controller(ctf_controller)
+        .controller(challenge_controller)
+        .controller(flag_controller)
+        .controller(instance_controller)
         .run()
         .await?;
 

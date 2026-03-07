@@ -14,13 +14,18 @@ pub enum Command {
 }
 
 #[derive(Debug, Parser)]
-pub struct CrdArgs {}
-
-#[derive(Debug, clap::ValueEnum, Clone, Copy)]
-pub enum CrdFormat {
-    Yaml,
-    Json,
+pub struct CrdArgs {
+    #[arg(short = 'n', long = "namespace", default_value = "ctf")]
+    pub namespace: String,
 }
 
 #[derive(Debug, Parser)]
-pub struct OperatorArgs {}
+pub struct OperatorArgs {
+    #[arg(
+        short = 'n',
+        long = "namespace",
+        value_delimiter = ',',
+        default_value = "ctf"
+    )]
+    pub namespaces: Vec<String>,
+}

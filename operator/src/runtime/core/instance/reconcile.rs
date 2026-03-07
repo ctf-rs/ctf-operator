@@ -1,31 +1,39 @@
-use crate::crd::v1alpha1::{
-    Challenge, Flag, FlagSpec, Instance, InstanceStatus, Jeopardy, PortClaim, PortClaimSpec,
-    ReservationRef,
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+    time::Duration,
 };
-use crate::runtime::core::challenge::ChallengeParentRef;
-use crate::runtime::reservation::{is_u16_str, port_claim};
-use crate::runtime::{MANAGED_BY_LABEL, MANAGED_BY_VALUE};
-use crate::util::{ConditionStatus, KubeObject};
+
 use crate::{
-    runtime::{CtfError, CtfState},
+    runtime::{
+        CtfError, CtfState, FINALIZER_NAME, LABEL_CHALLENGE, LABEL_CTF, LABEL_INSTANCE,
+        LABEL_NAMESPACE, MANAGED_BY_LABEL, MANAGED_BY_VALUE,
+    },
     util::Reconciler,
 };
-use k8s_openapi::api::apps::v1::{Deployment, DeploymentSpec};
-use k8s_openapi::api::core::v1::{
-    Container, Namespace, PodSpec, PodTemplateSpec, Service, ServicePort, ServiceSpec,
+use ctf_k8s::{Challenge, ConditionStatus, Ctf, Flag, FlagSpec, Instance, InstanceStatus};
+use k8s_openapi::{
+    api::{
+        apps::v1::{Deployment, DeploymentSpec},
+        core::v1::{Container, PodSpec, PodTemplateSpec, Service, ServicePort, ServiceSpec},
+    },
+    apimachinery::pkg::{
+        apis::meta::v1::{LabelSelector, OwnerReference},
+        util::intstr::IntOrString,
+    },
 };
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector;
-use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
-use kube::api::{ObjectMeta, Patch, PatchParams};
-use kube::runtime::controller::Action;
-use kube::runtime::reflector::{Lookup, ObjectRef};
-use kube::{Api, Resource, ResourceExt};
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
-use std::time::Duration;
-use tracing::{info, warn};
+use kube::{
+    api::{DeleteParams, ListParams, ObjectMeta, Patch, PatchParams},
+    runtime::{
+        controller::Action,
+        finalizer::{finalizer, Event},
+        reflector::ObjectRef,
+    },
+    Api, Resource, ResourceExt,
+};
 
-pub struct InstanceReconciler {}
+pub struct InstanceReconciler;
+
 impl Reconciler for InstanceReconciler {
     const NAME: &'static str = "instance-controller";
     type K = Instance;
@@ -33,954 +41,399 @@ impl Reconciler for InstanceReconciler {
     type Err = CtfError;
 
     async fn reconcile(obj: Arc<Instance>, state: Arc<CtfState>) -> Result<Action, CtfError> {
-        info!(
-            "Reconciling {} {} {}",
-            Self::K::gvk(),
-            obj.name_unchecked(),
-            obj.namespace_unchecked()
-        );
+        let namespace = obj.namespace().unwrap_or_default();
+        if !state.watches_namespace(&namespace) {
+            return Ok(Action::await_change());
+        }
 
-        let instance = obj.as_ref();
-        let mut status = obj.as_ref().status.to_owned().unwrap_or_default();
-
-        match Self::find_parent_ref(&instance, &mut status, &state) {
-            Some((challenge, ChallengeParentRef::Jeopardy(jeopardy))) => {
-                if Self::update_namespace(&instance, &mut status, &state).await {
-                    let flags =
-                        Self::update_flags(instance, &mut status, &state, &jeopardy, &challenge)
-                            .await;
-                    let port_claims =
-                        Self::update_ports(instance, &mut status, &state, &jeopardy, &challenge)
-                            .await;
-
-                    if let Some(flags) = flags
-                        && let Some(port_claims) = port_claims
-                    {
-                        Self::update_deployments(
-                            instance,
-                            &mut status,
-                            &state,
-                            &jeopardy,
-                            &challenge,
-                            &flags,
-                            &port_claims,
-                        )
-                        .await;
-                        Self::update_service(
-                            instance,
-                            &mut status,
-                            &state,
-                            &jeopardy,
-                            &challenge,
-                            &flags,
-                            &port_claims,
-                        )
-                        .await;
-                    }
-                }
+        let api: Api<Instance> = Api::namespaced(state.client.clone(), &namespace);
+        finalizer(&api, FINALIZER_NAME, obj, |event| async {
+            match event {
+                Event::Apply(instance) => reconcile_apply(instance, state.clone()).await,
+                Event::Cleanup(instance) => reconcile_cleanup(instance, state.clone()).await,
             }
-            None => {}
-        };
-
-        let conditions_true = status.conditions.all_true();
-
-        if instance.status.as_ref() != Some(&status) {
-            Self::patch_status_namespaced(instance, state.client.clone(), status).await?;
-        }
-
-        if conditions_true {
-            Ok(Action::await_change())
-        } else {
-            Ok(Action::requeue(Duration::from_secs(
-                Self::ERROR_RECONCILE_REQUEUE_TIME,
-            )))
-        }
+        })
+        .await
+        .map_err(|err| CtfError::FinalizerError(Box::new(err)))
     }
 }
 
-impl InstanceReconciler {
-    const PARENT_CONDITION_TYPE: &'static str = "Challenge";
-    const PARENT_REASON_ATTACHED: &'static str = "Atached";
-    const PARENT_REASON_CHALLENGE_NOT_FOUND: &'static str = "NotFound";
-    const PARENT_REASON_CHALLENGE_MISSING_STATUS: &'static str = "MissingStatus";
-    const PARENT_REASON_CHALLENGE_MISSING_NOT_READY: &'static str = "NotReady";
-    const PARENT_REASON_JEOPARDY_NOT_FOUND: &'static str = "NotFound";
-    const PARENT_REASON_JEOPARDY_MISSING_STATUS: &'static str = "MissingStatus";
-    const PARENT_REASON_JEOPARDY_MISSING_NOT_READY: &'static str = "NotReady";
-    const PARENT_REASON_CHALLENGE_PARENT_NOT_SUPPORTED: &'static str =
-        "Challenge parent not supported";
+async fn reconcile_apply(
+    instance: Arc<Instance>,
+    state: Arc<CtfState>,
+) -> Result<Action, CtfError> {
+    let namespace = instance.namespace().unwrap_or_default();
+    let mut status = instance.status.clone().unwrap_or_default();
 
-    fn find_parent_ref(
-        instance: &Instance,
-        status: &mut InstanceStatus,
-        state: &CtfState,
-    ) -> Option<(Challenge, ChallengeParentRef)> {
-        let challenge_ref = instance.spec_challenge_ref();
-        let challenge = match state
-            .challenges
-            .find(|challenge| challenge_ref.eq(&challenge.to_object_ref(Default::default())))
-        {
-            Some(challenge) => challenge.as_ref().clone(),
-            None => {
-                status.conditions.set(
-                    Self::PARENT_CONDITION_TYPE,
-                    ConditionStatus::False,
-                    Self::PARENT_REASON_CHALLENGE_NOT_FOUND,
-                    "",
-                );
-                return None;
-            }
-        };
-
-        let challenge_status = match &challenge.status {
-            Some(challenge_status) => challenge_status,
-            None => {
-                status.conditions.set(
-                    Self::PARENT_CONDITION_TYPE,
-                    ConditionStatus::False,
-                    Self::PARENT_REASON_CHALLENGE_MISSING_STATUS,
-                    "",
-                );
-                return None;
-            }
-        };
-
-        if !challenge_status.conditions.all_true() {
-            status.conditions.set(
-                Self::PARENT_CONDITION_TYPE,
-                ConditionStatus::False,
-                Self::PARENT_REASON_CHALLENGE_MISSING_NOT_READY,
-                "",
-            );
-            return None;
-        }
-
-        //TODO: Bundle same code with jeopardy in single place
-        let challenge_parent = if let Some(jeopardy_ref) = challenge.spec_jeopardy_ref() {
-            let jeopardy = match state
-                .jeopardy
-                .find(|jeopardy| jeopardy_ref.eq(&jeopardy.to_object_ref(Default::default())))
-            {
-                Some(jeopardy) => jeopardy,
-                None => {
-                    status.conditions.set(
-                        Self::PARENT_CONDITION_TYPE,
-                        ConditionStatus::False,
-                        Self::PARENT_REASON_JEOPARDY_NOT_FOUND,
-                        "",
-                    );
-                    return None;
-                }
-            };
-
-            let jeopardy_status = match &jeopardy.status {
-                Some(jeopardy_status) => jeopardy_status,
-                None => {
-                    status.conditions.set(
-                        Self::PARENT_CONDITION_TYPE,
-                        ConditionStatus::False,
-                        Self::PARENT_REASON_JEOPARDY_MISSING_STATUS,
-                        "",
-                    );
-                    return None;
-                }
-            };
-
-            if !jeopardy_status.conditions.all_true() {
-                status.conditions.set(
-                    Self::PARENT_CONDITION_TYPE,
-                    ConditionStatus::False,
-                    Self::PARENT_REASON_JEOPARDY_MISSING_NOT_READY,
-                    "",
-                );
-                return None;
-            }
-
-            ChallengeParentRef::Jeopardy(jeopardy.as_ref().clone())
-        } else {
-            status.conditions.set(
-                Self::PARENT_CONDITION_TYPE,
-                ConditionStatus::False,
-                Self::PARENT_REASON_CHALLENGE_PARENT_NOT_SUPPORTED,
-                "",
-            );
-            return None;
-        };
-
-        status.conditions.set(
-            Self::PARENT_CONDITION_TYPE,
-            ConditionStatus::True,
-            Self::PARENT_REASON_ATTACHED,
-            "",
+    let Some(owner_ref) = instance.controller_owner_ref(&()) else {
+        set_not_ready(
+            &mut status,
+            "References",
+            "MissingOwnerReference",
+            "Instance owner reference missing",
         );
-        Some((challenge, challenge_parent))
+        patch_status_if_needed(instance.as_ref(), &state, status).await?;
+        return Ok(Action::requeue(Duration::from_secs(30)));
+    };
+
+    let ctf_ref = ObjectRef::<Ctf>::new(&instance.spec.ctf).within(&namespace);
+    let challenge_ref = ObjectRef::<Challenge>::new(&instance.spec.challenge).within(&namespace);
+
+    let Some(ctf) = state.ctfs.get(&ctf_ref) else {
+        set_not_ready(
+            &mut status,
+            "References",
+            "MissingCtf",
+            "Referenced Ctf not found",
+        );
+        patch_status_if_needed(instance.as_ref(), &state, status).await?;
+        return Ok(Action::requeue(Duration::from_secs(30)));
+    };
+
+    let Some(challenge) = state.challenges.get(&challenge_ref) else {
+        set_not_ready(
+            &mut status,
+            "References",
+            "MissingChallenge",
+            "Referenced Challenge not found",
+        );
+        patch_status_if_needed(instance.as_ref(), &state, status).await?;
+        return Ok(Action::requeue(Duration::from_secs(30)));
+    };
+
+    if !is_ready_ctf(ctf.as_ref()) {
+        set_not_ready(&mut status, "References", "CtfNotReady", "Ctf is not ready");
+        patch_status_if_needed(instance.as_ref(), &state, status).await?;
+        return Ok(Action::requeue(Duration::from_secs(30)));
     }
+
+    if !is_ready_challenge(challenge.as_ref()) {
+        set_not_ready(
+            &mut status,
+            "References",
+            "ChallengeNotReady",
+            "Challenge is not ready",
+        );
+        patch_status_if_needed(instance.as_ref(), &state, status).await?;
+        return Ok(Action::requeue(Duration::from_secs(30)));
+    }
+
+    ensure_flags(
+        instance.as_ref(),
+        ctf.as_ref(),
+        challenge.as_ref(),
+        owner_ref.clone(),
+        &state,
+    )
+    .await?;
+    ensure_deployment(
+        instance.as_ref(),
+        challenge.as_ref(),
+        owner_ref.clone(),
+        &state,
+    )
+    .await?;
+    ensure_service(instance.as_ref(), challenge.as_ref(), owner_ref, &state).await?;
+
+    status
+        .conditions
+        .set("References", ConditionStatus::True, "Resolved", "");
+    status
+        .conditions
+        .set("Ready", ConditionStatus::True, "Reconciled", "");
+
+    patch_status_if_needed(instance.as_ref(), &state, status).await?;
+    Ok(Action::await_change())
 }
 
-impl InstanceReconciler {
-    const NAMESPACE_CONDITION_TYPE: &'static str = "Namespace";
-    const NAMESPACE_REASON_CREATED: &'static str = "Created";
+async fn reconcile_cleanup(
+    instance: Arc<Instance>,
+    state: Arc<CtfState>,
+) -> Result<Action, CtfError> {
+    let namespace = instance.namespace().unwrap_or_default();
+    let label_selector = format!(
+        "{LABEL_INSTANCE}={},{}={}",
+        instance.name_any(),
+        LABEL_NAMESPACE,
+        namespace
+    );
+    let delete_params = DeleteParams::default();
 
-    const NAMESPACE_MESSAGE_NOT_READY: &'static str = "NotReady";
-    const NAMESPACE_MESSAGE_OWNER_REF: &'static str = "OwnerReferenceError";
-    const NAMESPACE_REASON_FAILED_TO_CREATE: &'static str = "FailedToCreate";
+    Api::<Service>::namespaced(state.client.clone(), &namespace)
+        .delete_collection(
+            &delete_params,
+            &ListParams::default().labels(&label_selector),
+        )
+        .await?;
 
-    async fn update_namespace(
-        instance: &Instance,
-        status: &mut InstanceStatus,
-        state: &CtfState,
-    ) -> bool {
-        let namespace_ref = instance.target_namespace_ref();
+    Api::<Deployment>::namespaced(state.client.clone(), &namespace)
+        .delete_collection(
+            &delete_params,
+            &ListParams::default().labels(&label_selector),
+        )
+        .await?;
 
-        if let Some(reservation_set) = state.instance_namespaces.get(&namespace_ref) {
-            if let Some(annotations) = &reservation_set.metadata.labels
-                && annotations.get(MANAGED_BY_LABEL).map(|s| s.as_str()) == Some(&MANAGED_BY_VALUE)
-            {
-                if let Some(conditions) = reservation_set.status.as_ref().map(|s| &s.conditions)
-                    && conditions
-                        .as_ref()
-                        .map(|conditions| conditions.iter().all(|c| c.status == "True"))
-                        .unwrap_or(true)
-                {
-                    status.conditions.set(
-                        Self::NAMESPACE_CONDITION_TYPE,
-                        ConditionStatus::True,
-                        Self::NAMESPACE_REASON_CREATED,
-                        "Existing",
-                    );
-                    return true;
-                } else {
-                    status.conditions.set(
-                        Self::NAMESPACE_CONDITION_TYPE,
-                        ConditionStatus::False,
-                        Self::NAMESPACE_MESSAGE_NOT_READY,
-                        "",
-                    );
-                    return false;
-                }
-            }
-            // else (re)create Namespace
-        }
+    Api::<Flag>::namespaced(state.client.clone(), &namespace)
+        .delete_collection(
+            &delete_params,
+            &ListParams::default().labels(&label_selector),
+        )
+        .await?;
 
-        let owner_ref = match instance.controller_owner_ref(&Default::default()) {
-            Some(owner_ref) => owner_ref,
-            None => {
-                status.conditions.set(
-                    Self::NAMESPACE_CONDITION_TYPE,
-                    ConditionStatus::False,
-                    Self::NAMESPACE_MESSAGE_OWNER_REF,
-                    "",
-                );
-                return false;
-            }
+    Ok(Action::await_change())
+}
+
+async fn patch_status_if_needed(
+    instance: &Instance,
+    state: &CtfState,
+    status: InstanceStatus,
+) -> Result<(), CtfError> {
+    if instance.status.as_ref() != Some(&status) {
+        InstanceReconciler::patch_status_namespaced(instance, state.client.clone(), status).await?;
+    }
+    Ok(())
+}
+
+fn set_not_ready(status: &mut InstanceStatus, typ: &str, reason: &str, message: &str) {
+    status.conditions.set(
+        typ,
+        ConditionStatus::False,
+        reason.to_owned(),
+        message.to_owned(),
+    );
+    status
+        .conditions
+        .set("Ready", ConditionStatus::False, "NotReady", "");
+}
+
+fn is_ready_ctf(ctf: &Ctf) -> bool {
+    ctf.status
+        .as_ref()
+        .map(|status| status.conditions.all_true())
+        .unwrap_or(false)
+}
+
+fn is_ready_challenge(challenge: &Challenge) -> bool {
+    challenge
+        .status
+        .as_ref()
+        .map(|status| status.conditions.all_true())
+        .unwrap_or(false)
+}
+
+fn base_labels(instance: &Instance) -> BTreeMap<String, String> {
+    let mut labels = BTreeMap::new();
+    labels.insert(MANAGED_BY_LABEL.to_string(), MANAGED_BY_VALUE.to_string());
+    labels.insert(LABEL_CTF.to_string(), instance.spec.ctf.clone());
+    labels.insert(LABEL_CHALLENGE.to_string(), instance.spec.challenge.clone());
+    labels.insert(LABEL_INSTANCE.to_string(), instance.name_any());
+    labels.insert(
+        LABEL_NAMESPACE.to_string(),
+        instance.namespace().unwrap_or_default(),
+    );
+    labels
+}
+
+fn resource_labels(
+    instance: &Instance,
+    ctf: &Ctf,
+    challenge: &Challenge,
+) -> BTreeMap<String, String> {
+    let mut labels = base_labels(instance);
+    labels.insert(LABEL_CTF.to_string(), ctf.name_any());
+    labels.insert(LABEL_CHALLENGE.to_string(), challenge.name_any());
+    labels
+}
+
+async fn ensure_flags(
+    instance: &Instance,
+    ctf: &Ctf,
+    challenge: &Challenge,
+    owner_ref: OwnerReference,
+    state: &CtfState,
+) -> Result<(), CtfError> {
+    let namespace = instance.namespace().unwrap_or_default();
+
+    let labels = resource_labels(instance, ctf, challenge);
+    let api: Api<Flag> = Api::namespaced(state.client.clone(), &namespace);
+
+    for challenge_flag in &challenge.spec.flags {
+        let name = format!("{}-{}", instance.name_any(), challenge_flag.name);
+        let spec = FlagSpec {
+            prefix: challenge_flag
+                .prefix
+                .clone()
+                .unwrap_or_else(|| ctf.spec.flag.prefix.clone()),
+            format: challenge_flag.format.unwrap_or(ctf.spec.flag.format),
+            body: challenge_flag.body.clone(),
+            random: challenge_flag
+                .random
+                .clone()
+                .or(ctf.spec.flag.random.clone()),
+            options: challenge_flag.options.clone(),
+            conditions: Default::default(),
         };
 
-        let mut annottations = BTreeMap::new();
-        annottations.insert(MANAGED_BY_LABEL.into(), MANAGED_BY_VALUE.into());
-
-        let namespace = Namespace {
+        let resource = Flag {
             metadata: ObjectMeta {
-                name: Some(namespace_ref.name),
-                namespace: namespace_ref.namespace,
-                owner_references: Some(vec![owner_ref]),
-                labels: Some(annottations),
+                name: Some(name.clone()),
+                namespace: Some(namespace.clone()),
+                labels: Some(labels.clone()),
+                owner_references: Some(vec![owner_ref.clone()]),
                 ..Default::default()
             },
-            spec: None,
+            spec,
             status: None,
         };
 
-        let api: Api<Namespace> = Api::all(state.client.clone());
-
-        let pp = PatchParams::apply(Self::NAME).force();
-        if let Err(err) = api
-            .patch(&namespace.name_unchecked(), &pp, &Patch::Apply(&namespace))
-            .await
-        {
-            warn!(?err, "failed to apply Namespace for Instance");
-            status.conditions.set(
-                Self::NAMESPACE_CONDITION_TYPE,
-                ConditionStatus::False,
-                Self::NAMESPACE_REASON_FAILED_TO_CREATE,
-                err.to_string(),
-            );
-            return false;
-        }
-
-        status.conditions.set(
-            Self::NAMESPACE_CONDITION_TYPE,
-            ConditionStatus::True,
-            Self::FLAG_REASON_CREATED,
-            "Created",
-        );
-        true
+        api.patch(
+            &name,
+            &PatchParams::apply(InstanceReconciler::NAME).force(),
+            &Patch::Apply(&resource),
+        )
+        .await?;
     }
+
+    Ok(())
 }
 
-impl InstanceReconciler {
-    pub const INSTANCE_NAME_LABEL: &str = "operator.ctf.rs/instance-name";
-    pub const INSTANCE_NAMESPACE_LABEL: &str = "operator.ctf.rs/instance-namespace";
-    pub const CHALLENGE_NAME_LABEL: &str = "operator.ctf.rs/challenge-name";
-    pub const CHALLENGE_NAMESPACE_LABEL: &str = "operator.ctf.rs/challenge-namespace";
-    pub const JEOPARDY_NAME_LABEL: &str = "operator.ctf.rs/jeopardy-name";
-    pub const JEOPARDY_NAMESPACE_LABEL: &str = "operator.ctf.rs/jeopardy-namespace";
+async fn ensure_deployment(
+    instance: &Instance,
+    challenge: &Challenge,
+    owner_ref: OwnerReference,
+    state: &CtfState,
+) -> Result<(), CtfError> {
+    let namespace = instance.namespace().unwrap_or_default();
+    let name = instance.name_any();
 
-    pub const JEOPARDY_CONTAINER_LABEL: &str = "operator.ctf.rs/container";
-}
+    let mut labels = base_labels(instance);
+    labels.insert("app.kubernetes.io/name".to_string(), name.clone());
 
-impl InstanceReconciler {
-    const FLAG_CONDITION_TYPE: &'static str = "Flags";
-    const FLAG_REASON_CREATED: &'static str = "AllCreated";
-    const FLAG_MESSAGE_NOT_READY: &'static str = "NotReady";
-    const FLAG_REASON_FAILED_TO_CREATE: &'static str = "FailedToCreate";
-    const FLAG_REASON_DUPLICATE: &'static str = "DuplicateFlagName";
-
-    async fn update_flags(
-        instance: &Instance,
-        status: &mut InstanceStatus,
-        state: &CtfState,
-        jeopardy: &Jeopardy,
-        challenge: &Challenge,
-    ) -> Option<HashMap<String, Flag>> {
-        let flag_prefix = &jeopardy.spec.flag.prefix;
-        let flag_format = &jeopardy.spec.flag.format;
-        let flag_random = &jeopardy.spec.flag.random;
-
-        let namespace_ref = instance.target_namespace_ref();
-
-        let mut flags = HashMap::new();
-
-        let mut labels = BTreeMap::new();
-        labels.insert(MANAGED_BY_LABEL.into(), MANAGED_BY_VALUE.into());
-
-        labels.insert(Self::INSTANCE_NAME_LABEL.into(), instance.name_unchecked());
-        labels.insert(
-            Self::INSTANCE_NAMESPACE_LABEL.into(),
-            instance.namespace_unchecked(),
-        );
-
-        labels.insert(
-            Self::CHALLENGE_NAME_LABEL.into(),
-            challenge.name_unchecked(),
-        );
-        labels.insert(
-            Self::CHALLENGE_NAMESPACE_LABEL.into(),
-            challenge.namespace_unchecked(),
-        );
-
-        labels.insert(Self::JEOPARDY_NAME_LABEL.into(), jeopardy.name_unchecked());
-        labels.insert(
-            Self::JEOPARDY_NAMESPACE_LABEL.into(),
-            jeopardy.namespace_unchecked(),
-        );
-
-        for flag_spec in &challenge.spec.flags {
-            let desired_spec = FlagSpec {
-                prefix: flag_spec.prefix.as_ref().unwrap_or(flag_prefix).clone(),
-                format: flag_spec.format.as_ref().unwrap_or(flag_format).clone(),
-                random: flag_spec.random.as_ref().or(flag_random.as_ref()).cloned(),
-                body: flag_spec.body.clone(),
-                options: flag_spec.options.clone(),
-            };
-
-            let flag_ref = ObjectRef::<Flag>::new(&flag_spec.name).within(&namespace_ref.name);
-            if let Some(flag) = &state.flags.get(&flag_ref)
-                && flag.metadata.labels.as_ref() == Some(&labels)
-                && flag.spec == desired_spec
-            {
-                if flags
-                    .insert(flag.name_unchecked(), flag.as_ref().clone())
-                    .is_some()
-                {
-                    status.conditions.set(
-                        Self::PORT_CLAIM_CONDITION_TYPE,
-                        ConditionStatus::False,
-                        Self::FLAG_REASON_DUPLICATE,
-                        "Existing",
-                    );
-                    return None;
-                }
-                continue;
-            }
-
-            let flag = Flag {
-                metadata: ObjectMeta {
-                    name: Some(flag_ref.name),
-                    namespace: flag_ref.namespace,
-                    //owner_references: Some(vec![owner_ref.clone()]),
-                    labels: Some(labels.clone()),
-                    ..Default::default()
-                },
-                spec: desired_spec,
-                status: None,
-            };
-
-            let api: Api<Flag> = Api::namespaced(state.client.clone(), &namespace_ref.name);
-
-            let pp = PatchParams::apply(Self::NAME).force();
-            match api
-                .patch(&flag.name_unchecked(), &pp, &Patch::Apply(&flag))
-                .await
-            {
-                Err(err) => {
-                    warn!(?err, "failed to apply Flag for Instance");
-                    status.conditions.set(
-                        Self::FLAG_CONDITION_TYPE,
-                        ConditionStatus::False,
-                        Self::FLAG_REASON_FAILED_TO_CREATE,
-                        err.to_string(),
-                    );
-                    return None;
-                }
-                Ok(flag) => {
-                    if flags.insert(flag.name_unchecked(), flag).is_some() {
-                        status.conditions.set(
-                            Self::PORT_CLAIM_CONDITION_TYPE,
-                            ConditionStatus::False,
-                            Self::FLAG_REASON_DUPLICATE,
-                            "Patched",
-                        );
-                        return None;
-                    }
-                }
-            }
-        }
-
-        if !flags.values().all(|f| {
-            f.status
-                .as_ref()
-                .map(|status| status.conditions.all_true())
-                .unwrap_or(false)
-        }) {
-            status.conditions.set(
-                Self::FLAG_CONDITION_TYPE,
-                ConditionStatus::False,
-                Self::FLAG_MESSAGE_NOT_READY,
-                "",
-            );
-            return None;
-        }
-
-        status.conditions.set(
-            Self::FLAG_CONDITION_TYPE,
-            ConditionStatus::True,
-            Self::FLAG_REASON_CREATED,
-            "Created",
-        );
-
-        Some(flags)
-    }
-}
-
-impl InstanceReconciler {
-    const PORT_CLAIM_CONDITION_TYPE: &'static str = "PortClaims";
-    const PORT_CLAIM_REASON_CREATED: &'static str = "AllCreated";
-    const PORT_CLAIM_MESSAGE_NOT_READY: &'static str = "NotReady";
-    const PORT_CLAIM_REASON_FAILED_TO_CREATE: &'static str = "FailedToCreate";
-    const PORT_CLAIM_REASON_DUPLICATE: &'static str = "DuplicatePortName";
-
-    async fn update_ports(
-        instance: &Instance,
-        status: &mut InstanceStatus,
-        state: &CtfState,
-        jeopardy: &Jeopardy,
-        challenge: &Challenge,
-    ) -> Option<HashMap<String, PortClaim>> {
-        let reservation_ref = jeopardy.reservation_set_ref();
-
-        let namespace_ref = instance.target_namespace_ref();
-
-        let mut port_claims = HashMap::new();
-
-        let mut labels = BTreeMap::new();
-        labels.insert(MANAGED_BY_LABEL.into(), MANAGED_BY_VALUE.into());
-
-        labels.insert(Self::INSTANCE_NAME_LABEL.into(), instance.name_unchecked());
-        labels.insert(
-            Self::INSTANCE_NAMESPACE_LABEL.into(),
-            instance.namespace_unchecked(),
-        );
-
-        labels.insert(
-            Self::CHALLENGE_NAME_LABEL.into(),
-            challenge.name_unchecked(),
-        );
-        labels.insert(
-            Self::CHALLENGE_NAMESPACE_LABEL.into(),
-            challenge.namespace_unchecked(),
-        );
-
-        labels.insert(Self::JEOPARDY_NAME_LABEL.into(), jeopardy.name_unchecked());
-        labels.insert(
-            Self::JEOPARDY_NAMESPACE_LABEL.into(),
-            jeopardy.namespace_unchecked(),
-        );
-
-        for port_claim_spec in &challenge.spec.ports {
-            let desired_spec = PortClaimSpec {
-                reservation: ReservationRef {
-                    name: reservation_ref.name.clone(),
-                    namespace: reservation_ref.namespace.clone(),
-                },
-            };
-
-            let port_claim_ref =
-                ObjectRef::<PortClaim>::new(&port_claim_spec.name).within(&namespace_ref.name);
-            if let Some(port_claim) = &state.port_claims.get(&port_claim_ref)
-                && port_claim.metadata.labels.as_ref() == Some(&labels)
-                && port_claim.spec == desired_spec
-            {
-                if port_claims
-                    .insert(port_claim.name_unchecked(), port_claim.as_ref().clone())
-                    .is_some()
-                {
-                    status.conditions.set(
-                        Self::PORT_CLAIM_CONDITION_TYPE,
-                        ConditionStatus::False,
-                        Self::PORT_CLAIM_REASON_DUPLICATE,
-                        "Existing",
-                    );
-                    return None;
-                }
-                continue;
-            }
-
-            let flag = PortClaim {
-                metadata: ObjectMeta {
-                    name: Some(port_claim_ref.name),
-                    namespace: port_claim_ref.namespace,
-                    //owner_references: Some(vec![owner_ref.clone()]),
-                    labels: Some(labels.clone()),
-                    ..Default::default()
-                },
-                spec: desired_spec,
-                status: None,
-            };
-
-            let api: Api<PortClaim> = Api::namespaced(state.client.clone(), &namespace_ref.name);
-
-            let pp = PatchParams::apply(Self::NAME).force();
-            match api
-                .patch(&flag.name_unchecked(), &pp, &Patch::Apply(&flag))
-                .await
-            {
-                Err(err) => {
-                    warn!(?err, "failed to apply PortClaim for Instance");
-                    status.conditions.set(
-                        Self::PORT_CLAIM_CONDITION_TYPE,
-                        ConditionStatus::False,
-                        Self::PORT_CLAIM_REASON_FAILED_TO_CREATE,
-                        err.to_string(),
-                    );
-                    return None;
-                }
-                Ok(flag) => {
-                    if port_claims.insert(flag.name_unchecked(), flag).is_some() {
-                        status.conditions.set(
-                            Self::PORT_CLAIM_CONDITION_TYPE,
-                            ConditionStatus::False,
-                            Self::PORT_CLAIM_REASON_DUPLICATE,
-                            "Patched",
-                        );
-                        return None;
-                    }
-                }
-            }
-        }
-
-        if !port_claims.values().all(|f| {
-            f.status
-                .as_ref()
-                .map(|status| status.conditions.all_true())
-                .unwrap_or(false)
-        }) {
-            status.conditions.set(
-                Self::PORT_CLAIM_CONDITION_TYPE,
-                ConditionStatus::False,
-                Self::PORT_CLAIM_MESSAGE_NOT_READY,
-                "",
-            );
-            return None;
-        }
-
-        status.conditions.set(
-            Self::PORT_CLAIM_CONDITION_TYPE,
-            ConditionStatus::True,
-            Self::PORT_CLAIM_REASON_CREATED,
-            "Created",
-        );
-
-        Some(port_claims)
-    }
-}
-
-impl InstanceReconciler {
-    const DEPL_CONDITION_TYPE: &'static str = "Deployments";
-    const DEPL_REASON_CREATED: &'static str = "AllCreated";
-    const DEPL_MESSAGE_NOT_READY: &'static str = "NotReady";
-    const DEPL_REASON_FAILED_TO_CREATE: &'static str = "FailedToCreate";
-
-    const DEPL_REASON_FAILED_MISSING_FLAG: &'static str = "MissingFlag";
-
-    async fn update_deployments(
-        instance: &Instance,
-        status: &mut InstanceStatus,
-        state: &CtfState,
-        jeopardy: &Jeopardy,
-        challenge: &Challenge,
-        flags: &HashMap<String, Flag>,
-        _port_claims: &HashMap<String, PortClaim>,
-    ) -> Option<Vec<Deployment>> {
-        let namespace_ref = instance.target_namespace_ref();
-
-        let mut deployments = Vec::new();
-
-        let mut labels = BTreeMap::new();
-        labels.insert(MANAGED_BY_LABEL.into(), MANAGED_BY_VALUE.into());
-
-        labels.insert(Self::INSTANCE_NAME_LABEL.into(), instance.name_unchecked());
-        labels.insert(
-            Self::INSTANCE_NAMESPACE_LABEL.into(),
-            instance.namespace_unchecked(),
-        );
-
-        labels.insert(
-            Self::CHALLENGE_NAME_LABEL.into(),
-            challenge.name_unchecked(),
-        );
-        labels.insert(
-            Self::CHALLENGE_NAMESPACE_LABEL.into(),
-            challenge.namespace_unchecked(),
-        );
-
-        labels.insert(Self::JEOPARDY_NAME_LABEL.into(), jeopardy.name_unchecked());
-        labels.insert(
-            Self::JEOPARDY_NAMESPACE_LABEL.into(),
-            jeopardy.namespace_unchecked(),
-        );
-
-        for container_spec in &challenge.spec.containers {
-            let mut ports = Vec::<k8s_openapi::api::core::v1::ContainerPort>::new();
-            for port in &container_spec.ports {
-                ports.push(k8s_openapi::api::core::v1::ContainerPort {
-                    name: Some(port.name.clone()),
-                    container_port: port.container_port as i32,
-                    ..Default::default()
-                });
-            }
-
-            let mut envs = Vec::<k8s_openapi::api::core::v1::EnvVar>::new();
-            for flag in &container_spec.flags {
-                if let Some(flag_obj) = flags.get(&flag.name)
-                    && let Some(flag_status) = &flag_obj.status
-                    && let Some(flag_value) = &flag_status.flag
-                {
-                    envs.push(k8s_openapi::api::core::v1::EnvVar {
-                        name: flag.env.clone(),
-                        value: Some(flag_value.clone()),
-                        ..Default::default()
-                    });
-                } else {
-                    status.conditions.set(
-                        Self::DEPL_CONDITION_TYPE,
-                        ConditionStatus::False,
-                        Self::DEPL_REASON_FAILED_MISSING_FLAG,
-                        "",
-                    );
-                    return None;
-                }
-            }
-
-            let mut pod_labels = labels.clone();
-            pod_labels.insert(
-                Self::JEOPARDY_CONTAINER_LABEL.into(),
-                container_spec.name.clone(),
-            );
-
-            let desired_spec = DeploymentSpec {
-                replicas: Some(1),
-                selector: LabelSelector {
-                    match_labels: Some(pod_labels.clone()),
-                    ..Default::default()
-                },
-                template: PodTemplateSpec {
-                    metadata: Some(ObjectMeta {
-                        labels: Some(pod_labels),
-                        ..Default::default()
-                    }),
-                    spec: Some(PodSpec {
-                        //TODO: Node Slector and Runtime class name
-                        node_selector: None,
-                        runtime_class_name: None,
-                        containers: vec![Container {
-                            name: container_spec.name.clone(),
-                            image: Some(container_spec.image.clone()),
-                            ports: Some(ports),
-                            env: Some(envs),
+    let containers = challenge
+        .spec
+        .containers
+        .iter()
+        .map(|container| Container {
+            name: container.name.clone(),
+            image: Some(container.image.clone()),
+            ports: if container.ports.is_empty() {
+                None
+            } else {
+                Some(
+                    container
+                        .ports
+                        .iter()
+                        .map(|port| k8s_openapi::api::core::v1::ContainerPort {
+                            name: Some(port.name.clone()),
+                            container_port: i32::from(port.container_port),
                             ..Default::default()
-                        }],
-                        ..Default::default()
-                    }),
-                },
+                        })
+                        .collect(),
+                )
+            },
+            ..Default::default()
+        })
+        .collect::<Vec<_>>();
+
+    let deployment = Deployment {
+        metadata: ObjectMeta {
+            name: Some(name.clone()),
+            namespace: Some(namespace.clone()),
+            labels: Some(labels.clone()),
+            owner_references: Some(vec![owner_ref]),
+            ..Default::default()
+        },
+        spec: Some(DeploymentSpec {
+            replicas: Some(1),
+            selector: LabelSelector {
+                match_labels: Some(labels.clone()),
                 ..Default::default()
-            };
-
-            let deployment_ref =
-                ObjectRef::<Deployment>::new(&container_spec.name).within(&namespace_ref.name);
-            if let Some(pod) = &state.instance_deployments.get(&deployment_ref)
-                && pod.metadata.labels.as_ref() == Some(&labels)
-                && pod.spec.as_ref() == Some(&desired_spec)
-            {
-                deployments.push(pod.as_ref().clone());
-                continue;
-            }
-
-            let flag = Deployment {
-                metadata: ObjectMeta {
-                    name: Some(deployment_ref.name),
-                    namespace: deployment_ref.namespace,
-                    //owner_references: Some(vec![owner_ref.clone()]),
-                    labels: Some(labels.clone()),
+            },
+            template: PodTemplateSpec {
+                metadata: Some(ObjectMeta {
+                    labels: Some(labels),
                     ..Default::default()
-                },
-                spec: Some(desired_spec),
-                status: None,
-            };
+                }),
+                spec: Some(PodSpec {
+                    containers,
+                    ..Default::default()
+                }),
+            },
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
 
-            let api: Api<Deployment> = Api::namespaced(state.client.clone(), &namespace_ref.name);
+    Api::<Deployment>::namespaced(state.client.clone(), &namespace)
+        .patch(
+            &name,
+            &PatchParams::apply(InstanceReconciler::NAME).force(),
+            &Patch::Apply(&deployment),
+        )
+        .await?;
 
-            let pp = PatchParams::apply(Self::NAME).force();
-            match api
-                .patch(&flag.name_unchecked(), &pp, &Patch::Apply(&flag))
-                .await
-            {
-                Err(err) => {
-                    warn!(?err, "failed to apply Deployment for Instance");
-                    status.conditions.set(
-                        Self::DEPL_CONDITION_TYPE,
-                        ConditionStatus::False,
-                        Self::DEPL_REASON_FAILED_TO_CREATE,
-                        err.to_string(),
-                    );
-                    return None;
-                }
-                Ok(flag) => {
-                    deployments.push(flag);
-                }
-            }
-        }
-
-        if !deployments.iter().all(|f| {
-            f.status
-                .as_ref()
-                .map(|status| {
-                    status
-                        .conditions
-                        .as_ref()
-                        .map(|c| c.iter().all(|c| c.status == "True"))
-                        .unwrap_or(false)
-                })
-                .unwrap_or(false)
-        }) {
-            status.conditions.set(
-                Self::DEPL_CONDITION_TYPE,
-                ConditionStatus::False,
-                Self::DEPL_MESSAGE_NOT_READY,
-                "",
-            );
-            return None;
-        }
-
-        status.conditions.set(
-            Self::DEPL_CONDITION_TYPE,
-            ConditionStatus::True,
-            Self::DEPL_REASON_CREATED,
-            "Created",
-        );
-
-        Some(deployments)
-    }
+    Ok(())
 }
 
-impl InstanceReconciler {
-    const SERVICE_CONDITION_TYPE: &'static str = "Service";
-    const SERVICE_REASON_CREATED: &'static str = "Created";
-    const SERVICE_MESSAGE_NOT_READY: &'static str = "NotReady";
-    const SERVICE_REASON_FAILED_TO_CREATE: &'static str = "FailedToCreate";
+async fn ensure_service(
+    instance: &Instance,
+    challenge: &Challenge,
+    owner_ref: OwnerReference,
+    state: &CtfState,
+) -> Result<(), CtfError> {
+    let namespace = instance.namespace().unwrap_or_default();
+    let name = instance.name_any();
 
-    const SERVICE_REASON_FAILED_MISSING_PORT_CLAIM: &'static str = "MissingPortClaim";
-    const SERVICE_REASON_FAILED_PORT_CLAIM_NO_PORT: &'static str = "PortClaimNoPort";
+    let mut labels = base_labels(instance);
+    labels.insert("app.kubernetes.io/name".to_string(), name.clone());
 
-    async fn update_service(
-        instance: &Instance,
-        status: &mut InstanceStatus,
-        state: &CtfState,
-        jeopardy: &Jeopardy,
-        challenge: &Challenge,
-        flags: &HashMap<String, Flag>,
-        port_claims: &HashMap<String, PortClaim>,
-    ) -> Option<Service> {
-        let namespace_ref = instance.target_namespace_ref();
-
-        let mut labels = jeopardy.spec.expose.service_template.labels.clone();
-        let annotations = jeopardy.spec.expose.service_template.annotations.clone();
-        let service_type = jeopardy
-            .spec
-            .expose
-            .service_template
-            .service_type
-            .to_string();
-
-        let mut selector_labels = BTreeMap::<String, String>::new();
-        selector_labels.insert(MANAGED_BY_LABEL.into(), MANAGED_BY_VALUE.into());
-
-        selector_labels.insert(Self::INSTANCE_NAME_LABEL.into(), instance.name_unchecked());
-        selector_labels.insert(
-            Self::INSTANCE_NAMESPACE_LABEL.into(),
-            instance.namespace_unchecked(),
-        );
-
-        selector_labels.insert(
-            Self::CHALLENGE_NAME_LABEL.into(),
-            challenge.name_unchecked(),
-        );
-        selector_labels.insert(
-            Self::CHALLENGE_NAMESPACE_LABEL.into(),
-            challenge.namespace_unchecked(),
-        );
-
-        selector_labels.insert(Self::JEOPARDY_NAME_LABEL.into(), jeopardy.name_unchecked());
-        selector_labels.insert(
-            Self::JEOPARDY_NAMESPACE_LABEL.into(),
-            jeopardy.namespace_unchecked(),
-        );
-
-        for (key, value) in &selector_labels {
-            labels.insert(key.clone(), value.clone());
-        }
-
-        let service_ref = instance.target_service_ref();
-
-        let mut ports = Vec::<ServicePort>::new();
-
-        for container in &challenge.spec.containers {
-            for port in &container.ports {
-                if let Some(expose_port) = &port.expose_port {
-                    if let Some(expose_port) = expose_port.parse::<u16>().ok() {
-                        ports.push(ServicePort {
-                            port: expose_port as i32,
-                            target_port: Some(IntOrString::String(port.name.clone())),
-                            ..Default::default()
-                        });
-                    } else {
-                        if let Some(port_claim) = port_claims.get(expose_port) {
-                            if let Some(status) = &port_claim.status
-                                && let Some(port_claim_port) = status.port
-                            {
-                                ports.push(ServicePort {
-                                    port: port_claim_port as i32,
-                                    target_port: Some(IntOrString::String(port.name.clone())),
-                                    ..Default::default()
-                                });
-                            } else {
-                                status.conditions.set(
-                                    Self::SERVICE_CONDITION_TYPE,
-                                    ConditionStatus::False,
-                                    Self::SERVICE_REASON_FAILED_PORT_CLAIM_NO_PORT,
-                                    "",
-                                );
-                                return None;
-                            }
-                        } else {
-                            status.conditions.set(
-                                Self::SERVICE_CONDITION_TYPE,
-                                ConditionStatus::False,
-                                Self::SERVICE_REASON_FAILED_MISSING_PORT_CLAIM,
-                                "",
-                            );
-                            return None;
-                        }
-                    }
-                }
+    let mut ports = Vec::<ServicePort>::new();
+    let mut seen_names = BTreeSet::new();
+    for container in &challenge.spec.containers {
+        for port in &container.ports {
+            if !port.expose {
+                continue;
             }
+            if !seen_names.insert(port.name.clone()) {
+                continue;
+            }
+            ports.push(ServicePort {
+                name: Some(port.name.clone()),
+                port: i32::from(port.container_port),
+                target_port: Some(IntOrString::Int(i32::from(port.container_port))),
+                protocol: Some("TCP".to_string()),
+                ..Default::default()
+            });
         }
+    }
 
-        let desired_spec = ServiceSpec {
-            type_: Some(service_type),
-            selector: Some(selector_labels),
+    if ports.is_empty() {
+        return Ok(());
+    }
+
+    let service = Service {
+        metadata: ObjectMeta {
+            name: Some(name.clone()),
+            namespace: Some(namespace.clone()),
+            labels: Some(labels.clone()),
+            owner_references: Some(vec![owner_ref]),
+            ..Default::default()
+        },
+        spec: Some(ServiceSpec {
+            selector: Some(labels),
             ports: Some(ports),
             ..Default::default()
-        };
+        }),
+        ..Default::default()
+    };
 
-        if let Some(service) = &state.instance_services.get(&service_ref)
-            && service.metadata.labels.as_ref() == Some(&labels)
-            && service.metadata.annotations.as_ref() == Some(&labels)
-            && service.spec.as_ref() == Some(&desired_spec)
-        {
-            if !service
-                .status
-                .as_ref()
-                .map(|status| {
-                    status
-                        .conditions
-                        .as_ref()
-                        .map(|c| c.iter().all(|c| c.status == "True"))
-                        .unwrap_or(false)
-                })
-                .unwrap_or(false)
-            {
-                status.conditions.set(
-                    Self::SERVICE_CONDITION_TYPE,
-                    ConditionStatus::False,
-                    Self::SERVICE_MESSAGE_NOT_READY,
-                    "",
-                );
-                return None;
-            }
+    Api::<Service>::namespaced(state.client.clone(), &namespace)
+        .patch(
+            &name,
+            &PatchParams::apply(InstanceReconciler::NAME).force(),
+            &Patch::Apply(&service),
+        )
+        .await?;
 
-            return Some(service.as_ref().clone());
-        }
-
-        let service = Service {
-            metadata: ObjectMeta {
-                name: Some(service_ref.name),
-                namespace: service_ref.namespace,
-                //owner_references: Some(vec![owner_ref.clone()]),
-                labels: Some(labels.clone()),
-                annotations: Some(annotations.clone()),
-                ..Default::default()
-            },
-            spec: Some(desired_spec),
-            status: None,
-        };
-
-        let api: Api<Service> = Api::namespaced(state.client.clone(), &namespace_ref.name);
-
-        let pp = PatchParams::apply(Self::NAME).force();
-        let service = match api
-            .patch(&service.name_unchecked(), &pp, &Patch::Apply(&service))
-            .await
-        {
-            Err(err) => {
-                warn!(?err, "failed to apply Service for Instance");
-                status.conditions.set(
-                    Self::SERVICE_CONDITION_TYPE,
-                    ConditionStatus::False,
-                    Self::SERVICE_REASON_FAILED_TO_CREATE,
-                    err.to_string(),
-                );
-                return None;
-            }
-            Ok(service) => service,
-        };
-
-        status.conditions.set(
-            Self::SERVICE_CONDITION_TYPE,
-            ConditionStatus::True,
-            Self::SERVICE_REASON_CREATED,
-            "Created",
-        );
-
-        Some(service)
-    }
+    Ok(())
 }

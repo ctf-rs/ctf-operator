@@ -3,9 +3,10 @@ use k8s_openapi::NamespaceResourceScope;
 use kube::api::{Patch, PatchParams};
 use kube::runtime::controller::Action;
 use kube::{Api, Client, Resource, ResourceExt};
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use serde_json::json;
+use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 

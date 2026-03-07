@@ -1,55 +1,45 @@
-use k8s_openapi::api::{
-    apps::v1::Deployment,
-    core::v1::{Namespace, Service},
-};
-use kube::{Client, runtime::reflector::Store};
+use std::collections::HashSet;
 
-use crate::{
-    crd::v1alpha1::{Challenge, Flag, Instance, Jeopardy, PortClaim, ReservationSet},
-    runtime::index::CtfIndex,
-    util::SharedIndex,
-};
+use ctf_k8s::{Challenge, Ctf, Flag, Instance};
+use k8s_openapi::api::{apps::v1::Deployment, core::v1::Service};
+use kube::{runtime::reflector::Store, Client};
 
 pub struct CtfState {
-    pub index: SharedIndex<CtfIndex>,
     pub client: Client,
-    pub flags: Store<Flag>,
-    pub reservation_sets: Store<ReservationSet>,
-    pub port_claims: Store<PortClaim>,
-    pub jeopardy: Store<Jeopardy>,
+    pub watched_namespaces: HashSet<String>,
+    pub ctfs: Store<Ctf>,
     pub challenges: Store<Challenge>,
     pub instances: Store<Instance>,
-    pub instance_namespaces: Store<Namespace>,
-    pub instance_deployments: Store<Deployment>,
-    pub instance_services: Store<Service>,
+    pub flags: Store<Flag>,
+    pub deployments: Store<Deployment>,
+    pub services: Store<Service>,
 }
 
 impl CtfState {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         client: Client,
-        index: SharedIndex<CtfIndex>,
-        flags: Store<Flag>,
-        reservation_sets: Store<ReservationSet>,
-        port_claims: Store<PortClaim>,
-        jeopardy: Store<Jeopardy>,
+        watched_namespaces: HashSet<String>,
+        ctfs: Store<Ctf>,
         challenges: Store<Challenge>,
         instances: Store<Instance>,
-        instance_namespaces: Store<Namespace>,
-        instance_deployments: Store<Deployment>,
-        instance_services: Store<Service>,
+        flags: Store<Flag>,
+        deployments: Store<Deployment>,
+        services: Store<Service>,
     ) -> Self {
         Self {
             client,
-            index,
-            flags,
-            reservation_sets,
-            port_claims,
-            jeopardy,
+            watched_namespaces,
+            ctfs,
             challenges,
             instances,
-            instance_namespaces,
-            instance_deployments,
-            instance_services,
+            flags,
+            deployments,
+            services,
         }
+    }
+
+    pub fn watches_namespace(&self, namespace: &str) -> bool {
+        self.watched_namespaces.contains(namespace)
     }
 }

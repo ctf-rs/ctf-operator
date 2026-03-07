@@ -11,12 +11,7 @@ pub enum CtfError {
     KubeError(#[from] kube::Error),
 
     #[error("Finalizer Error: {0}")]
-    // NB: awkward type because finalizer::Error embeds the reconciler error (which is this)
-    // so boxing this error to break cycles
     FinalizerError(#[from] Box<kube::runtime::finalizer::Error<CtfError>>),
-
-    #[error("IllegalDocument")]
-    IllegalDocument,
 
     #[error("Controller Error {0}")]
     ControllerError(#[from] ControllerError),
