@@ -22,6 +22,10 @@ pub enum ValidationError {
     DuplicateChallengePortName,
     #[error("Container env names must be unique")]
     DuplicateContainerEnv,
+    #[error("Challenge file names must be unique")]
+    DuplicateChallengeFileName,
+    #[error("Challenge can contain at most 3 files")]
+    TooManyChallengeFiles,
     #[error("{field} path is invalid (must be relative and must not contain '..'): {path}")]
     InvalidPath { field: String, path: String },
     #[error("{field} file does not exist: {path}")]

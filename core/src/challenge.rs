@@ -166,6 +166,22 @@ impl Challenge {
     pub fn validate_strict(&self) -> ValidationResult<()> {
         garde::Validate::validate(self).map_err(ValidationError::from_garde)?;
 
+        if self.files.len() > 3 {
+            return Err(ValidationError::TooManyChallengeFiles);
+        }
+
+        let mut file_names = HashSet::<String>::new();
+        for file in &self.files {
+            let name = file
+                .file_name()
+                .map(|value| value.to_string_lossy().to_string())
+                .unwrap_or_else(|| file.to_string_lossy().to_string());
+
+            if !file_names.insert(name) {
+                return Err(ValidationError::DuplicateChallengeFileName);
+            }
+        }
+
         let mut flag_names = HashSet::<&str>::new();
         for flag in &self.flags {
             if !flag_names.insert(flag.name.as_str()) {

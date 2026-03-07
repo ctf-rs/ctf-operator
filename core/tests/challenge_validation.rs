@@ -1,8 +1,8 @@
 use ctf_core::{Challenge, ContainerImage, ValidationError};
 use std::{
-  fs,
-  path::{Path, PathBuf},
-  time::{SystemTime, UNIX_EPOCH},
+    fs,
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 fn baseline_challenge_yaml() -> &'static str {
@@ -10,20 +10,20 @@ fn baseline_challenge_yaml() -> &'static str {
 }
 
 fn make_temp_dir(name: &str) -> PathBuf {
-  let nanos = SystemTime::now()
-    .duration_since(UNIX_EPOCH)
-    .expect("clock drift")
-    .as_nanos();
-  let dir = std::env::temp_dir().join(format!("ctf-core-{name}-{}-{nanos}", std::process::id()));
-  fs::create_dir_all(&dir).expect("failed to create temp test directory");
-  dir
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock drift")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("ctf-core-{name}-{}-{nanos}", std::process::id()));
+    fs::create_dir_all(&dir).expect("failed to create temp test directory");
+    dir
 }
 
 fn write_file(path: &Path, content: &str) {
-  if let Some(parent) = path.parent() {
-    fs::create_dir_all(parent).expect("failed to create parent directory");
-  }
-  fs::write(path, content).expect("failed to write test file");
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).expect("failed to create parent directory");
+    }
+    fs::write(path, content).expect("failed to write test file");
 }
 
 #[test]
@@ -43,15 +43,15 @@ fn baseline_challenge_yaml_parses_and_validates() {
 
 #[test]
 fn baseline_challenge_yaml_validates_paths_relative_to_examples_dir() {
-  let challenge: Challenge = serde_saphyr::from_str(baseline_challenge_yaml())
-    .expect("baseline challenge-test.yaml should parse");
+    let challenge: Challenge = serde_saphyr::from_str(baseline_challenge_yaml())
+        .expect("baseline challenge-test.yaml should parse");
 
-  let challenge_yaml_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-    .join("../examples/challenge-test.yaml");
+    let challenge_yaml_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/challenge-test.yaml");
 
-  challenge
-    .validate_strict_at(&challenge_yaml_path)
-    .expect("baseline challenge paths should resolve and validate");
+    challenge
+        .validate_strict_at(&challenge_yaml_path)
+        .expect("baseline challenge paths should resolve and validate");
 }
 
 #[test]
@@ -339,4 +339,62 @@ containers:
     challenge
         .validate_strict_at(&challenge_yaml_path)
         .expect("dockerfile path should validate");
+}
+
+#[test]
+fn challenge_files_must_have_unique_file_names() {
+    let yaml = r#"
+name: challenge-test
+fullName: Challenge Test
+categories:
+  - misc
+files:
+  - dir1/flag.txt
+  - dir2/flag.txt
+flags:
+  - name: flag
+    body: fake_flag
+containers:
+  - name: test
+    image:
+      type: image
+      image: alpine:latest
+"#;
+
+    let challenge: Challenge = serde_saphyr::from_str(yaml).expect("yaml should parse");
+    let err = challenge
+        .validate_strict()
+        .expect_err("duplicate file names should fail");
+
+    assert_eq!(err, ValidationError::DuplicateChallengeFileName);
+}
+
+#[test]
+fn challenge_can_have_at_most_three_files() {
+    let yaml = r#"
+name: challenge-test
+fullName: Challenge Test
+categories:
+  - misc
+files:
+  - file1.txt
+  - file2.txt
+  - file3.txt
+  - file4.txt
+flags:
+  - name: flag
+    body: fake_flag
+containers:
+  - name: test
+    image:
+      type: image
+      image: alpine:latest
+"#;
+
+    let challenge: Challenge = serde_saphyr::from_str(yaml).expect("yaml should parse");
+    let err = challenge
+        .validate_strict()
+        .expect_err("more than three files should fail");
+
+    assert_eq!(err, ValidationError::TooManyChallengeFiles);
 }

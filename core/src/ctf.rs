@@ -25,6 +25,9 @@ pub struct Ctf {
     #[serde(default)]
     #[garde(dive)]
     pub registry: Option<CtfRegistry>,
+    #[serde(default)]
+    #[garde(dive)]
+    pub storage: Option<CtfStorage>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[garde(skip)]
     pub challenges: Vec<PathBuf>,
@@ -41,6 +44,37 @@ pub struct CtfRegistry {
         r"^[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$"
     ))]
     pub url: String,
+}
+
+#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]
+pub struct CtfStorage {
+    #[serde(rename = "type")]
+    #[garde(skip)]
+    pub kind: CtfStorageKind,
+    #[garde(length(min = 1))]
+    #[garde(pattern(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"))]
+    pub bucket: String,
+    #[garde(length(min = 1))]
+    pub endpoint: String,
+    #[serde(default)]
+    #[garde(length(min = 1))]
+    pub region: Option<String>,
+    #[serde(default = "default_storage_path_style", rename = "pathStyle")]
+    #[garde(skip)]
+    pub path_style: bool,
+    #[serde(default)]
+    #[garde(length(min = 1))]
+    pub prefix: Option<String>,
+}
+
+#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum CtfStorageKind {
+    S3,
+}
+
+fn default_storage_path_style() -> bool {
+    true
 }
 
 #[derive(

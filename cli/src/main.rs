@@ -6,12 +6,14 @@ use ctf_core::{Challenge, Ctf};
 
 pub mod build;
 pub mod cli;
+pub mod upload;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = cli::Args::parse();
     match args.cmd {
         cli::Command::Build(args) => build::build(args).await?,
+        cli::Command::Upload(args) => upload::upload(args).await?,
     }
 
     Ok(())

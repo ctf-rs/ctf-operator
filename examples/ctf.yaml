@@ -12,6 +12,10 @@ network:
   ports:
     start: 6000
     end: 7000
+storage:
+  type: s3
+  bucket: cyberhero-playground-storage
+  endpoint: https://s3.ctf.rs
 challenges:
   - challenge-test.yaml
   - challenge-test2.yaml
