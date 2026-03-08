@@ -1,9 +1,13 @@
 replicaCount: 1
 
 image:
-  repository: ctf-operator
+  repository: registry.ctf.rs/ctf/ctf-operator
   tag: local
   pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+  # Example:
+  # - name: ctf-registry-pull-secret
 
 nameOverride: ""
 fullnameOverride: ""
@@ -12,6 +16,27 @@ watchNamespaces:
   - ctf
 
 instanceNamespacePrefix: ctf-inst-
+
+registry: []
+  # Example:
+  # - endpoint: registry.ctf.rs/ctf
+  #   secretRef:
+  #     name: ctf-registry-creds
+  #     usernameKey: username
+  #     passwordKey: password
+
+storage:
+  s3: []
+    # Example:
+    # - endpoint: https://s3.ctf.rs
+    #   bucket: ctf-bucket
+    #   region: us-east-1
+    #   pathStyle: true
+    #   prefix: challenges
+    #   secretRef:
+    #     name: ctf-storage-creds
+    #     accessKeyIdKey: accessKeyId
+    #     secretAccessKeyKey: secretAccessKey
 
 crds:
   install: true

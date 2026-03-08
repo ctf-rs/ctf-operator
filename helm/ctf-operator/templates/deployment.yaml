@@ -28,6 +28,10 @@ spec:
 {{- end }}
     spec:
       serviceAccountName: {{ include "ctf-operator.serviceAccountName" . }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+    {{ toYaml . | nindent 8 }}
+    {{- end }}
       securityContext:
 {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
@@ -44,12 +48,26 @@ spec:
             - {{ .Values.instanceNamespacePrefix | quote }}
           securityContext:
 {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: operator-config
+              mountPath: /etc/ctf-operator/config.yaml
+              subPath: config.yaml
+              readOnly: true
+          env:
+            - name: CTF_OPERATOR_CONFIG_PATH
+              value: /etc/ctf-operator/config.yaml
+{{- with .Values.env }}
+{{ toYaml . | nindent 12 }}
+{{- end }}
           resources:
 {{- toYaml .Values.resources | nindent 12 }}
-        {{- with .Values.env }}
-          env:
-        {{- toYaml . | nindent 12 }}
-        {{- end }}
+      volumes:
+        - name: operator-config
+          configMap:
+            name: {{ include "ctf-operator.configMapName" . }}
+            items:
+              - key: config.yaml
+                path: config.yaml
         {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

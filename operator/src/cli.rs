@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[clap(about = "CTF Operator")]
@@ -31,4 +32,7 @@ pub struct OperatorArgs {
 
     #[arg(long = "instance-namespace-prefix", default_value = "ctf-inst-")]
     pub instance_namespace_prefix: String,
+
+    #[arg(long = "config", env = "CTF_OPERATOR_CONFIG_PATH")]
+    pub config: Option<PathBuf>,
 }

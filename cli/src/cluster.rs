@@ -8,7 +8,7 @@ use anyhow::{bail, Context};
 use tokio::{fs, process::Command};
 
 use crate::{
-    cli::{ClusterBackend, ClusterCreateArgs},
+    cli::{ClusterBackend, ClusterCreateArgs, KindProvider},
     read_ctf,
 };
 
@@ -19,6 +19,7 @@ pub async fn create(args: ClusterCreateArgs) -> anyhow::Result<()> {
         instance_namespace_prefix,
         ctf,
         backend,
+        kind_provider,
         operator_namespace,
         operator_replicas,
         expose_port_start,
@@ -44,22 +45,24 @@ pub async fn create(args: ClusterCreateArgs) -> anyhow::Result<()> {
 
     match backend {
         ClusterBackend::Kind => {
+            let provider = resolve_kind_provider(kind_provider).await?;
             ensure_command("kind").await?;
             ensure_command("kubectl").await?;
             ensure_command("helm").await?;
-            ensure_command("docker").await?;
+            ensure_command(kind_provider_command(&provider)).await?;
             if !skip_cilium {
                 ensure_command("cilium").await?;
             }
 
-            create_kind_cluster(&cluster_name, expose_port_start, expose_port_end).await?;
+            create_kind_cluster(&cluster_name, expose_port_start, expose_port_end, &provider)
+                .await?;
 
             if !skip_cilium {
                 install_cilium().await?;
             }
 
             build_operator_image().await?;
-            kind_load_operator_image(&cluster_name).await?;
+            kind_load_operator_image(&cluster_name, &provider).await?;
             install_operator_chart(
                 &operator_namespace,
                 operator_replicas,
@@ -71,9 +74,7 @@ pub async fn create(args: ClusterCreateArgs) -> anyhow::Result<()> {
         }
     }
 
-    if let Some(ctf_path) = ctf {
-        apply_ctf_bundle(ctf_path, &cluster_name).await?;
-    }
+    apply_ctf_bundle(ctf, &cluster_name).await?;
 
     Ok(())
 }
@@ -96,6 +97,33 @@ async fn ensure_command(cmd: &str) -> anyhow::Result<()> {
 
 async fn run_streamed(cmd: &str, args: &[&str]) -> anyhow::Result<()> {
     run_streamed_os(cmd, args.iter().map(OsStr::new)).await
+}
+
+async fn run_streamed_os_with_env<'a, I>(
+    cmd: &str,
+    args: I,
+    envs: &[(&str, &str)],
+) -> anyhow::Result<()>
+where
+    I: IntoIterator<Item = &'a OsStr>,
+{
+    let mut command = Command::new(cmd);
+    command.args(args);
+    command.envs(envs.iter().copied());
+    command.stdin(std::process::Stdio::null());
+    command.stdout(std::process::Stdio::inherit());
+    command.stderr(std::process::Stdio::inherit());
+
+    let status = command
+        .status()
+        .await
+        .with_context(|| format!("failed to spawn command: {cmd}"))?;
+
+    if !status.success() {
+        bail!("command failed: {cmd} (exit {status})");
+    }
+
+    Ok(())
 }
 
 async fn run_streamed_os<'a, I>(cmd: &str, args: I) -> anyhow::Result<()>
@@ -132,6 +160,7 @@ async fn create_kind_cluster(
     cluster_name: &str,
     expose_port_start: u16,
     expose_port_end: u16,
+    provider: &str,
 ) -> anyhow::Result<()> {
     let config_file = temp_file_path("kind-config", "yaml");
     let mut config = String::from(
@@ -146,7 +175,7 @@ async fn create_kind_cluster(
 
     fs::write(&config_file, config).await?;
 
-    run_streamed_os(
+    run_streamed_os_with_env(
         "kind",
         [
             OsStr::new("create"),
@@ -156,6 +185,7 @@ async fn create_kind_cluster(
             OsStr::new("--config"),
             config_file.as_os_str(),
         ],
+        &[("KIND_EXPERIMENTAL_PROVIDER", provider)],
     )
     .await?;
 
@@ -192,18 +222,62 @@ async fn build_operator_image() -> anyhow::Result<()> {
     .await
 }
 
-async fn kind_load_operator_image(cluster_name: &str) -> anyhow::Result<()> {
-    run_streamed(
+async fn kind_load_operator_image(cluster_name: &str, provider: &str) -> anyhow::Result<()> {
+    run_streamed_os_with_env(
         "kind",
-        &[
-            "load",
-            "docker-image",
-            "ctf-operator:local",
-            "--name",
-            cluster_name,
+        [
+            OsStr::new("load"),
+            OsStr::new("docker-image"),
+            OsStr::new("ctf-operator:local"),
+            OsStr::new("--name"),
+            OsStr::new(cluster_name),
         ],
+        &[("KIND_EXPERIMENTAL_PROVIDER", provider)],
     )
     .await
+}
+
+fn kind_provider_command(provider: &str) -> &'static str {
+    match provider {
+        "docker" => "docker",
+        "podman" => "podman",
+        "nerdctl" => "nerdctl",
+        _ => "docker",
+    }
+}
+
+async fn resolve_kind_provider(provider: KindProvider) -> anyhow::Result<String> {
+    match provider {
+        KindProvider::Docker => return Ok("docker".to_owned()),
+        KindProvider::Podman => return Ok("podman".to_owned()),
+        KindProvider::Nerdctl => return Ok("nerdctl".to_owned()),
+        KindProvider::Auto => {}
+    }
+
+    if command_succeeds("docker", &["info"]).await {
+        return Ok("docker".to_owned());
+    }
+    if command_succeeds("podman", &["info"]).await {
+        return Ok("podman".to_owned());
+    }
+    if command_succeeds("nerdctl", &["info"]).await {
+        return Ok("nerdctl".to_owned());
+    }
+
+    bail!("failed to detect kind provider; use --kind-provider docker|podman|nerdctl")
+}
+
+async fn command_succeeds(cmd: &str, args: &[&str]) -> bool {
+    let mut command = Command::new(cmd);
+    command.args(args);
+    command.stdin(std::process::Stdio::null());
+    command.stdout(std::process::Stdio::null());
+    command.stderr(std::process::Stdio::null());
+
+    match command.status().await {
+        Ok(status) => status.success(),
+        Err(_) => false,
+    }
 }
 
 async fn install_operator_chart(

@@ -22,3 +22,7 @@
 {{- default "default" .Values.serviceAccount.name -}}
 {{- end -}}
 {{- end -}}
+
+{{- define "ctf-operator.configMapName" -}}
+{{- printf "%s-config" (include "ctf-operator.fullname" .) -}}
+{{- end -}}

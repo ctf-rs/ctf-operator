@@ -29,6 +29,9 @@ pub enum ClusterCommand {
 
 #[derive(Debug, Parser)]
 pub struct ClusterCreateArgs {
+    #[arg(index = 1)]
+    pub ctf: PathBuf,
+
     #[arg(long = "name", default_value = "ctf")]
     pub cluster_name: String,
 
@@ -43,11 +46,11 @@ pub struct ClusterCreateArgs {
     #[arg(long = "instance-namespace-prefix", default_value = "ctf-inst-")]
     pub instance_namespace_prefix: String,
 
-    #[arg(long)]
-    pub ctf: Option<PathBuf>,
-
     #[arg(long, value_enum, default_value_t = ClusterBackend::Kind)]
     pub backend: ClusterBackend,
+
+    #[arg(long = "kind-provider", value_enum, default_value_t = KindProvider::Auto)]
+    pub kind_provider: KindProvider,
 
     #[arg(long = "operator-namespace", default_value = "ctf-operator")]
     pub operator_namespace: String,
@@ -107,4 +110,13 @@ pub enum Backend {
 pub enum ClusterBackend {
     #[default]
     Kind,
+}
+
+#[derive(Debug, Clone, ValueEnum, Default)]
+pub enum KindProvider {
+    #[default]
+    Auto,
+    Docker,
+    Podman,
+    Nerdctl,
 }

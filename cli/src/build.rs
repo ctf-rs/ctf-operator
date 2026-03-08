@@ -106,10 +106,10 @@ pub async fn build(args: BuildArgs) -> anyhow::Result<()> {
                     .parent()
                     .context("Dockerfile must have parent directory")?;
 
-                let local_tag = format!("{}:{}", challenge.name, container.name);
-                let publish_tag = publish_registry
-                    .as_ref()
-                    .map(|registry| format!("{registry}/{}:{}", challenge.name, container.name));
+                let local_tag = format!("{}/{}:latest", challenge.name, container.name);
+                let publish_tag = publish_registry.as_ref().map(|registry| {
+                    format!("{registry}/{}/{}:latest", challenge.name, container.name)
+                });
 
                 println!("Building container {} with {:?}", container.name, backend);
 

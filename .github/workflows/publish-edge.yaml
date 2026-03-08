@@ -84,4 +84,4 @@ jobs:
         run: |
           CHART_TGZ="$(ls -1 ./dist/ctf-operator-*.tgz | head -n1)"
           test -n "$CHART_TGZ"
-          helm push "$CHART_TGZ" oci://registry.ctf.rs/ctf/charts
+          helm push "$CHART_TGZ" oci://registry.ctf.rs/ctf

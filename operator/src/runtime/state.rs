@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use crate::runtime::OperatorRuntimeConfig;
 use ctf_cli::k8s::{Challenge, Ctf, Flag, Instance, PortClaim, ReservationSet};
 use k8s_openapi::api::{apps::v1::Deployment, core::v1::Service};
 use kube::{runtime::reflector::Store, Client};
@@ -8,6 +9,7 @@ use kube::{runtime::reflector::Store, Client};
 pub struct OperatorConfig {
     pub watched_namespaces: HashSet<String>,
     pub instance_namespace_prefix: String,
+    pub runtime_config: OperatorRuntimeConfig,
 }
 
 pub struct CtfState {

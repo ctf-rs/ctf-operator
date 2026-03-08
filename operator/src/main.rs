@@ -23,7 +23,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn start_operator(args: OperatorArgs) -> anyhow::Result<()> {
-    runtime::run(args.namespaces, args.instance_namespace_prefix).await?;
+    runtime::run(args.namespaces, args.instance_namespace_prefix, args.config).await?;
     Ok(())
 }
 

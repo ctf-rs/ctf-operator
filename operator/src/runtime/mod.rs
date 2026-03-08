@@ -1,7 +1,9 @@
+mod config;
 pub mod core;
 mod error;
 mod state;
 
+pub use config::*;
 pub use error::*;
 pub use state::*;
 
@@ -9,7 +11,8 @@ use crate::util::{Waiter, Watcher};
 use ctf_cli::k8s::{PortClaim, ReservationSet};
 use k8s_openapi::api::{apps::v1::Deployment, core::v1::Service};
 use kube::{runtime::watcher::Config, Client};
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, path::PathBuf, sync::Arc};
+use tracing::info;
 
 pub const FINALIZER_NAME: &str = "operators.ctf.rs/finalizer";
 pub const MANAGED_BY_LABEL: &str = "operators.ctf.rs/managed-by";
@@ -19,7 +22,11 @@ pub const LABEL_CHALLENGE: &str = "operators.ctf.rs/challenge";
 pub const LABEL_INSTANCE: &str = "operators.ctf.rs/instance";
 pub const LABEL_NAMESPACE: &str = "operators.ctf.rs/namespace";
 
-pub async fn run(namespaces: Vec<String>, instance_namespace_prefix: String) -> CtfResult<()> {
+pub async fn run(
+    namespaces: Vec<String>,
+    instance_namespace_prefix: String,
+    config_path: Option<PathBuf>,
+) -> CtfResult<()> {
     let watched_namespaces = namespaces
         .into_iter()
         .filter(|ns| !ns.trim().is_empty())
@@ -29,6 +36,17 @@ pub async fn run(namespaces: Vec<String>, instance_namespace_prefix: String) -> 
             "watchNamespaces cannot be empty; provide at least one namespace".to_owned(),
         ));
     }
+
+    let runtime_config = load_operator_runtime_config(config_path.as_deref())?;
+    info!(
+        config_path = %config_path
+            .as_deref()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| "<not set>".to_owned()),
+        registry_configs = runtime_config.registry.len(),
+        s3_configs = runtime_config.storage.s3.len(),
+        "loaded operator runtime config"
+    );
 
     let instance_namespace_prefix = {
         let trimmed = instance_namespace_prefix.trim();
@@ -41,6 +59,7 @@ pub async fn run(namespaces: Vec<String>, instance_namespace_prefix: String) -> 
     let operator_config = OperatorConfig {
         watched_namespaces,
         instance_namespace_prefix,
+        runtime_config,
     };
 
     let client = Client::try_default().await?;
