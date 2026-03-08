@@ -12,7 +12,10 @@ spec:
     singular: flag
   scope: Namespaced
   versions:
-  - additionalPrinterColumns: []
+  - additionalPrinterColumns:
+    - jsonPath: .status.flag
+      name: FLAG
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:

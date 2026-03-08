@@ -12,6 +12,7 @@ use crate::Conditions;
 	plural = "flags",
 	singular = "flag",
 	namespaced,
+	printcolumn = r#"{"name":"FLAG","type":"string","jsonPath":".status.flag"}"#,
 	status = "FlagStatus",
 	derive = "PartialEq",
 	validation = Rule::new("self.spec.prefix != ''").message("prefix is empty"),
