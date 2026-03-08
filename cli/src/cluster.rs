@@ -9,8 +9,7 @@ use tokio::{fs, process::Command};
 
 use crate::{
     cli::{ClusterBackend, ClusterCreateArgs, KindProvider},
-    read_challenge,
-    read_ctf,
+    read_challenge, read_ctf,
 };
 use ctf_cli::models::Ctf;
 
@@ -519,11 +518,7 @@ async fn apply_ctf_bundle(
         .await?;
     }
 
-    let ctf_manifest = ctf_cli::k8s::ctf_from_core(
-        ctf,
-        &core_challenges,
-        Some(target_namespace),
-    );
+    let ctf_manifest = ctf_cli::k8s::ctf_from_core(ctf, &core_challenges, Some(target_namespace));
     let ctf_manifest_path = temp_file_path("ctf-manifest", "yaml");
     let ctf_manifest_yaml = serde_saphyr::to_string(&ctf_manifest)?;
     fs::write(&ctf_manifest_path, ctf_manifest_yaml).await?;

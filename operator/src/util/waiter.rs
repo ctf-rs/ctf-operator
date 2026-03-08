@@ -1,7 +1,7 @@
 use super::indexer::Index;
 use crate::util::{Controller, KubeObject, Reconciler, SharedIndex, Watcher};
-use futures::StreamExt;
 use futures::future::BoxFuture;
+use futures::StreamExt;
 use kube::runtime::reflector::store::WriterDropped;
 use std::fmt::Debug;
 use thiserror::Error;

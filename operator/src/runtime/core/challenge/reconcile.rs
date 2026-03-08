@@ -4,8 +4,8 @@ use crate::{
     runtime::{CtfError, CtfState},
     util::Reconciler,
 };
-use ctf_cli::models::{ChallengeContainer, ChallengeFlag, ContainerImage};
 use ctf_cli::k8s::{Challenge, ChallengeStatus, ConditionStatus};
+use ctf_cli::models::{ChallengeContainer, ChallengeFlag, ContainerImage};
 use kube::{runtime::controller::Action, ResourceExt};
 
 pub struct ChallengeReconciler;

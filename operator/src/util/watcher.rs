@@ -1,14 +1,14 @@
 use futures::stream::{select_all, BoxStream};
 use futures::{Stream, StreamExt};
-use kube::Resource;
-use kube::runtime::WatchStreamExt;
 use kube::runtime::watcher::Event;
+use kube::runtime::WatchStreamExt;
+use kube::Resource;
 use kube::{
-    Api,
     runtime::{
-        reflector::{self, ReflectHandle, Store, store::Writer},
+        reflector::{self, store::Writer, ReflectHandle, Store},
         watcher,
     },
+    Api,
 };
 use serde::de::DeserializeOwned;
 use std::fmt::Debug;
@@ -35,7 +35,10 @@ impl<K: KubeObject> Watcher<K> {
     }
 
     pub fn new_many(apis: Vec<Api<K>>, config: watcher::Config, store_buf_size: usize) -> Self {
-        assert!(!apis.is_empty(), "Watcher::new_many requires at least one Api");
+        assert!(
+            !apis.is_empty(),
+            "Watcher::new_many requires at least one Api"
+        );
         let (store, writer) = reflector::store_shared::<K>(store_buf_size);
 
         Self {
@@ -92,14 +95,11 @@ impl<K: KubeObject> Watcher<K> {
         K: Send,
         I: Send + Sync + 'static,
     {
-        let streams = self
-            .apis
-            .into_iter()
-            .map(|api| {
-                kube::runtime::watcher(api, self.config.clone())
-                    .index(index.clone())
-                    .boxed()
-            });
+        let streams = self.apis.into_iter().map(|api| {
+            kube::runtime::watcher(api, self.config.clone())
+                .index(index.clone())
+                .boxed()
+        });
         select_all(streams).reflect_shared(self.writer)
     }
 }
