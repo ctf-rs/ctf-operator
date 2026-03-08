@@ -17,7 +17,7 @@ impl Reconciler for PortClaimReconciler {
 
     async fn reconcile(obj: Arc<PortClaim>, state: Arc<CtfState>) -> Result<Action, CtfError> {
         let namespace = obj.namespace().unwrap_or_default();
-        if !state.watches_namespace(&namespace) {
+        if !state.manages_namespace(&namespace) {
             return Ok(Action::await_change());
         }
 
@@ -130,12 +130,9 @@ fn find_reservation_set(
         return None;
     }
 
-    status.conditions.set(
-        "ReservationSet",
-        ConditionStatus::True,
-        "Attached",
-        "",
-    );
+    status
+        .conditions
+        .set("ReservationSet", ConditionStatus::True, "Attached", "");
 
     Some(reservation_set.as_ref().clone())
 }
@@ -184,12 +181,9 @@ fn allocate_port(
     match selected {
         Some(port) => {
             status.port = Some(port);
-            status.conditions.set(
-                "Allocation",
-                ConditionStatus::True,
-                "Allocated",
-                "",
-            );
+            status
+                .conditions
+                .set("Allocation", ConditionStatus::True, "Allocated", "");
         }
         None => {
             status.port = None;
@@ -208,7 +202,12 @@ mod tests {
     use super::*;
     use ctf_k8s::{PortClaimSpec, ReservationRef};
 
-    fn claim(name: &str, ns: Option<&str>, reservation: &str, reservation_ns: Option<&str>) -> PortClaim {
+    fn claim(
+        name: &str,
+        ns: Option<&str>,
+        reservation: &str,
+        reservation_ns: Option<&str>,
+    ) -> PortClaim {
         let mut claim = PortClaim::new(
             name,
             PortClaimSpec {
@@ -244,11 +243,13 @@ mod tests {
     #[test]
     fn reservation_ref_uses_explicit_or_fallback_namespace() {
         let explicit = claim("port-a", Some("ctf"), "res-a", Some("custom"));
-        let explicit_ref = reservation_ref_for_port_claim(&explicit).expect("expected explicit ref");
+        let explicit_ref =
+            reservation_ref_for_port_claim(&explicit).expect("expected explicit ref");
         assert_eq!(explicit_ref.namespace.as_deref(), Some("custom"));
 
         let fallback = claim("port-a", Some("ctf"), "res-a", None);
-        let fallback_ref = reservation_ref_for_port_claim(&fallback).expect("expected fallback ref");
+        let fallback_ref =
+            reservation_ref_for_port_claim(&fallback).expect("expected fallback ref");
         assert_eq!(fallback_ref.namespace.as_deref(), Some("ctf"));
     }
 }

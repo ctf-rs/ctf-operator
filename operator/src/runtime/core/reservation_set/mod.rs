@@ -16,9 +16,12 @@ use kube::{
 };
 use std::sync::Arc;
 
-pub fn watcher(client: Client) -> Watcher<ReservationSet> {
-    let api: kube::Api<ReservationSet> = kube::Api::all(client);
-    Watcher::new(api, Config::default(), 0xFFFF)
+pub fn watcher(client: Client, namespaces: &[String]) -> Watcher<ReservationSet> {
+    let apis = namespaces
+        .iter()
+        .map(|namespace| kube::Api::<ReservationSet>::namespaced(client.clone(), namespace))
+        .collect::<Vec<_>>();
+    Watcher::new_many(apis, Config::default(), 0xFFFF)
 }
 
 pub fn controller(

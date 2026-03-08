@@ -15,7 +15,9 @@ use ctf_k8s::{Challenge, ConditionStatus, Ctf, Flag, FlagSpec, Instance, Instanc
 use k8s_openapi::{
     api::{
         apps::v1::{Deployment, DeploymentSpec},
-        core::v1::{Container, PodSpec, PodTemplateSpec, Service, ServicePort, ServiceSpec},
+        core::v1::{
+            Container, Namespace, PodSpec, PodTemplateSpec, Service, ServicePort, ServiceSpec,
+        },
     },
     apimachinery::pkg::{
         apis::meta::v1::{LabelSelector, OwnerReference},
@@ -23,7 +25,7 @@ use k8s_openapi::{
     },
 };
 use kube::{
-    api::{DeleteParams, ListParams, ObjectMeta, Patch, PatchParams},
+    api::{DeleteParams, ObjectMeta, Patch, PatchParams},
     runtime::{
         controller::Action,
         finalizer::{finalizer, Event},
@@ -63,6 +65,7 @@ async fn reconcile_apply(
     state: Arc<CtfState>,
 ) -> Result<Action, CtfError> {
     let namespace = instance.namespace().unwrap_or_default();
+    let target_namespace = target_namespace_for_instance(instance.as_ref(), &state)?;
     let mut status = instance.status.clone().unwrap_or_default();
 
     let Some(owner_ref) = instance.controller_owner_ref(&()) else {
@@ -123,6 +126,7 @@ async fn reconcile_apply(
         ctf.as_ref(),
         challenge.as_ref(),
         owner_ref.clone(),
+        &target_namespace,
         &state,
     )
     .await?;
@@ -130,10 +134,18 @@ async fn reconcile_apply(
         instance.as_ref(),
         challenge.as_ref(),
         owner_ref.clone(),
+        &target_namespace,
         &state,
     )
     .await?;
-    ensure_service(instance.as_ref(), challenge.as_ref(), owner_ref, &state).await?;
+    ensure_service(
+        instance.as_ref(),
+        challenge.as_ref(),
+        owner_ref,
+        &target_namespace,
+        &state,
+    )
+    .await?;
 
     status
         .conditions
@@ -150,35 +162,17 @@ async fn reconcile_cleanup(
     instance: Arc<Instance>,
     state: Arc<CtfState>,
 ) -> Result<Action, CtfError> {
-    let namespace = instance.namespace().unwrap_or_default();
-    let label_selector = format!(
-        "{LABEL_INSTANCE}={},{}={}",
-        instance.name_any(),
-        LABEL_NAMESPACE,
-        namespace
-    );
-    let delete_params = DeleteParams::default();
+    let target_namespace = target_namespace_for_instance(instance.as_ref(), &state)?;
 
-    Api::<Service>::namespaced(state.client.clone(), &namespace)
-        .delete_collection(
-            &delete_params,
-            &ListParams::default().labels(&label_selector),
-        )
-        .await?;
-
-    Api::<Deployment>::namespaced(state.client.clone(), &namespace)
-        .delete_collection(
-            &delete_params,
-            &ListParams::default().labels(&label_selector),
-        )
-        .await?;
-
-    Api::<Flag>::namespaced(state.client.clone(), &namespace)
-        .delete_collection(
-            &delete_params,
-            &ListParams::default().labels(&label_selector),
-        )
-        .await?;
+    if let Err(err) = Api::<Namespace>::all(state.client.clone())
+        .delete(&target_namespace, &DeleteParams::default())
+        .await
+    {
+        match err {
+            kube::Error::Api(ae) if ae.code == 404 => {}
+            other => return Err(other.into()),
+        }
+    }
 
     Ok(Action::await_change())
 }
@@ -245,14 +239,76 @@ fn resource_labels(
     labels
 }
 
+fn target_namespace_for_instance(
+    instance: &Instance,
+    state: &CtfState,
+) -> Result<String, CtfError> {
+    let uid = instance
+        .metadata
+        .uid
+        .clone()
+        .unwrap_or_else(|| instance.name_any());
+
+    let mut ns = format!(
+        "{}{}",
+        state.config.instance_namespace_prefix,
+        uid.to_ascii_lowercase()
+    );
+    if ns.len() > 63 {
+        ns.truncate(63);
+    }
+    while ns.ends_with('-') {
+        ns.pop();
+    }
+
+    if ns.is_empty() {
+        ns = "ctf-inst-fallback".to_owned();
+    }
+
+    Ok(ns)
+}
+
+async fn ensure_target_namespace(
+    instance: &Instance,
+    target_namespace: &str,
+    state: &CtfState,
+) -> Result<(), CtfError> {
+    let mut labels = base_labels(instance);
+    labels.insert(
+        "app.kubernetes.io/part-of".to_string(),
+        MANAGED_BY_VALUE.to_string(),
+    );
+
+    let namespace = Namespace {
+        metadata: ObjectMeta {
+            name: Some(target_namespace.to_owned()),
+            labels: Some(labels),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    Api::<Namespace>::all(state.client.clone())
+        .patch(
+            target_namespace,
+            &PatchParams::apply(InstanceReconciler::NAME).force(),
+            &Patch::Apply(&namespace),
+        )
+        .await?;
+
+    Ok(())
+}
+
 async fn ensure_flags(
     instance: &Instance,
     ctf: &Ctf,
     challenge: &Challenge,
     owner_ref: OwnerReference,
+    target_namespace: &str,
     state: &CtfState,
 ) -> Result<(), CtfError> {
-    let namespace = instance.namespace().unwrap_or_default();
+    ensure_target_namespace(instance, target_namespace, state).await?;
+    let namespace = target_namespace.to_owned();
 
     let labels = resource_labels(instance, ctf, challenge);
     let api: Api<Flag> = Api::namespaced(state.client.clone(), &namespace);
@@ -301,9 +357,11 @@ async fn ensure_deployment(
     instance: &Instance,
     challenge: &Challenge,
     owner_ref: OwnerReference,
+    target_namespace: &str,
     state: &CtfState,
 ) -> Result<(), CtfError> {
-    let namespace = instance.namespace().unwrap_or_default();
+    ensure_target_namespace(instance, target_namespace, state).await?;
+    let namespace = target_namespace.to_owned();
     let name = instance.name_any();
 
     let mut labels = base_labels(instance);
@@ -379,9 +437,11 @@ async fn ensure_service(
     instance: &Instance,
     challenge: &Challenge,
     owner_ref: OwnerReference,
+    target_namespace: &str,
     state: &CtfState,
 ) -> Result<(), CtfError> {
-    let namespace = instance.namespace().unwrap_or_default();
+    ensure_target_namespace(instance, target_namespace, state).await?;
+    let namespace = target_namespace.to_owned();
     let name = instance.name_any();
 
     let mut labels = base_labels(instance);

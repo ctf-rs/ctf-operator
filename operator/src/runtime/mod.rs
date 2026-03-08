@@ -19,34 +19,75 @@ pub const LABEL_CHALLENGE: &str = "operators.ctf.rs/challenge";
 pub const LABEL_INSTANCE: &str = "operators.ctf.rs/instance";
 pub const LABEL_NAMESPACE: &str = "operators.ctf.rs/namespace";
 
-pub async fn run(namespaces: Vec<String>) -> CtfResult<()> {
+pub async fn run(namespaces: Vec<String>, instance_namespace_prefix: String) -> CtfResult<()> {
     let watched_namespaces = namespaces
         .into_iter()
         .filter(|ns| !ns.trim().is_empty())
         .collect::<HashSet<_>>();
+    if watched_namespaces.is_empty() {
+        return Err(CtfError::ConfigError(
+            "watchNamespaces cannot be empty; provide at least one namespace".to_owned(),
+        ));
+    }
+
+    let instance_namespace_prefix = {
+        let trimmed = instance_namespace_prefix.trim();
+        if trimmed.is_empty() {
+            "ctf-inst-".to_owned()
+        } else {
+            trimmed.to_owned()
+        }
+    };
+    let operator_config = OperatorConfig {
+        watched_namespaces,
+        instance_namespace_prefix,
+    };
 
     let client = Client::try_default().await?;
 
-    let ctf_watcher = core::ctf::watcher(client.clone());
-    let challenge_watcher = core::challenge::watcher(client.clone());
-    let flag_watcher = core::flag::watcher(client.clone());
-    let instance_watcher = core::instance::watcher(client.clone());
-    let reservation_set_watcher = core::reservation_set::watcher(client.clone());
-    let port_claim_watcher = core::port_claim::watcher(client.clone());
+    let watched_namespace_vec = operator_config
+        .watched_namespaces
+        .iter()
+        .cloned()
+        .collect::<Vec<_>>();
 
+    let ctf_watcher = core::ctf::watcher(client.clone(), &watched_namespace_vec);
+    let challenge_watcher = core::challenge::watcher(client.clone(), &watched_namespace_vec);
+    let flag_watcher = core::flag::watcher(client.clone(), &watched_namespace_vec);
+    let instance_watcher = core::instance::watcher(client.clone(), &watched_namespace_vec);
+    let reservation_set_watcher =
+        core::reservation_set::watcher(client.clone(), &watched_namespace_vec);
+    let port_claim_watcher = core::port_claim::watcher(client.clone(), &watched_namespace_vec);
+
+    let managed_selector = format!("{MANAGED_BY_LABEL}={MANAGED_BY_VALUE}");
     let deployment_api: kube::Api<Deployment> = kube::Api::all(client.clone());
     let service_api: kube::Api<Service> = kube::Api::all(client.clone());
-    let reservation_set_api: kube::Api<ReservationSet> = kube::Api::all(client.clone());
-    let port_claim_api: kube::Api<PortClaim> = kube::Api::all(client.clone());
-    let deployment_watcher = Watcher::new(deployment_api, Config::default(), 0xFFFF);
-    let service_watcher = Watcher::new(service_api, Config::default(), 0xFFFF);
+    let reservation_set_apis = watched_namespace_vec
+        .iter()
+        .map(|namespace| kube::Api::<ReservationSet>::namespaced(client.clone(), namespace))
+        .collect::<Vec<_>>();
+    let port_claim_apis = watched_namespace_vec
+        .iter()
+        .map(|namespace| kube::Api::<PortClaim>::namespaced(client.clone(), namespace))
+        .collect::<Vec<_>>();
+
+    let deployment_watcher = Watcher::new(
+        deployment_api,
+        Config::default().labels(&managed_selector),
+        0xFFFF,
+    );
+    let service_watcher = Watcher::new(
+        service_api,
+        Config::default().labels(&managed_selector),
+        0xFFFF,
+    );
     let reservation_set_store_watcher =
-        Watcher::new(reservation_set_api, Config::default(), 0xFFFF);
-    let port_claim_store_watcher = Watcher::new(port_claim_api, Config::default(), 0xFFFF);
+        Watcher::new_many(reservation_set_apis, Config::default(), 0xFFFF);
+    let port_claim_store_watcher = Watcher::new_many(port_claim_apis, Config::default(), 0xFFFF);
 
     let state = Arc::new(CtfState::new(
         client,
-        watched_namespaces,
+        operator_config,
         ctf_watcher.store(),
         challenge_watcher.store(),
         instance_watcher.store(),

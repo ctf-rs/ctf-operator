@@ -13,6 +13,56 @@ pub struct Args {
 pub enum Command {
     Build(BuildArgs),
     Upload(UploadArgs),
+    Cluster(ClusterArgs),
+}
+
+#[derive(Debug, Parser)]
+pub struct ClusterArgs {
+    #[command(subcommand)]
+    pub cmd: ClusterCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ClusterCommand {
+    Create(ClusterCreateArgs),
+}
+
+#[derive(Debug, Parser)]
+pub struct ClusterCreateArgs {
+    #[arg(long = "name", default_value = "ctf")]
+    pub cluster_name: String,
+
+    #[arg(
+        short = 'n',
+        long = "namespace",
+        value_delimiter = ',',
+        default_value = "ctf"
+    )]
+    pub namespaces: Vec<String>,
+
+    #[arg(long = "instance-namespace-prefix", default_value = "ctf-inst-")]
+    pub instance_namespace_prefix: String,
+
+    #[arg(long)]
+    pub ctf: Option<PathBuf>,
+
+    #[arg(long, value_enum, default_value_t = ClusterBackend::Kind)]
+    pub backend: ClusterBackend,
+
+    #[arg(long = "operator-namespace", default_value = "ctf-operator")]
+    pub operator_namespace: String,
+
+    #[arg(long = "operator-replicas", default_value_t = 1)]
+    pub operator_replicas: u16,
+
+    #[arg(long = "expose-port-start", default_value_t = 20000)]
+    pub expose_port_start: u16,
+
+    #[arg(long = "expose-port-end", default_value_t = 20100)]
+    pub expose_port_end: u16,
+
+    #[arg(long = "skip-cilium", default_value_t = false)]
+    pub skip_cilium: bool,
 }
 
 #[derive(Debug, Parser)]
@@ -51,4 +101,10 @@ pub enum Backend {
     Docker,
     Buildah,
     Podman,
+}
+
+#[derive(Debug, Clone, ValueEnum, Default)]
+pub enum ClusterBackend {
+    #[default]
+    Kind,
 }

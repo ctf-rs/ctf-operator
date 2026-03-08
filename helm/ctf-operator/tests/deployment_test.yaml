@@ -1,0 +1,39 @@
+suite: deployment rendering
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: renders operator args with all watch namespaces and instance namespace prefix
+    set:
+      watchNamespaces:
+        - ctf
+        - ctf-admin
+      instanceNamespacePrefix: ctf-inst-
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.containers[0].args[0]
+          value: operator
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --namespace
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: ctf
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: ctf-admin
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --instance-namespace-prefix
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: ctf-inst-
+
+  - it: applies replica count override
+    set:
+      replicaCount: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3

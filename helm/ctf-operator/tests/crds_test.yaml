@@ -1,0 +1,19 @@
+suite: crds rendering
+templates:
+  - templates/crds.yaml
+tests:
+  - it: renders all CRDs by default
+    asserts:
+      - hasDocuments:
+          count: 6
+      - isKind:
+          of: CustomResourceDefinition
+        documentIndex: 0
+
+  - it: does not render CRDs when disabled
+    set:
+      crds:
+        install: false
+    asserts:
+      - hasDocuments:
+          count: 0

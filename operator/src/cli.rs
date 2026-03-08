@@ -28,4 +28,7 @@ pub struct OperatorArgs {
         default_value = "ctf"
     )]
     pub namespaces: Vec<String>,
+
+    #[arg(long = "instance-namespace-prefix", default_value = "ctf-inst-")]
+    pub instance_namespace_prefix: String,
 }

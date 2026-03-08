@@ -18,9 +18,12 @@ use kube::{
     Client,
 };
 
-pub fn watcher(client: Client) -> Watcher<Instance> {
-    let api: kube::Api<Instance> = kube::Api::all(client);
-    Watcher::new(api, Config::default(), 0xFFFF)
+pub fn watcher(client: Client, namespaces: &[String]) -> Watcher<Instance> {
+    let apis = namespaces
+        .iter()
+        .map(|namespace| kube::Api::<Instance>::namespaced(client.clone(), namespace))
+        .collect::<Vec<_>>();
+    Watcher::new_many(apis, Config::default(), 0xFFFF)
 }
 
 pub fn controller(

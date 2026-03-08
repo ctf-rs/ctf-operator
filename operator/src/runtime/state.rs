@@ -4,9 +4,15 @@ use ctf_k8s::{Challenge, Ctf, Flag, Instance, PortClaim, ReservationSet};
 use k8s_openapi::api::{apps::v1::Deployment, core::v1::Service};
 use kube::{runtime::reflector::Store, Client};
 
+#[derive(Debug, Clone)]
+pub struct OperatorConfig {
+    pub watched_namespaces: HashSet<String>,
+    pub instance_namespace_prefix: String,
+}
+
 pub struct CtfState {
     pub client: Client,
-    pub watched_namespaces: HashSet<String>,
+    pub config: OperatorConfig,
     pub ctfs: Store<Ctf>,
     pub challenges: Store<Challenge>,
     pub instances: Store<Instance>,
@@ -21,7 +27,7 @@ impl CtfState {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         client: Client,
-        watched_namespaces: HashSet<String>,
+        config: OperatorConfig,
         ctfs: Store<Ctf>,
         challenges: Store<Challenge>,
         instances: Store<Instance>,
@@ -33,7 +39,7 @@ impl CtfState {
     ) -> Self {
         Self {
             client,
-            watched_namespaces,
+            config,
             ctfs,
             challenges,
             instances,
@@ -46,6 +52,11 @@ impl CtfState {
     }
 
     pub fn watches_namespace(&self, namespace: &str) -> bool {
-        self.watched_namespaces.contains(namespace)
+        self.config.watched_namespaces.contains(namespace)
+    }
+
+    pub fn manages_namespace(&self, namespace: &str) -> bool {
+        self.watches_namespace(namespace)
+            || namespace.starts_with(&self.config.instance_namespace_prefix)
     }
 }

@@ -6,6 +6,7 @@ use ctf_core::{Challenge, Ctf};
 
 pub mod build;
 pub mod cli;
+pub mod cluster;
 pub mod upload;
 
 #[tokio::main]
@@ -14,6 +15,9 @@ async fn main() -> anyhow::Result<()> {
     match args.cmd {
         cli::Command::Build(args) => build::build(args).await?,
         cli::Command::Upload(args) => upload::upload(args).await?,
+        cli::Command::Cluster(args) => match args.cmd {
+            cli::ClusterCommand::Create(create_args) => cluster::create(create_args).await?,
+        },
     }
 
     Ok(())

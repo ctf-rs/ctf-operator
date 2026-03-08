@@ -1,4 +1,4 @@
-use futures::stream::BoxStream;
+use futures::stream::{select_all, BoxStream};
 use futures::{Stream, StreamExt};
 use kube::Resource;
 use kube::runtime::WatchStreamExt;
@@ -23,7 +23,7 @@ pub struct Watcher<K: 'static + Resource + Clone + Debug + DeserializeOwned>
 where
     K::DynamicType: Default + Eq + Hash + Clone + Debug,
 {
-    pub(crate) api: Api<K>,
+    pub(crate) apis: Vec<Api<K>>,
     pub(crate) config: watcher::Config,
     pub(crate) store: Store<K>,
     pub(crate) writer: Writer<K>,
@@ -31,10 +31,15 @@ where
 
 impl<K: KubeObject> Watcher<K> {
     pub fn new(api: Api<K>, config: watcher::Config, store_buf_size: usize) -> Self {
+        Self::new_many(vec![api], config, store_buf_size)
+    }
+
+    pub fn new_many(apis: Vec<Api<K>>, config: watcher::Config, store_buf_size: usize) -> Self {
+        assert!(!apis.is_empty(), "Watcher::new_many requires at least one Api");
         let (store, writer) = reflector::store_shared::<K>(store_buf_size);
 
         Self {
-            api,
+            apis,
             config,
             store,
             writer,
@@ -72,7 +77,11 @@ impl<K: KubeObject> Watcher<K> {
     where
         K: Send,
     {
-        kube::runtime::watcher(self.api, self.config).reflect_shared(self.writer)
+        let streams = self
+            .apis
+            .into_iter()
+            .map(|api| kube::runtime::watcher(api, self.config.clone()).boxed());
+        select_all(streams).reflect_shared(self.writer)
     }
 
     pub fn to_index_stream<I: Index<K>>(
@@ -81,9 +90,16 @@ impl<K: KubeObject> Watcher<K> {
     ) -> impl Stream<Item = Result<Event<K>, kube::runtime::watcher::Error>>
     where
         K: Send,
+        I: Send + Sync + 'static,
     {
-        kube::runtime::watcher(self.api, self.config)
-            .index(index)
-            .reflect_shared(self.writer)
+        let streams = self
+            .apis
+            .into_iter()
+            .map(|api| {
+                kube::runtime::watcher(api, self.config.clone())
+                    .index(index.clone())
+                    .boxed()
+            });
+        select_all(streams).reflect_shared(self.writer)
     }
 }

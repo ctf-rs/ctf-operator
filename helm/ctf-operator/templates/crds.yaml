@@ -1,0 +1,13 @@
+{{- if .Values.crds.install }}
+{{ .Files.Get "files/crds/ctfs.yaml" }}
+---
+{{ .Files.Get "files/crds/challenges.yaml" }}
+---
+{{ .Files.Get "files/crds/flags.yaml" }}
+---
+{{ .Files.Get "files/crds/instances.yaml" }}
+---
+{{ .Files.Get "files/crds/portclaims.yaml" }}
+---
+{{ .Files.Get "files/crds/reservationsets.yaml" }}
+{{- end }}

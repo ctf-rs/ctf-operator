@@ -1,0 +1,28 @@
+suite: watch namespaces validation
+templates:
+  - templates/validate-watch-namespaces.yaml
+tests:
+  - it: fails when watchNamespaces is empty
+    set:
+      watchNamespaces: []
+    asserts:
+      - failedTemplate:
+          errorMessage: watchNamespaces cannot be empty; set at least one namespace
+
+  - it: fails when watchNamespaces contains blank value
+    set:
+      watchNamespaces:
+        - ctf
+        - ""
+    asserts:
+      - failedTemplate:
+          errorMessage: watchNamespaces cannot contain empty namespace values
+
+  - it: renders successfully with non-empty watchNamespaces
+    set:
+      watchNamespaces:
+        - ctf
+        - ctf-admin
+    asserts:
+      - hasDocuments:
+          count: 0

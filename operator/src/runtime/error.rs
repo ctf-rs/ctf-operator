@@ -4,6 +4,9 @@ use crate::util::{ControllerError, WaitReadyError};
 
 #[derive(Error, Debug)]
 pub enum CtfError {
+    #[error("Configuration Error: {0}")]
+    ConfigError(String),
+
     #[error("SerializationError: {0}")]
     SerializationError(#[from] serde_json::Error),
 

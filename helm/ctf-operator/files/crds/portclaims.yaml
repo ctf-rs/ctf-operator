@@ -1,0 +1,129 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: portclaims.operator.ctf.rs
+spec:
+  group: operator.ctf.rs
+  names:
+    categories: []
+    kind: PortClaim
+    plural: portclaims
+    shortNames:
+    - port
+    singular: portclaim
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.port
+      name: PORT
+      type: integer
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Auto-generated derived type for PortClaimSpec via `CustomResource`
+        properties:
+          spec:
+            properties:
+              conditions:
+                default: []
+                items:
+                  properties:
+                    lastProbeTime:
+                      description: Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.  Wrappers are provided for many of the factory methods that the time package offers.
+                      format: date-time
+                      nullable: true
+                      type: string
+                    lastTransitionTime:
+                      description: Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.  Wrappers are provided for many of the factory methods that the time package offers.
+                      format: date-time
+                      nullable: true
+                      type: string
+                    message:
+                      nullable: true
+                      type: string
+                    reason:
+                      nullable: true
+                      type: string
+                    status:
+                      enum:
+                      - 'True'
+                      - 'False'
+                      - Unknown
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+              reservation:
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    nullable: true
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - reservation
+            type: object
+          status:
+            nullable: true
+            properties:
+              conditions:
+                default: []
+                items:
+                  properties:
+                    lastProbeTime:
+                      description: Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.  Wrappers are provided for many of the factory methods that the time package offers.
+                      format: date-time
+                      nullable: true
+                      type: string
+                    lastTransitionTime:
+                      description: Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.  Wrappers are provided for many of the factory methods that the time package offers.
+                      format: date-time
+                      nullable: true
+                      type: string
+                    message:
+                      nullable: true
+                      type: string
+                    reason:
+                      nullable: true
+                      type: string
+                    status:
+                      enum:
+                      - 'True'
+                      - 'False'
+                      - Unknown
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+              port:
+                format: uint16
+                maximum: 65535.0
+                minimum: 0.0
+                nullable: true
+                type: integer
+            type: object
+        required:
+        - spec
+        title: PortClaimValidated
+        type: object
+        x-kubernetes-validations:
+        - message: reservation field is immutable
+          rule: self.spec.reservation == oldSelf.spec.reservation
+    selectableFields:
+    - jsonPath: .spec.reservation.name
+    - jsonPath: .spec.reservation.namespace
+    served: true
+    storage: true
+    subresources:
+      status: {}

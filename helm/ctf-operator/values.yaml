@@ -1,0 +1,55 @@
+replicaCount: 1
+
+image:
+  repository: ctf-operator
+  tag: local
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+watchNamespaces:
+  - ctf
+
+instanceNamespacePrefix: ctf-inst-
+
+crds:
+  install: true
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+env: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+rbac:
+  create: true

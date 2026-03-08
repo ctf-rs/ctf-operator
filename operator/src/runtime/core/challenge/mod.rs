@@ -10,9 +10,12 @@ use ctf_k8s::Challenge;
 use kube::{runtime::watcher::Config, Client};
 use std::sync::Arc;
 
-pub fn watcher(client: Client) -> Watcher<Challenge> {
-    let api: kube::Api<Challenge> = kube::Api::all(client);
-    Watcher::new(api, Config::default(), 0xFFFF)
+pub fn watcher(client: Client, namespaces: &[String]) -> Watcher<Challenge> {
+    let apis = namespaces
+        .iter()
+        .map(|namespace| kube::Api::<Challenge>::namespaced(client.clone(), namespace))
+        .collect::<Vec<_>>();
+    Watcher::new_many(apis, Config::default(), 0xFFFF)
 }
 
 pub fn controller(

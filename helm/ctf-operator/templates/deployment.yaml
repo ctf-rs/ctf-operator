@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ctf-operator.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "ctf-operator.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "ctf-operator.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "ctf-operator.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+{{- with .Values.podAnnotations }}
+      annotations:
+{{- toYaml . | nindent 8 }}
+{{- end }}
+    spec:
+      serviceAccountName: {{ include "ctf-operator.serviceAccountName" . }}
+      securityContext:
+{{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: ctf-operator
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - operator
+{{- range $namespace := .Values.watchNamespaces }}
+            - --namespace
+            - {{ $namespace | quote }}
+{{- end }}
+            - --instance-namespace-prefix
+            - {{ .Values.instanceNamespacePrefix | quote }}
+          securityContext:
+{{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+{{- toYaml .Values.resources | nindent 12 }}
+        {{- with .Values.env }}
+          env:
+        {{- toYaml . | nindent 12 }}
+        {{- end }}
+        {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
