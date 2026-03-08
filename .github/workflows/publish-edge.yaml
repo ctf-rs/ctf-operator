@@ -72,10 +72,13 @@ jobs:
             harbor/creds/github-actions-ctf-rs robot_account_secret | HARBOR_PASS
 
       - name: Login Helm registry
+        env:
+          HARBOR_USER: ${{ steps.vault_helm.outputs.HARBOR_USER }}
+          HARBOR_PASS: ${{ steps.vault_helm.outputs.HARBOR_PASS }}
         run: |
-          helm registry login registry.ctf.rs \
-            --username "${{ steps.vault_helm.outputs.HARBOR_USER }}" \
-            --password "${{ steps.vault_helm.outputs.HARBOR_PASS }}"
+          printf '%s' "$HARBOR_PASS" | helm registry login registry.ctf.rs \
+            --username "$HARBOR_USER" \
+            --password-stdin
 
       - name: Push Helm chart
         run: |
