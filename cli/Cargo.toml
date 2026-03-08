@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.102"
-clap = { version = "4.5.60", features = ["derive"] }
-tokio = { version = "1.50.0", features = ["full"] }
-serde-saphyr = "0.0.21"
-ctf-core = { path = "../core/" }
-aws-config = "1.8.8"
-aws-credential-types = "1.2.8"
-aws-sdk-s3 = "1.81.0"
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["full"] }
+serde-saphyr = { workspace = true }
+ctf-core = { path = "../core" }
+aws-config = { workspace = true }
+aws-credential-types = { workspace = true }
+aws-sdk-s3 = { workspace = true }

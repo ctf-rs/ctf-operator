@@ -1,7 +1,7 @@
 use clap::Parser;
 
 use ctf_operator::crd::v1alpha1::{Challenge, Flag, Instance, Jeopardy, PortClaim, ReservationSet};
-use ctf_operator::{Args, Command, CrdArgs, OperatorArgs, init_telemetry, runtime};
+use ctf_operator::{init_telemetry, runtime, Args, Command, CrdArgs, OperatorArgs};
 use kube::CustomResourceExt;
 
 #[tokio::main]
@@ -28,32 +28,32 @@ fn gen_crd(_args: CrdArgs) {
     std::fs::create_dir_all("crd").unwrap();
     std::fs::write(
         "crd/flags.yaml",
-        serde_yaml::to_string(&Flag::crd()).unwrap(),
+        serde_saphyr::to_string(&Flag::crd()).unwrap(),
     )
     .unwrap();
     std::fs::write(
         "crd/jeopardy.yaml",
-        serde_yaml::to_string(&Jeopardy::crd()).unwrap(),
+        serde_saphyr::to_string(&Jeopardy::crd()).unwrap(),
     )
     .unwrap();
     std::fs::write(
         "crd/reservationsets.yaml",
-        serde_yaml::to_string(&ReservationSet::crd()).unwrap(),
+        serde_saphyr::to_string(&ReservationSet::crd()).unwrap(),
     )
     .unwrap();
     std::fs::write(
         "crd/portclaims.yaml",
-        serde_yaml::to_string(&PortClaim::crd()).unwrap(),
+        serde_saphyr::to_string(&PortClaim::crd()).unwrap(),
     )
     .unwrap();
     std::fs::write(
         "crd/challenges.yaml",
-        serde_yaml::to_string(&Challenge::crd()).unwrap(),
+        serde_saphyr::to_string(&Challenge::crd()).unwrap(),
     )
     .unwrap();
     std::fs::write(
         "crd/instances.yaml",
-        serde_yaml::to_string(&Instance::crd()).unwrap(),
+        serde_saphyr::to_string(&Instance::crd()).unwrap(),
     )
     .unwrap();
 }

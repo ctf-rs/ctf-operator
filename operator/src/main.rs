@@ -31,23 +31,23 @@ fn gen_crd(_args: CrdArgs) -> anyhow::Result<()> {
     std::fs::remove_dir_all("crd").ok();
     std::fs::create_dir_all("crd")?;
 
-    std::fs::write("crd/ctfs.yaml", serde_yaml::to_string(&Ctf::crd())?)?;
+    std::fs::write("crd/ctfs.yaml", serde_saphyr::to_string(&Ctf::crd())?)?;
     std::fs::write(
         "crd/challenges.yaml",
-        serde_yaml::to_string(&Challenge::crd())?,
+        serde_saphyr::to_string(&Challenge::crd())?,
     )?;
-    std::fs::write("crd/flags.yaml", serde_yaml::to_string(&Flag::crd())?)?;
+    std::fs::write("crd/flags.yaml", serde_saphyr::to_string(&Flag::crd())?)?;
     std::fs::write(
         "crd/instances.yaml",
-        serde_yaml::to_string(&Instance::crd())?,
+        serde_saphyr::to_string(&Instance::crd())?,
     )?;
     std::fs::write(
         "crd/reservationsets.yaml",
-        serde_yaml::to_string(&ReservationSet::crd())?,
+        serde_saphyr::to_string(&ReservationSet::crd())?,
     )?;
     std::fs::write(
         "crd/portclaims.yaml",
-        serde_yaml::to_string(&PortClaim::crd())?,
+        serde_saphyr::to_string(&PortClaim::crd())?,
     )?;
 
     Ok(())

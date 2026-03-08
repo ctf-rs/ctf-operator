@@ -4,13 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.102"
-garde = { version = "0.22.1", features = ["serde", "derive", "regex"] }
-rand = "0.10.0"
-schemars = { version = "1.2.1", features = ["uuid1"] }
-serde = { version = "1.0.228", features = ["derive"] }
-thiserror = "2.0.18"
-tokio = { version = "1.50.0", features = ["full"] }
+anyhow = { workspace = true }
+garde = { workspace = true, features = ["serde", "derive", "regex"] }
+rand = { workspace = true }
+schemars = { workspace = true, features = ["uuid1"] }
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
 
 [dev-dependencies]
-serde-saphyr = "0.0.21"
+serde-saphyr = { workspace = true }
