@@ -21,6 +21,13 @@ tests:
               name: ctf-storage-a-creds
               accessKeyIdKey: accessKeyId
               secretAccessKeyKey: secretAccessKey
+      instance:
+        deployment:
+          replicas: 2
+          imagePullPolicy: IfNotPresent
+        service:
+          type: NodePort
+          nodePortMode: Allocated
     asserts:
       - isKind:
           of: ConfigMap
@@ -36,3 +43,6 @@ tests:
       - matchRegex:
           path: data["config.yaml"]
           pattern: '(?s)secretRef:\n\s+accessKeyIdKey: accessKeyId\n\s+name: ctf-storage-a-creds\n\s+secretAccessKeyKey: secretAccessKey'
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: '(?s)instance:\n\s+deployment:\n\s+replicas: 2\n\s+imagePullPolicy: "IfNotPresent"\n\s+service:\n\s+type: "NodePort"\n\s+nodePortMode: "Allocated"'

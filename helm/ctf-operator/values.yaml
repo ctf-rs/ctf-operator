@@ -38,6 +38,14 @@ storage:
     #     accessKeyIdKey: accessKeyId
     #     secretAccessKeyKey: secretAccessKey
 
+instance:
+  deployment:
+    replicas: 1
+    imagePullPolicy: ""
+  service:
+    type: ClusterIP
+    nodePortMode: Auto
+
 crds:
   install: true
 

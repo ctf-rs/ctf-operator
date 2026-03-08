@@ -161,8 +161,8 @@ async fn create_kind_cluster(
     provider: &str,
 ) -> anyhow::Result<()> {
     let config_file = temp_file_path("kind-config", "yaml");
-    let mut config = String::from(
-        "kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nnodes:\n- role: control-plane\n  extraPortMappings:\n",
+    let mut config = format!(
+        "kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nkubeadmConfigPatches:\n- |\n  kind: ClusterConfiguration\n  apiServer:\n    extraArgs:\n      service-node-port-range: \"{expose_port_start}-{expose_port_end}\"\nnodes:\n- role: control-plane\n  extraPortMappings:\n"
     );
 
     for port in expose_port_start..=expose_port_end {

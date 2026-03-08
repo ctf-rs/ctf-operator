@@ -579,6 +579,7 @@ async fn ensure_deployment(
 ) -> Result<(), CtfError> {
     let namespace = target_namespace.to_owned();
     let name = instance.name_any();
+    let deployment_config = &state.config.runtime_config.instance.deployment;
 
     let mut labels = base_labels(instance);
     labels.insert("app.kubernetes.io/name".to_string(), name.clone());
@@ -606,6 +607,7 @@ async fn ensure_deployment(
             },
             name: container.name.clone(),
             image: Some(container.image.clone()),
+            image_pull_policy: deployment_config.image_pull_policy.clone(),
             ports: if container.ports.is_empty() {
                 None
             } else {
@@ -628,7 +630,7 @@ async fn ensure_deployment(
     let deployment = Deployment {
         metadata: managed_resource_metadata(name.clone(), namespace.clone(), labels.clone()),
         spec: Some(DeploymentSpec {
-            replicas: Some(1),
+            replicas: Some(deployment_config.replicas),
             selector: LabelSelector {
                 match_labels: Some(labels.clone()),
                 ..Default::default()
@@ -668,6 +670,9 @@ async fn ensure_service(
 ) -> Result<(), CtfError> {
     let namespace = target_namespace.to_owned();
     let name = instance.name_any();
+    let service_config = &state.config.runtime_config.instance.service;
+    let use_allocated_node_ports =
+        service_config.type_.is_node_port() && service_config.node_port_mode.is_allocated();
 
     let mut labels = base_labels(instance);
     labels.insert("app.kubernetes.io/name".to_string(), name.clone());
@@ -689,6 +694,7 @@ async fn ensure_service(
                 name: Some(port.name.clone()),
                 port: i32::from(*exposed_port),
                 target_port: Some(IntOrString::Int(i32::from(port.container_port))),
+                node_port: use_allocated_node_ports.then_some(i32::from(*exposed_port)),
                 protocol: Some("TCP".to_string()),
                 ..Default::default()
             });
@@ -713,6 +719,7 @@ async fn ensure_service(
         spec: Some(ServiceSpec {
             selector: Some(labels),
             ports: Some(ports),
+            type_: Some(service_config.type_.as_k8s_str().to_string()),
             ..Default::default()
         }),
         ..Default::default()

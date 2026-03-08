@@ -10,12 +10,99 @@ pub struct OperatorRuntimeConfig {
     pub registry: Vec<RegistryConfig>,
     #[serde(default)]
     pub storage: StorageConfig,
+    #[serde(default)]
+    pub instance: InstanceRuntimeConfig,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct StorageConfig {
     #[serde(default)]
     pub s3: Vec<S3StorageConfig>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub struct InstanceRuntimeConfig {
+    #[serde(default)]
+    pub deployment: InstanceDeploymentConfig,
+    #[serde(default)]
+    pub service: InstanceServiceConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct InstanceDeploymentConfig {
+    #[serde(default = "default_instance_replicas")]
+    pub replicas: i32,
+    #[serde(default, rename = "imagePullPolicy")]
+    pub image_pull_policy: Option<String>,
+}
+
+impl Default for InstanceDeploymentConfig {
+    fn default() -> Self {
+        Self {
+            replicas: default_instance_replicas(),
+            image_pull_policy: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct InstanceServiceConfig {
+    #[serde(default, rename = "type")]
+    pub type_: InstanceServiceType,
+    #[serde(default, rename = "nodePortMode")]
+    pub node_port_mode: InstanceServiceNodePortMode,
+}
+
+impl Default for InstanceServiceConfig {
+    fn default() -> Self {
+        Self {
+            type_: InstanceServiceType::ClusterIp,
+            node_port_mode: InstanceServiceNodePortMode::Auto,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Default)]
+pub enum InstanceServiceType {
+    #[serde(rename = "ClusterIP")]
+    #[default]
+    ClusterIp,
+    #[serde(rename = "NodePort")]
+    NodePort,
+    #[serde(rename = "LoadBalancer")]
+    LoadBalancer,
+}
+
+impl InstanceServiceType {
+    pub fn as_k8s_str(&self) -> &'static str {
+        match self {
+            Self::ClusterIp => "ClusterIP",
+            Self::NodePort => "NodePort",
+            Self::LoadBalancer => "LoadBalancer",
+        }
+    }
+
+    pub fn is_node_port(&self) -> bool {
+        matches!(self, Self::NodePort)
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Default)]
+pub enum InstanceServiceNodePortMode {
+    #[default]
+    Auto,
+    #[serde(rename = "Allocated")]
+    Allocated,
+}
+
+impl InstanceServiceNodePortMode {
+    pub fn is_allocated(&self) -> bool {
+        matches!(self, Self::Allocated)
+    }
+}
+
+fn default_instance_replicas() -> i32 {
+    1
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -105,6 +192,13 @@ storage:
         name: ctf-storage-a-creds
         accessKeyIdKey: accessKeyId
         secretAccessKeyKey: secretAccessKey
+instance:
+    deployment:
+        replicas: 2
+        imagePullPolicy: IfNotPresent
+    service:
+        type: NodePort
+        nodePortMode: Allocated
 "#;
 
         let config: OperatorRuntimeConfig =
@@ -115,5 +209,15 @@ storage:
         assert_eq!(config.registry[0].endpoint, "registry.ctf.rs/ctf");
         assert_eq!(config.storage.s3[0].bucket, "ctf-bucket-a");
         assert!(config.storage.s3[0].path_style);
+        assert_eq!(config.instance.deployment.replicas, 2);
+        assert_eq!(
+            config.instance.deployment.image_pull_policy.as_deref(),
+            Some("IfNotPresent")
+        );
+        assert_eq!(config.instance.service.type_, InstanceServiceType::NodePort);
+        assert_eq!(
+            config.instance.service.node_port_mode,
+            InstanceServiceNodePortMode::Allocated
+        );
     }
 }

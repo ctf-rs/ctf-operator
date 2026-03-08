@@ -13,3 +13,12 @@ data:
     storage:
       s3:
 {{ toYaml .Values.storage.s3 | nindent 8 }}
+    instance:
+      deployment:
+        replicas: {{ .Values.instance.deployment.replicas }}
+{{- if .Values.instance.deployment.imagePullPolicy }}
+        imagePullPolicy: {{ .Values.instance.deployment.imagePullPolicy | quote }}
+{{- end }}
+      service:
+        type: {{ .Values.instance.service.type | quote }}
+        nodePortMode: {{ .Values.instance.service.nodePortMode | quote }}
