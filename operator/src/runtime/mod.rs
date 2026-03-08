@@ -81,14 +81,8 @@ pub async fn run(
     let managed_selector = format!("{MANAGED_BY_LABEL}={MANAGED_BY_VALUE}");
     let deployment_api: kube::Api<Deployment> = kube::Api::all(client.clone());
     let service_api: kube::Api<Service> = kube::Api::all(client.clone());
-    let reservation_set_apis = watched_namespace_vec
-        .iter()
-        .map(|namespace| kube::Api::<ReservationSet>::namespaced(client.clone(), namespace))
-        .collect::<Vec<_>>();
-    let port_claim_apis = watched_namespace_vec
-        .iter()
-        .map(|namespace| kube::Api::<PortClaim>::namespaced(client.clone(), namespace))
-        .collect::<Vec<_>>();
+    let reservation_set_api: kube::Api<ReservationSet> = kube::Api::all(client.clone());
+    let port_claim_api: kube::Api<PortClaim> = kube::Api::all(client.clone());
 
     let deployment_watcher = Watcher::new(
         deployment_api,
@@ -101,8 +95,8 @@ pub async fn run(
         0xFFFF,
     );
     let reservation_set_store_watcher =
-        Watcher::new_many(reservation_set_apis, Config::default(), 0xFFFF);
-    let port_claim_store_watcher = Watcher::new_many(port_claim_apis, Config::default(), 0xFFFF);
+        Watcher::new(reservation_set_api, Config::default(), 0xFFFF);
+    let port_claim_store_watcher = Watcher::new(port_claim_api, Config::default(), 0xFFFF);
 
     let state = Arc::new(CtfState::new(
         client,
@@ -132,6 +126,9 @@ pub async fn run(
         &instance_watcher,
         &ctf_watcher,
         &challenge_watcher,
+        &flag_watcher,
+        &reservation_set_watcher,
+        &port_claim_watcher,
         &deployment_watcher,
         &service_watcher,
     )?;

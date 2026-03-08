@@ -8,7 +8,7 @@ use crate::{
     runtime::{CtfResult, CtfState},
     util::{Controller, Watcher},
 };
-use ctf_cli::k8s::{Challenge, Ctf, Instance};
+use ctf_cli::k8s::{Challenge, Ctf, Flag, Instance, PortClaim, ReservationSet};
 use k8s_openapi::api::{apps::v1::Deployment, core::v1::Service};
 use kube::{
     runtime::{
@@ -31,6 +31,9 @@ pub fn controller(
     watcher: &Watcher<Instance>,
     ctf_watcher: &Watcher<Ctf>,
     challenge_watcher: &Watcher<Challenge>,
+    flag_watcher: &Watcher<Flag>,
+    reservation_set_watcher: &Watcher<ReservationSet>,
+    port_claim_watcher: &Watcher<PortClaim>,
     deployment_watcher: &Watcher<Deployment>,
     service_watcher: &Watcher<Service>,
 ) -> CtfResult<Controller<InstanceReconciler>> {
@@ -42,6 +45,15 @@ pub fn controller(
         .watches(challenge_watcher, {
             let ctx = ctx.clone();
             move |challenge| map_instances_for_challenge(challenge.as_ref(), ctx.instances.state())
+        })?
+        .watches(flag_watcher, |flag| {
+            resource_to_instance_ref(flag.metadata.labels.as_ref())
+        })?
+        .watches(reservation_set_watcher, |reservation_set| {
+            resource_to_instance_ref(reservation_set.metadata.labels.as_ref())
+        })?
+        .watches(port_claim_watcher, |port_claim| {
+            resource_to_instance_ref(port_claim.metadata.labels.as_ref())
         })?
         .watches(deployment_watcher, |deployment| {
             resource_to_instance_ref(deployment.metadata.labels.as_ref())

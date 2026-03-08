@@ -8,20 +8,18 @@ use crate::{
 };
 use ctf_cli::k8s::{PortClaim, ReservationSet};
 use kube::{
-    runtime::{
-        reflector::ObjectRef,
-        watcher::Config,
-    },
+    runtime::{reflector::ObjectRef, watcher::Config},
     Client,
 };
 use std::sync::Arc;
 
 pub fn watcher(client: Client, namespaces: &[String]) -> Watcher<ReservationSet> {
-    let apis = namespaces
-        .iter()
-        .map(|namespace| kube::Api::<ReservationSet>::namespaced(client.clone(), namespace))
-        .collect::<Vec<_>>();
-    Watcher::new_many(apis, Config::default(), 0xFFFF)
+    let _ = namespaces;
+    Watcher::new(
+        kube::Api::<ReservationSet>::all(client),
+        Config::default(),
+        0xFFFF,
+    )
 }
 
 pub fn controller(
@@ -29,9 +27,11 @@ pub fn controller(
     watcher: &Watcher<ReservationSet>,
     port_claim_watcher: &Watcher<PortClaim>,
 ) -> CtfResult<Controller<ReservationSetReconciler>> {
-    Ok(Controller::new(ctx, watcher)?.watches(port_claim_watcher, |port_claim| {
-        port_claim_to_reservation_ref(port_claim.as_ref())
-    })?)
+    Ok(
+        Controller::new(ctx, watcher)?.watches(port_claim_watcher, |port_claim| {
+            port_claim_to_reservation_ref(port_claim.as_ref())
+        })?,
+    )
 }
 
 fn port_claim_to_reservation_ref(port_claim: &PortClaim) -> Option<ObjectRef<ReservationSet>> {
@@ -55,7 +55,12 @@ mod tests {
     use super::*;
     use ctf_cli::k8s::{PortClaimSpec, ReservationRef};
 
-    fn make_port_claim(name: &str, ns: Option<&str>, reservation_name: &str, reservation_ns: Option<&str>) -> PortClaim {
+    fn make_port_claim(
+        name: &str,
+        ns: Option<&str>,
+        reservation_name: &str,
+        reservation_ns: Option<&str>,
+    ) -> PortClaim {
         let mut claim = PortClaim::new(
             name,
             PortClaimSpec {

@@ -6,6 +6,7 @@
     "helm lint": true,
     "helm unittest": true,
     "kubectl --context kind-playground": true,
-    "cargo run -p ctf-cli --bin ctf --": true
+    "cargo run -p ctf-cli --bin ctf --": true,
+    "cargo run -p ctf-operator -- operator": true
   }
 }

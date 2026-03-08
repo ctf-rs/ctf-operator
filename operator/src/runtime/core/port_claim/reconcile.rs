@@ -31,7 +31,7 @@ impl Reconciler for PortClaimReconciler {
             status.port = None;
         }
 
-        if status.conditions.all_true() {
+        if conditions_true_excluding_ready(&status.conditions) {
             status
                 .conditions
                 .set("Ready", ConditionStatus::True, "Ready", "");
@@ -41,7 +41,7 @@ impl Reconciler for PortClaimReconciler {
                 .set("Ready", ConditionStatus::False, "NotReady", "");
         }
 
-        let ready = status.conditions.all_true();
+        let ready = conditions_true_excluding_ready(&status.conditions);
 
         if obj.status.as_ref() != Some(&status) {
             Self::patch_status_namespaced(obj.as_ref(), state.client.clone(), status).await?;
@@ -55,6 +55,12 @@ impl Reconciler for PortClaimReconciler {
             )))
         }
     }
+}
+
+fn conditions_true_excluding_ready(conditions: &ctf_cli::k8s::Conditions) -> bool {
+    let mut clone = conditions.clone();
+    clone.remove("Ready");
+    clone.all_true()
 }
 
 fn validate_spec(resource: &PortClaim, status: &mut PortClaimStatus) -> bool {

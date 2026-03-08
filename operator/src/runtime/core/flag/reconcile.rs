@@ -17,14 +17,14 @@ impl Reconciler for FlagReconciler {
 
     async fn reconcile(obj: Arc<Flag>, state: Arc<CtfState>) -> Result<Action, CtfError> {
         let namespace = obj.namespace().unwrap_or_default();
-        if !state.watches_namespace(&namespace) {
+        if !state.manages_namespace(&namespace) {
             return Ok(Action::await_change());
         }
 
         let mut status = obj.status.clone().unwrap_or_default();
         validate_and_generate(&obj, &mut status);
 
-        let ready = status.conditions.all_true();
+        let ready = conditions_true_excluding_ready(&status.conditions);
 
         if obj.status.as_ref() != Some(&status) {
             Self::patch_status_namespaced(obj.as_ref(), state.client.clone(), status).await?;
@@ -78,7 +78,7 @@ fn validate_and_generate(resource: &Flag, status: &mut FlagStatus) {
         }
     }
 
-    if status.conditions.all_true() {
+    if conditions_true_excluding_ready(&status.conditions) {
         status
             .conditions
             .set("Ready", ConditionStatus::True, "Ready", "");
@@ -87,6 +87,12 @@ fn validate_and_generate(resource: &Flag, status: &mut FlagStatus) {
             .conditions
             .set("Ready", ConditionStatus::False, "NotReady", "");
     }
+}
+
+fn conditions_true_excluding_ready(conditions: &ctf_cli::k8s::Conditions) -> bool {
+    let mut clone = conditions.clone();
+    clone.remove("Ready");
+    clone.all_true()
 }
 
 #[cfg(test)]

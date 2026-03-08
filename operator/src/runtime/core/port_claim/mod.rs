@@ -17,11 +17,12 @@ use kube::{
 use std::sync::Arc;
 
 pub fn watcher(client: Client, namespaces: &[String]) -> Watcher<PortClaim> {
-    let apis = namespaces
-        .iter()
-        .map(|namespace| kube::Api::<PortClaim>::namespaced(client.clone(), namespace))
-        .collect::<Vec<_>>();
-    Watcher::new_many(apis, Config::default(), 0xFFFF)
+    let _ = namespaces;
+    Watcher::new(
+        kube::Api::<PortClaim>::all(client),
+        Config::default(),
+        0xFFFF,
+    )
 }
 
 pub fn controller(
@@ -29,9 +30,11 @@ pub fn controller(
     watcher: &Watcher<PortClaim>,
     reservation_set_watcher: &Watcher<ReservationSet>,
 ) -> CtfResult<Controller<PortClaimReconciler>> {
-    Ok(Controller::new(ctx.clone(), watcher)?.watches(reservation_set_watcher, move |rs| {
-        map_port_claims_for_reservation_set(rs.as_ref(), ctx.port_claims.state())
-    })?)
+    Ok(
+        Controller::new(ctx.clone(), watcher)?.watches(reservation_set_watcher, move |rs| {
+            map_port_claims_for_reservation_set(rs.as_ref(), ctx.port_claims.state())
+        })?,
+    )
 }
 
 fn map_port_claims_for_reservation_set(
@@ -39,7 +42,11 @@ fn map_port_claims_for_reservation_set(
     port_claims: impl IntoIterator<Item = Arc<PortClaim>>,
 ) -> Vec<ObjectRef<PortClaim>> {
     let reservation_name = reservation_set.metadata.name.as_deref().unwrap_or_default();
-    let reservation_ns = reservation_set.metadata.namespace.as_deref().unwrap_or_default();
+    let reservation_ns = reservation_set
+        .metadata
+        .namespace
+        .as_deref()
+        .unwrap_or_default();
 
     port_claims
         .into_iter()

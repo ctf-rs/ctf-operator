@@ -5,7 +5,7 @@ use crate::{
     util::Reconciler,
 };
 use ctf_cli::k8s::{ConditionStatus, ReservationSet, ReservationSetStatus};
-use kube::{runtime::reflector::ObjectRef, runtime::controller::Action, ResourceExt};
+use kube::{runtime::controller::Action, runtime::reflector::ObjectRef, ResourceExt};
 
 pub struct ReservationSetReconciler;
 
@@ -15,12 +15,9 @@ impl Reconciler for ReservationSetReconciler {
     type Ctx = CtfState;
     type Err = CtfError;
 
-    async fn reconcile(
-        obj: Arc<ReservationSet>,
-        state: Arc<CtfState>,
-    ) -> Result<Action, CtfError> {
+    async fn reconcile(obj: Arc<ReservationSet>, state: Arc<CtfState>) -> Result<Action, CtfError> {
         let namespace = obj.namespace().unwrap_or_default();
-        if !state.watches_namespace(&namespace) {
+        if !state.manages_namespace(&namespace) {
             return Ok(Action::await_change());
         }
 
@@ -28,7 +25,7 @@ impl Reconciler for ReservationSetReconciler {
         validate_spec(&obj, &mut status);
         refresh_claims(&obj, &state, &mut status);
 
-        if status.conditions.all_true() {
+        if conditions_true_excluding_ready(&status.conditions) {
             status
                 .conditions
                 .set("Ready", ConditionStatus::True, "Ready", "");
@@ -38,7 +35,7 @@ impl Reconciler for ReservationSetReconciler {
                 .set("Ready", ConditionStatus::False, "NotReady", "");
         }
 
-        let ready = status.conditions.all_true();
+        let ready = conditions_true_excluding_ready(&status.conditions);
 
         if obj.status.as_ref() != Some(&status) {
             Self::patch_status_namespaced(obj.as_ref(), state.client.clone(), status).await?;
@@ -52,6 +49,12 @@ impl Reconciler for ReservationSetReconciler {
             )))
         }
     }
+}
+
+fn conditions_true_excluding_ready(conditions: &ctf_cli::k8s::Conditions) -> bool {
+    let mut clone = conditions.clone();
+    clone.remove("Ready");
+    clone.all_true()
 }
 
 fn validate_spec(resource: &ReservationSet, status: &mut ReservationSetStatus) {

@@ -11,11 +11,8 @@ use kube::{runtime::watcher::Config, Client};
 use std::sync::Arc;
 
 pub fn watcher(client: Client, namespaces: &[String]) -> Watcher<Flag> {
-    let apis = namespaces
-        .iter()
-        .map(|namespace| kube::Api::<Flag>::namespaced(client.clone(), namespace))
-        .collect::<Vec<_>>();
-    Watcher::new_many(apis, Config::default(), 0xFFFF)
+    let _ = namespaces;
+    Watcher::new(kube::Api::<Flag>::all(client), Config::default(), 0xFFFF)
 }
 
 pub fn controller(

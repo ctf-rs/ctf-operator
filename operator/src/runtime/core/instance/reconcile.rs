@@ -12,6 +12,7 @@ use crate::{
     util::Reconciler,
 };
 use ctf_cli::k8s::{Challenge, ConditionStatus, Ctf, Flag, FlagSpec, Instance, InstanceStatus};
+use ctf_cli::k8s::{PortClaim, PortClaimSpec, ReservationRef, ReservationSet, ReservationSetSpec};
 use k8s_openapi::{
     api::{
         apps::v1::{Deployment, DeploymentSpec},
@@ -19,10 +20,7 @@ use k8s_openapi::{
             Container, Namespace, PodSpec, PodTemplateSpec, Service, ServicePort, ServiceSpec,
         },
     },
-    apimachinery::pkg::{
-        apis::meta::v1::LabelSelector,
-        util::intstr::IntOrString,
-    },
+    apimachinery::pkg::{apis::meta::v1::LabelSelector, util::intstr::IntOrString},
 };
 use kube::{
     api::{DeleteParams, ObjectMeta, Patch, PatchParams},
@@ -110,6 +108,20 @@ async fn reconcile_apply(
         return Ok(Action::requeue(Duration::from_secs(30)));
     }
 
+    ensure_target_namespace(instance.as_ref(), &target_namespace, &state).await?;
+
+    let reservation_name =
+        ensure_reservation_set(instance.as_ref(), ctf.as_ref(), &target_namespace, &state).await?;
+
+    ensure_port_claims(
+        instance.as_ref(),
+        challenge.as_ref(),
+        &reservation_name,
+        &target_namespace,
+        &state,
+    )
+    .await?;
+
     ensure_flags(
         instance.as_ref(),
         ctf.as_ref(),
@@ -118,30 +130,92 @@ async fn reconcile_apply(
         &state,
     )
     .await?;
-    ensure_deployment(
+    let observed = collect_instance_resources(
         instance.as_ref(),
         challenge.as_ref(),
+        &reservation_name,
         &target_namespace,
         &state,
-    )
-    .await?;
-    ensure_service(
+    );
+
+    if observed.flags_ready {
+        ensure_deployment(
+            instance.as_ref(),
+            challenge.as_ref(),
+            &observed.flag_values,
+            &target_namespace,
+            &state,
+        )
+        .await?;
+    }
+    if observed.port_claims_ready {
+        ensure_service(
+            instance.as_ref(),
+            challenge.as_ref(),
+            &observed.allocated_ports,
+            &target_namespace,
+            &state,
+        )
+        .await?;
+    }
+
+    let observed = collect_instance_resources(
         instance.as_ref(),
         challenge.as_ref(),
+        &reservation_name,
         &target_namespace,
         &state,
-    )
-    .await?;
+    );
 
     status
         .conditions
         .set("References", ConditionStatus::True, "Resolved", "");
-    status
-        .conditions
-        .set("Ready", ConditionStatus::True, "Reconciled", "");
+    set_resource_condition(
+        &mut status,
+        "ReservationSet",
+        observed.reservation_ready,
+        "Ready",
+        "NotReady",
+    );
+    set_resource_condition(
+        &mut status,
+        "PortClaims",
+        observed.port_claims_ready,
+        "Ready",
+        "NotReady",
+    );
+    set_resource_condition(
+        &mut status,
+        "Flags",
+        observed.flags_ready,
+        "Ready",
+        "NotReady",
+    );
+    set_resource_condition(
+        &mut status,
+        "Deployments",
+        observed.deployments_ready,
+        "Ready",
+        "NotReady",
+    );
+    set_resource_condition(
+        &mut status,
+        "Service",
+        observed.service_ready,
+        "Ready",
+        "NotReady",
+    );
+
+    let all_ready = all_conditions_true_except(&status, "Ready");
+    set_resource_condition(&mut status, "Ready", all_ready, "Reconciled", "NotReady");
 
     patch_status_if_needed(instance.as_ref(), &state, status).await?;
-    Ok(Action::await_change())
+
+    if all_ready {
+        Ok(Action::await_change())
+    } else {
+        Ok(Action::requeue(Duration::from_secs(10)))
+    }
 }
 
 async fn reconcile_cleanup(
@@ -184,6 +258,36 @@ fn set_not_ready(status: &mut InstanceStatus, typ: &str, reason: &str, message: 
     status
         .conditions
         .set("Ready", ConditionStatus::False, "NotReady", "");
+}
+
+fn set_resource_condition(
+    status: &mut InstanceStatus,
+    typ: &str,
+    ready: bool,
+    success_reason: &str,
+    not_ready_reason: &str,
+) {
+    if ready {
+        status
+            .conditions
+            .set(typ, ConditionStatus::True, success_reason, "");
+    } else {
+        status
+            .conditions
+            .set(typ, ConditionStatus::False, not_ready_reason, "");
+    }
+}
+
+fn all_conditions_true_except(status: &InstanceStatus, skip: &str) -> bool {
+    let mut conditions = status.conditions.clone();
+    conditions.remove(skip);
+    conditions.all_true()
+}
+
+fn conditions_true_excluding_ready(conditions: &ctf_cli::k8s::Conditions) -> bool {
+    let mut clone = conditions.clone();
+    clone.remove("Ready");
+    clone.all_true()
 }
 
 fn is_ready_ctf(ctf: &Ctf) -> bool {
@@ -235,6 +339,116 @@ fn managed_resource_metadata(
         namespace: Some(namespace),
         labels: Some(labels),
         ..Default::default()
+    }
+}
+
+fn reservation_set_name(instance: &Instance) -> String {
+    format!("{}-ports", instance.name_any())
+}
+
+fn port_claim_name(instance: &Instance, port_name: &str) -> String {
+    format!("{}-{}", instance.name_any(), port_name)
+}
+
+#[derive(Default)]
+struct ObservedInstanceResources {
+    reservation_ready: bool,
+    port_claims_ready: bool,
+    flags_ready: bool,
+    deployments_ready: bool,
+    service_ready: bool,
+    flag_values: BTreeMap<String, String>,
+    allocated_ports: BTreeMap<String, u16>,
+}
+
+fn collect_instance_resources(
+    instance: &Instance,
+    challenge: &Challenge,
+    reservation_name: &str,
+    target_namespace: &str,
+    state: &CtfState,
+) -> ObservedInstanceResources {
+    let reservation_ref =
+        ObjectRef::<ReservationSet>::new(reservation_name).within(target_namespace);
+    let reservation_ready = state
+        .reservation_sets
+        .get(&reservation_ref)
+        .and_then(|resource| resource.status.clone())
+        .map(|status| conditions_true_excluding_ready(&status.conditions))
+        .unwrap_or(false);
+
+    let mut flag_values = BTreeMap::new();
+    let mut flags_ready = true;
+    for challenge_flag in &challenge.spec.flags {
+        let name = format!("{}-{}", instance.name_any(), challenge_flag.name);
+        let flag_ref = ObjectRef::<Flag>::new(&name).within(target_namespace);
+        let Some(flag) = state.flags.get(&flag_ref) else {
+            flags_ready = false;
+            continue;
+        };
+        let Some(flag_status) = flag.status.clone() else {
+            flags_ready = false;
+            continue;
+        };
+        if !conditions_true_excluding_ready(&flag_status.conditions) {
+            flags_ready = false;
+        }
+        if let Some(value) = flag_status.flag {
+            flag_values.insert(challenge_flag.name.clone(), value);
+        } else {
+            flags_ready = false;
+        }
+    }
+
+    let mut allocated_ports = BTreeMap::new();
+    let mut port_claims_ready = true;
+    for container in &challenge.spec.containers {
+        for port in &container.ports {
+            if !port.expose {
+                continue;
+            }
+
+            let claim_name = port_claim_name(instance, &port.name);
+            let claim_ref = ObjectRef::<PortClaim>::new(&claim_name).within(target_namespace);
+            let Some(port_claim) = state.port_claims.get(&claim_ref) else {
+                port_claims_ready = false;
+                continue;
+            };
+            let Some(port_claim_status) = port_claim.status.clone() else {
+                port_claims_ready = false;
+                continue;
+            };
+            if !conditions_true_excluding_ready(&port_claim_status.conditions) {
+                port_claims_ready = false;
+            }
+            if let Some(value) = port_claim_status.port {
+                allocated_ports.insert(port.name.clone(), value);
+            } else {
+                port_claims_ready = false;
+            }
+        }
+    }
+
+    let deployment_ref =
+        ObjectRef::<Deployment>::new(&instance.name_any()).within(target_namespace);
+    let deployments_ready = state
+        .deployments
+        .get(&deployment_ref)
+        .and_then(|resource| resource.status.clone())
+        .map(|status| status.available_replicas.unwrap_or_default() > 0)
+        .unwrap_or(false);
+
+    let service_ref = ObjectRef::<Service>::new(&instance.name_any()).within(target_namespace);
+    let service_ready = state.services.get(&service_ref).is_some();
+
+    ObservedInstanceResources {
+        reservation_ready,
+        port_claims_ready,
+        flags_ready,
+        deployments_ready,
+        service_ready,
+        flag_values,
+        allocated_ports,
     }
 }
 
@@ -305,7 +519,6 @@ async fn ensure_flags(
     target_namespace: &str,
     state: &CtfState,
 ) -> Result<(), CtfError> {
-    ensure_target_namespace(instance, target_namespace, state).await?;
     let namespace = target_namespace.to_owned();
 
     let labels = resource_labels(instance, ctf, challenge);
@@ -348,10 +561,10 @@ async fn ensure_flags(
 async fn ensure_deployment(
     instance: &Instance,
     challenge: &Challenge,
+    flag_values: &BTreeMap<String, String>,
     target_namespace: &str,
     state: &CtfState,
 ) -> Result<(), CtfError> {
-    ensure_target_namespace(instance, target_namespace, state).await?;
     let namespace = target_namespace.to_owned();
     let name = instance.name_any();
 
@@ -363,6 +576,22 @@ async fn ensure_deployment(
         .containers
         .iter()
         .map(|container| Container {
+            env: if container.flags.is_empty() {
+                None
+            } else {
+                let mut env = Vec::new();
+                for container_flag in &container.flags {
+                    let Some(flag_value) = flag_values.get(&container_flag.name) else {
+                        continue;
+                    };
+                    env.push(k8s_openapi::api::core::v1::EnvVar {
+                        name: container_flag.env.clone(),
+                        value: Some(flag_value.clone()),
+                        ..Default::default()
+                    });
+                }
+                Some(env)
+            },
             name: container.name.clone(),
             image: Some(container.image.clone()),
             ports: if container.ports.is_empty() {
@@ -421,10 +650,10 @@ async fn ensure_deployment(
 async fn ensure_service(
     instance: &Instance,
     challenge: &Challenge,
+    allocated_ports: &BTreeMap<String, u16>,
     target_namespace: &str,
     state: &CtfState,
 ) -> Result<(), CtfError> {
-    ensure_target_namespace(instance, target_namespace, state).await?;
     let namespace = target_namespace.to_owned();
     let name = instance.name_any();
 
@@ -441,9 +670,12 @@ async fn ensure_service(
             if !seen_names.insert(port.name.clone()) {
                 continue;
             }
+            let Some(exposed_port) = allocated_ports.get(&port.name) else {
+                continue;
+            };
             ports.push(ServicePort {
                 name: Some(port.name.clone()),
-                port: i32::from(port.container_port),
+                port: i32::from(*exposed_port),
                 target_port: Some(IntOrString::Int(i32::from(port.container_port))),
                 protocol: Some("TCP".to_string()),
                 ..Default::default()
@@ -472,6 +704,89 @@ async fn ensure_service(
             &Patch::Apply(&service),
         )
         .await?;
+
+    Ok(())
+}
+
+async fn ensure_reservation_set(
+    instance: &Instance,
+    ctf: &Ctf,
+    target_namespace: &str,
+    state: &CtfState,
+) -> Result<String, CtfError> {
+    let name = reservation_set_name(instance);
+    let mut labels = base_labels(instance);
+    labels.insert("app.kubernetes.io/name".to_string(), name.clone());
+
+    let resource = ReservationSet {
+        metadata: managed_resource_metadata(name.clone(), target_namespace.to_owned(), labels),
+        spec: ReservationSetSpec {
+            start: ctf.spec.network.ports.start,
+            end: ctf.spec.network.ports.end,
+            conditions: Default::default(),
+        },
+        status: None,
+    };
+
+    Api::<ReservationSet>::namespaced(state.client.clone(), target_namespace)
+        .patch(
+            &name,
+            &PatchParams::apply(InstanceReconciler::NAME).force(),
+            &Patch::Apply(&resource),
+        )
+        .await?;
+
+    Ok(name)
+}
+
+async fn ensure_port_claims(
+    instance: &Instance,
+    challenge: &Challenge,
+    reservation_name: &str,
+    target_namespace: &str,
+    state: &CtfState,
+) -> Result<(), CtfError> {
+    let mut labels = base_labels(instance);
+    labels.insert("app.kubernetes.io/name".to_string(), instance.name_any());
+
+    let api: Api<PortClaim> = Api::namespaced(state.client.clone(), target_namespace);
+
+    let mut seen_names = BTreeSet::new();
+    for container in &challenge.spec.containers {
+        for port in &container.ports {
+            if !port.expose {
+                continue;
+            }
+            if !seen_names.insert(port.name.clone()) {
+                continue;
+            }
+
+            let name = port_claim_name(instance, &port.name);
+
+            let resource = PortClaim {
+                metadata: managed_resource_metadata(
+                    name.clone(),
+                    target_namespace.to_owned(),
+                    labels.clone(),
+                ),
+                spec: PortClaimSpec {
+                    reservation: ReservationRef {
+                        name: reservation_name.to_owned(),
+                        namespace: None,
+                    },
+                    conditions: Default::default(),
+                },
+                status: None,
+            };
+
+            api.patch(
+                &name,
+                &PatchParams::apply(InstanceReconciler::NAME).force(),
+                &Patch::Apply(&resource),
+            )
+            .await?;
+        }
+    }
 
     Ok(())
 }
@@ -643,5 +958,26 @@ mod tests {
         );
 
         assert!(metadata.owner_references.is_none());
+    }
+
+    #[test]
+    fn reservation_and_port_claim_names_are_stable() {
+        let instance = make_instance();
+
+        assert_eq!(reservation_set_name(&instance), "inst-1-ports");
+        assert_eq!(port_claim_name(&instance, "http"), "inst-1-http");
+    }
+
+    #[test]
+    fn all_conditions_true_except_ignores_ready_condition() {
+        let mut status = InstanceStatus::default();
+        status
+            .conditions
+            .set("References", ConditionStatus::True, "Resolved", "");
+        status
+            .conditions
+            .set("Ready", ConditionStatus::False, "NotReady", "");
+
+        assert!(all_conditions_true_except(&status, "Ready"));
     }
 }
