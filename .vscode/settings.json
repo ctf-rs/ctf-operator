@@ -4,6 +4,8 @@
     "cargo check": true,
     "cargo test": true,
     "helm lint": true,
-    "helm unittest": true
+    "helm unittest": true,
+    "kubectl --context kind-playground": true,
+    "cargo run -p ctf-cli --bin ctf --": true
   }
 }

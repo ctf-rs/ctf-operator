@@ -9,6 +9,7 @@ use tokio::{fs, process::Command};
 
 use crate::{
     cli::{ClusterBackend, ClusterCreateArgs, KindProvider},
+    read_challenge,
     read_ctf,
 };
 use ctf_cli::models::Ctf;
@@ -79,7 +80,7 @@ pub async fn create(args: ClusterCreateArgs) -> anyhow::Result<()> {
         }
     }
 
-    apply_ctf_bundle(&ctf_model, &ctf_abs, &cluster_name).await?;
+    apply_ctf_bundle(&ctf_model, &ctf_abs, &cluster_name, &namespaces).await?;
 
     Ok(())
 }
@@ -468,20 +469,49 @@ where
     Ok(output.stdout)
 }
 
-async fn apply_ctf_bundle(ctf: &Ctf, ctf_abs: &Path, cluster_name: &str) -> anyhow::Result<()> {
+async fn apply_ctf_bundle(
+    ctf: &Ctf,
+    ctf_abs: &Path,
+    cluster_name: &str,
+    namespaces: &[String],
+) -> anyhow::Result<()> {
     let ctf_dir = ctf_abs
         .parent()
         .context("ctf yaml must have parent directory")?
         .to_path_buf();
 
+    let target_namespace = namespaces
+        .first()
+        .cloned()
+        .context("at least one namespace is required")?;
+
+    ensure_namespace(&target_namespace, cluster_name).await?;
+
+    let mut core_challenges = Vec::new();
+    let mut challenge_manifests = Vec::new();
+
     for challenge in &ctf.challenges {
         let challenge_path = ctf_dir.join(challenge);
+        let core_challenge = read_challenge(challenge_path).await?;
+        let challenge_manifest = ctf_cli::k8s::challenge_from_core(
+            ctf,
+            &core_challenge,
+            Some(target_namespace.clone()),
+        )?;
+        core_challenges.push(core_challenge);
+        challenge_manifests.push(challenge_manifest);
+    }
+
+    for challenge_manifest in challenge_manifests {
+        let challenge_manifest_path = temp_file_path("challenge-manifest", "yaml");
+        let challenge_manifest_yaml = serde_saphyr::to_string(&challenge_manifest)?;
+        fs::write(&challenge_manifest_path, challenge_manifest_yaml).await?;
         run_streamed_os(
             "kubectl",
             [
                 OsStr::new("apply"),
                 OsStr::new("-f"),
-                challenge_path.as_os_str(),
+                challenge_manifest_path.as_os_str(),
                 OsStr::new("--context"),
                 OsStr::new(&format!("kind-{cluster_name}")),
             ],
@@ -489,12 +519,21 @@ async fn apply_ctf_bundle(ctf: &Ctf, ctf_abs: &Path, cluster_name: &str) -> anyh
         .await?;
     }
 
+    let ctf_manifest = ctf_cli::k8s::ctf_from_core(
+        ctf,
+        &core_challenges,
+        Some(target_namespace),
+    );
+    let ctf_manifest_path = temp_file_path("ctf-manifest", "yaml");
+    let ctf_manifest_yaml = serde_saphyr::to_string(&ctf_manifest)?;
+    fs::write(&ctf_manifest_path, ctf_manifest_yaml).await?;
+
     run_streamed_os(
         "kubectl",
         [
             OsStr::new("apply"),
             OsStr::new("-f"),
-            ctf_abs.as_os_str(),
+            ctf_manifest_path.as_os_str(),
             OsStr::new("--context"),
             OsStr::new(&format!("kind-{cluster_name}")),
         ],

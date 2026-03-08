@@ -20,7 +20,7 @@ use k8s_openapi::{
         },
     },
     apimachinery::pkg::{
-        apis::meta::v1::{LabelSelector, OwnerReference},
+        apis::meta::v1::LabelSelector,
         util::intstr::IntOrString,
     },
 };
@@ -31,7 +31,7 @@ use kube::{
         finalizer::{finalizer, Event},
         reflector::ObjectRef,
     },
-    Api, Resource, ResourceExt,
+    Api, ResourceExt,
 };
 
 pub struct InstanceReconciler;
@@ -67,17 +67,6 @@ async fn reconcile_apply(
     let namespace = instance.namespace().unwrap_or_default();
     let target_namespace = target_namespace_for_instance(instance.as_ref(), &state)?;
     let mut status = instance.status.clone().unwrap_or_default();
-
-    let Some(owner_ref) = instance.controller_owner_ref(&()) else {
-        set_not_ready(
-            &mut status,
-            "References",
-            "MissingOwnerReference",
-            "Instance owner reference missing",
-        );
-        patch_status_if_needed(instance.as_ref(), &state, status).await?;
-        return Ok(Action::requeue(Duration::from_secs(30)));
-    };
 
     let ctf_ref = ObjectRef::<Ctf>::new(&instance.spec.ctf).within(&namespace);
     let challenge_ref = ObjectRef::<Challenge>::new(&instance.spec.challenge).within(&namespace);
@@ -125,7 +114,6 @@ async fn reconcile_apply(
         instance.as_ref(),
         ctf.as_ref(),
         challenge.as_ref(),
-        owner_ref.clone(),
         &target_namespace,
         &state,
     )
@@ -133,7 +121,6 @@ async fn reconcile_apply(
     ensure_deployment(
         instance.as_ref(),
         challenge.as_ref(),
-        owner_ref.clone(),
         &target_namespace,
         &state,
     )
@@ -141,7 +128,6 @@ async fn reconcile_apply(
     ensure_service(
         instance.as_ref(),
         challenge.as_ref(),
-        owner_ref,
         &target_namespace,
         &state,
     )
@@ -239,6 +225,19 @@ fn resource_labels(
     labels
 }
 
+fn managed_resource_metadata(
+    name: String,
+    namespace: String,
+    labels: BTreeMap<String, String>,
+) -> ObjectMeta {
+    ObjectMeta {
+        name: Some(name),
+        namespace: Some(namespace),
+        labels: Some(labels),
+        ..Default::default()
+    }
+}
+
 fn target_namespace_for_instance(
     instance: &Instance,
     state: &CtfState,
@@ -303,7 +302,6 @@ async fn ensure_flags(
     instance: &Instance,
     ctf: &Ctf,
     challenge: &Challenge,
-    owner_ref: OwnerReference,
     target_namespace: &str,
     state: &CtfState,
 ) -> Result<(), CtfError> {
@@ -331,13 +329,7 @@ async fn ensure_flags(
         };
 
         let resource = Flag {
-            metadata: ObjectMeta {
-                name: Some(name.clone()),
-                namespace: Some(namespace.clone()),
-                labels: Some(labels.clone()),
-                owner_references: Some(vec![owner_ref.clone()]),
-                ..Default::default()
-            },
+            metadata: managed_resource_metadata(name.clone(), namespace.clone(), labels.clone()),
             spec,
             status: None,
         };
@@ -356,7 +348,6 @@ async fn ensure_flags(
 async fn ensure_deployment(
     instance: &Instance,
     challenge: &Challenge,
-    owner_ref: OwnerReference,
     target_namespace: &str,
     state: &CtfState,
 ) -> Result<(), CtfError> {
@@ -394,13 +385,7 @@ async fn ensure_deployment(
         .collect::<Vec<_>>();
 
     let deployment = Deployment {
-        metadata: ObjectMeta {
-            name: Some(name.clone()),
-            namespace: Some(namespace.clone()),
-            labels: Some(labels.clone()),
-            owner_references: Some(vec![owner_ref]),
-            ..Default::default()
-        },
+        metadata: managed_resource_metadata(name.clone(), namespace.clone(), labels.clone()),
         spec: Some(DeploymentSpec {
             replicas: Some(1),
             selector: LabelSelector {
@@ -436,7 +421,6 @@ async fn ensure_deployment(
 async fn ensure_service(
     instance: &Instance,
     challenge: &Challenge,
-    owner_ref: OwnerReference,
     target_namespace: &str,
     state: &CtfState,
 ) -> Result<(), CtfError> {
@@ -472,13 +456,7 @@ async fn ensure_service(
     }
 
     let service = Service {
-        metadata: ObjectMeta {
-            name: Some(name.clone()),
-            namespace: Some(namespace.clone()),
-            labels: Some(labels.clone()),
-            owner_references: Some(vec![owner_ref]),
-            ..Default::default()
-        },
+        metadata: managed_resource_metadata(name.clone(), namespace.clone(), labels.clone()),
         spec: Some(ServiceSpec {
             selector: Some(labels),
             ports: Some(ports),
@@ -654,5 +632,16 @@ mod tests {
             Some("inst-1")
         );
         assert_eq!(labels.get(LABEL_NAMESPACE).map(String::as_str), Some("ctf"));
+    }
+
+    #[test]
+    fn managed_resource_metadata_does_not_set_owner_references() {
+        let metadata = managed_resource_metadata(
+            "inst-1".to_string(),
+            "ctf-inst-123".to_string(),
+            BTreeMap::new(),
+        );
+
+        assert!(metadata.owner_references.is_none());
     }
 }
