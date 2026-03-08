@@ -4,7 +4,7 @@ use crate::{
     runtime::{CtfError, CtfState},
     util::Reconciler,
 };
-use ctf_k8s::{ConditionStatus, ReservationSet, ReservationSetStatus};
+use ctf_cli::k8s::{ConditionStatus, ReservationSet, ReservationSetStatus};
 use kube::{runtime::reflector::ObjectRef, runtime::controller::Action, ResourceExt};
 
 pub struct ReservationSetReconciler;
@@ -111,7 +111,7 @@ fn refresh_claims(resource: &ReservationSet, state: &CtfState, status: &mut Rese
                     .unwrap_or_else(|| claim.metadata.namespace.as_deref().unwrap_or_default())
                     == reservation_ref.namespace.as_deref().unwrap_or_default()
         })
-        .map(|claim| ctf_k8s::ReservationSetClaimStatus {
+        .map(|claim| ctf_cli::k8s::ReservationSetClaimStatus {
             port: claim.status.as_ref().and_then(|status| status.port),
             name: claim.name_any(),
             namespace: claim.namespace().unwrap_or_default(),
@@ -133,7 +133,7 @@ fn refresh_claims(resource: &ReservationSet, state: &CtfState, status: &mut Rese
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ctf_k8s::ReservationSetSpec;
+    use ctf_cli::k8s::ReservationSetSpec;
 
     fn reservation(start: u16, end: u16) -> ReservationSet {
         let mut rs = ReservationSet::new(

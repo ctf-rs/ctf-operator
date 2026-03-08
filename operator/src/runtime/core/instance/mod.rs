@@ -8,7 +8,7 @@ use crate::{
     runtime::{CtfResult, CtfState},
     util::{Controller, Watcher},
 };
-use ctf_k8s::{Challenge, Ctf, Instance};
+use ctf_cli::k8s::{Challenge, Ctf, Instance};
 use k8s_openapi::api::{apps::v1::Deployment, core::v1::Service};
 use kube::{
     runtime::{
@@ -94,7 +94,7 @@ fn resource_to_instance_ref(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ctf_k8s::{ChallengeSpec, CtfSpec, InstanceSpec};
+    use ctf_cli::k8s::{ChallengeSpec, CtfSpec, InstanceSpec};
     use std::{collections::HashSet, sync::Arc};
 
     fn instance(name: &str, ns: &str, ctf: &str, challenge: &str) -> Arc<Instance> {
@@ -118,13 +118,13 @@ mod tests {
                 description: None,
                 conditions: Default::default(),
                 challenges: vec!["chall-a".to_string()],
-                flag: ctf_core::CtfFlag {
+                flag: ctf_cli::models::CtfFlag {
                     prefix: "SCC".to_string(),
-                    format: ctf_core::FlagFormat::Curly,
+                    format: ctf_cli::models::FlagFormat::Curly,
                     random: None,
                 },
-                network: ctf_core::CtfNetwork {
-                    ports: ctf_core::CtfPorts {
+                network: ctf_cli::models::CtfNetwork {
+                    ports: ctf_cli::models::CtfPorts {
                         start: 20000,
                         end: 20010,
                     },
@@ -147,7 +147,7 @@ mod tests {
                 authors: HashSet::new(),
                 conditions: Default::default(),
                 flags: vec![],
-                containers: vec![ctf_k8s::ChallengeContainer {
+                containers: vec![ctf_cli::k8s::ChallengeContainer {
                     name: "svc".to_string(),
                     image: "repo/svc:latest".to_string(),
                     flags: vec![],

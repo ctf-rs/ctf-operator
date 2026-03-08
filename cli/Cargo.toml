@@ -8,12 +8,24 @@ default-run = "ctf"
 name = "ctf"
 path = "src/main.rs"
 
+[lib]
+name = "ctf_cli"
+path = "src/lib.rs"
+
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["full"] }
 serde-saphyr = { workspace = true }
-ctf-core = { path = "../core" }
 aws-config = { workspace = true }
 aws-credential-types = { workspace = true }
 aws-sdk-s3 = { workspace = true }
+garde = { workspace = true, features = ["serde", "derive", "regex"] }
+rand = { workspace = true }
+schemars = { workspace = true, features = ["uuid1"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+k8s-openapi = { workspace = true, features = ["schemars", "v1_33"] }
+kube = { workspace = true, features = ["client", "derive", "runtime", "unstable-runtime"] }
+jiff = { workspace = true }

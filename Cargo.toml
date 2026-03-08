@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["cli", "operator", "core", "k8s"]
+members = ["cli", "operator"]
 
 [workspace.dependencies]
 anyhow = "1.0.102"

@@ -1,5 +1,5 @@
 use clap::Parser;
-use ctf_k8s::{Challenge, Ctf, Flag, Instance, PortClaim, ReservationSet};
+use ctf_cli::k8s::{Challenge, Ctf, Flag, Instance, PortClaim, ReservationSet};
 use ctf_operator::{runtime, Args, Command, CrdArgs, OperatorArgs};
 use kube::CustomResourceExt;
 

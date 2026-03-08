@@ -4,7 +4,7 @@ use crate::{
     runtime::{CtfError, CtfState},
     util::Reconciler,
 };
-use ctf_k8s::{ConditionStatus, Flag, FlagStatus};
+use ctf_cli::k8s::{ConditionStatus, Flag, FlagStatus};
 use kube::{runtime::controller::Action, ResourceExt};
 
 pub struct FlagReconciler;
@@ -41,7 +41,7 @@ impl Reconciler for FlagReconciler {
 }
 
 fn validate_and_generate(resource: &Flag, status: &mut FlagStatus) {
-    let core = ctf_core::Flag {
+    let core = ctf_cli::models::Flag {
         prefix: resource.spec.prefix.clone(),
         format: resource.spec.format,
         body: resource.spec.body.clone(),
@@ -92,14 +92,14 @@ fn validate_and_generate(resource: &Flag, status: &mut FlagStatus) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ctf_k8s::FlagSpec;
+    use ctf_cli::k8s::FlagSpec;
 
     fn valid_flag() -> Flag {
         let mut flag = Flag::new(
             "flag-1",
             FlagSpec {
                 prefix: "SCC".to_string(),
-                format: ctf_core::FlagFormat::Curly,
+                format: ctf_cli::models::FlagFormat::Curly,
                 body: "hello".to_string(),
                 random: None,
                 options: Default::default(),

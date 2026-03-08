@@ -4,7 +4,7 @@ use crate::{
     runtime::{CtfError, CtfState},
     util::Reconciler,
 };
-use ctf_k8s::{ConditionStatus, Ctf, CtfStatus};
+use ctf_cli::k8s::{ConditionStatus, Ctf, CtfStatus};
 use kube::{runtime::controller::Action, ResourceExt};
 
 pub struct CtfReconciler;
@@ -41,7 +41,7 @@ impl Reconciler for CtfReconciler {
 }
 
 fn validate_spec(resource: &Ctf, status: &mut CtfStatus) {
-    let core = ctf_core::Ctf {
+    let core = ctf_cli::models::Ctf {
         name: resource.name_any(),
         full_name: resource.spec.full_name.clone(),
         description: resource.spec.description.clone(),
@@ -82,7 +82,7 @@ fn validate_spec(resource: &Ctf, status: &mut CtfStatus) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ctf_k8s::CtfSpec;
+    use ctf_cli::k8s::CtfSpec;
 
     fn valid_ctf() -> Ctf {
         let mut ctf = Ctf::new(
@@ -92,13 +92,13 @@ mod tests {
                 description: Some("desc".to_string()),
                 conditions: Default::default(),
                 challenges: vec!["chall-1".to_string()],
-                flag: ctf_core::CtfFlag {
+                flag: ctf_cli::models::CtfFlag {
                     prefix: "SCC".to_string(),
-                    format: ctf_core::FlagFormat::Curly,
+                    format: ctf_cli::models::FlagFormat::Curly,
                     random: None,
                 },
-                network: ctf_core::CtfNetwork {
-                    ports: ctf_core::CtfPorts {
+                network: ctf_cli::models::CtfNetwork {
+                    ports: ctf_cli::models::CtfPorts {
                         start: 20000,
                         end: 20100,
                     },

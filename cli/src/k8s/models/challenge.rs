@@ -28,14 +28,14 @@ pub struct ChallengeSpec {
     pub full_name: String,
     #[serde(default)]
     pub description: Option<String>,
-    pub categories: HashSet<ctf_core::ChallengeCategory>,
+    pub categories: HashSet<crate::models::ChallengeCategory>,
     #[serde(default)]
     pub tags: HashSet<String>,
     #[serde(default)]
     pub authors: HashSet<String>,
     #[serde(default)]
     pub conditions: Conditions,
-    pub flags: Vec<ctf_core::ChallengeFlag>,
+    pub flags: Vec<crate::models::ChallengeFlag>,
     pub containers: Vec<ChallengeContainer>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<ChallengeFileRef>,
@@ -52,9 +52,9 @@ pub struct ChallengeContainer {
     pub name: String,
     pub image: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub flags: Vec<ctf_core::ContainerFlag>,
+    pub flags: Vec<crate::models::ContainerFlag>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub ports: Vec<ctf_core::ContainerPort>,
+    pub ports: Vec<crate::models::ContainerPort>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]

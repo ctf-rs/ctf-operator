@@ -34,8 +34,8 @@ pub struct CtfSpec {
     #[serde(default)]
     pub conditions: Conditions,
     pub challenges: Vec<String>,
-    pub flag: ctf_core::CtfFlag,
-    pub network: ctf_core::CtfNetwork,
+    pub flag: crate::models::CtfFlag,
+    pub network: crate::models::CtfNetwork,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema, Default)]

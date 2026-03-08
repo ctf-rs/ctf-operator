@@ -1,6 +1,6 @@
-use ctf_core::{Challenge as CoreChallenge, Ctf as CoreCtf, CtfStorageKind};
+use crate::models::{Challenge as CoreChallenge, Ctf as CoreCtf, CtfStorageKind};
 
-use crate::{
+use crate::k8s::{
     Challenge, ChallengeContainer, ChallengeFileRef, ChallengeSpec, ConversionError,
     ConversionResult, Ctf, CtfSpec, Instance, InstanceSpec,
 };

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::bail;
 use clap::Parser;
-use ctf_core::{Challenge, Ctf};
+use ctf_cli::models::{Challenge, Ctf};
 
 pub mod build;
 pub mod cli;

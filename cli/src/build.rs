@@ -1,5 +1,5 @@
 use anyhow::{bail, Context};
-use ctf_core::ContainerImage;
+use ctf_cli::models::ContainerImage;
 use std::{collections::HashSet, path::Path};
 use tokio::process::Command;
 

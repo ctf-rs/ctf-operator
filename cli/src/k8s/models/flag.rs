@@ -28,12 +28,12 @@ use crate::Conditions;
 pub struct FlagSpec {
     pub prefix: String,
     #[serde(default)]
-    pub format: ctf_core::FlagFormat,
+    pub format: crate::models::FlagFormat,
     pub body: String,
     #[serde(default)]
-    pub random: Option<ctf_core::FlagRandomRules>,
+    pub random: Option<crate::models::FlagRandomRules>,
     #[serde(default)]
-    pub options: ctf_core::FlagMatchOptions,
+    pub options: crate::models::FlagMatchOptions,
     #[serde(default)]
     pub conditions: Conditions,
 }
@@ -46,7 +46,7 @@ pub struct FlagStatus {
     pub conditions: Conditions,
 }
 
-pub type FlagFormat = ctf_core::FlagFormat;
-pub type FlagRandomRules = ctf_core::FlagRandomRules;
-pub type FlagMatchOptions = ctf_core::FlagMatchOptions;
-pub type ChallengeFlag = ctf_core::ChallengeFlag;
+pub type FlagFormat = crate::models::FlagFormat;
+pub type FlagRandomRules = crate::models::FlagRandomRules;
+pub type FlagMatchOptions = crate::models::FlagMatchOptions;
+pub type ChallengeFlag = crate::models::ChallengeFlag;

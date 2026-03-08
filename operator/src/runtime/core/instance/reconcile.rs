@@ -11,7 +11,7 @@ use crate::{
     },
     util::Reconciler,
 };
-use ctf_k8s::{Challenge, ConditionStatus, Ctf, Flag, FlagSpec, Instance, InstanceStatus};
+use ctf_cli::k8s::{Challenge, ConditionStatus, Ctf, Flag, FlagSpec, Instance, InstanceStatus};
 use k8s_openapi::{
     api::{
         apps::v1::{Deployment, DeploymentSpec},
@@ -501,7 +501,7 @@ async fn ensure_service(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ctf_k8s::{ChallengeSpec, CtfSpec};
+    use ctf_cli::k8s::{ChallengeSpec, CtfSpec};
     use std::collections::HashSet;
 
     fn make_ctf(name: &str, ready: bool) -> Ctf {
@@ -512,13 +512,13 @@ mod tests {
                 description: None,
                 conditions: Default::default(),
                 challenges: vec!["chall-1".to_string()],
-                flag: ctf_core::CtfFlag {
+                flag: ctf_cli::models::CtfFlag {
                     prefix: "SCC".to_string(),
-                    format: ctf_core::FlagFormat::Curly,
+                    format: ctf_cli::models::FlagFormat::Curly,
                     random: None,
                 },
-                network: ctf_core::CtfNetwork {
-                    ports: ctf_core::CtfPorts {
+                network: ctf_cli::models::CtfNetwork {
+                    ports: ctf_cli::models::CtfPorts {
                         start: 20000,
                         end: 20100,
                     },
@@ -528,7 +528,7 @@ mod tests {
         );
         ctf.metadata.namespace = Some("ctf".to_string());
         if ready {
-            let mut status = ctf_k8s::CtfStatus::default();
+            let mut status = ctf_cli::k8s::CtfStatus::default();
             status
                 .conditions
                 .set("Validation", ConditionStatus::True, "Validated", "");
@@ -550,7 +550,7 @@ mod tests {
                 tags: HashSet::new(),
                 authors: HashSet::new(),
                 conditions: Default::default(),
-                flags: vec![ctf_core::ChallengeFlag {
+                flags: vec![ctf_cli::models::ChallengeFlag {
                     name: "flag-1".to_string(),
                     body: "body".to_string(),
                     prefix: None,
@@ -558,7 +558,7 @@ mod tests {
                     random: None,
                     options: Default::default(),
                 }],
-                containers: vec![ctf_k8s::ChallengeContainer {
+                containers: vec![ctf_cli::k8s::ChallengeContainer {
                     name: "svc".to_string(),
                     image: "repo/svc:latest".to_string(),
                     flags: vec![],
@@ -569,7 +569,7 @@ mod tests {
         );
         challenge.metadata.namespace = Some("ctf".to_string());
         if ready {
-            let mut status = ctf_k8s::ChallengeStatus::default();
+            let mut status = ctf_cli::k8s::ChallengeStatus::default();
             status
                 .conditions
                 .set("Validation", ConditionStatus::True, "Validated", "");
@@ -584,7 +584,7 @@ mod tests {
     fn make_instance() -> Instance {
         let mut instance = Instance::new(
             "inst-1",
-            ctf_k8s::InstanceSpec {
+            ctf_cli::k8s::InstanceSpec {
                 ctf: "ctf-1".to_string(),
                 challenge: "chall-1".to_string(),
                 conditions: Default::default(),

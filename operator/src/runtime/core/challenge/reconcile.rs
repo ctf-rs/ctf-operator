@@ -4,8 +4,8 @@ use crate::{
     runtime::{CtfError, CtfState},
     util::Reconciler,
 };
-use ctf_core::{ChallengeContainer, ChallengeFlag, ContainerImage};
-use ctf_k8s::{Challenge, ChallengeStatus, ConditionStatus};
+use ctf_cli::models::{ChallengeContainer, ChallengeFlag, ContainerImage};
+use ctf_cli::k8s::{Challenge, ChallengeStatus, ConditionStatus};
 use kube::{runtime::controller::Action, ResourceExt};
 
 pub struct ChallengeReconciler;
@@ -42,7 +42,7 @@ impl Reconciler for ChallengeReconciler {
 }
 
 fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
-    let core = ctf_core::Challenge {
+    let core = ctf_cli::models::Challenge {
         name: resource.name_any(),
         full_name: resource.spec.full_name.clone(),
         description: resource.spec.description.clone(),
@@ -54,7 +54,7 @@ fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
             .files
             .iter()
             .map(|file| match file {
-                ctf_k8s::ChallengeFileRef::S3 { key, .. } => PathBuf::from(key),
+                ctf_cli::k8s::ChallengeFileRef::S3 { key, .. } => PathBuf::from(key),
             })
             .collect(),
         flags: resource
@@ -115,7 +115,7 @@ fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ctf_k8s::{ChallengeContainer, ChallengeFileRef, ChallengeSpec};
+    use ctf_cli::k8s::{ChallengeContainer, ChallengeFileRef, ChallengeSpec};
     use std::collections::HashSet;
 
     fn valid_challenge() -> Challenge {
@@ -128,7 +128,7 @@ mod tests {
                 tags: HashSet::new(),
                 authors: HashSet::new(),
                 conditions: Default::default(),
-                flags: vec![ctf_core::ChallengeFlag {
+                flags: vec![ctf_cli::models::ChallengeFlag {
                     name: "flag-1".to_string(),
                     body: "flagbody".to_string(),
                     prefix: None,
@@ -139,15 +139,15 @@ mod tests {
                 containers: vec![ChallengeContainer {
                     name: "svc".to_string(),
                     image: "repo/svc:latest".to_string(),
-                    flags: vec![ctf_core::ContainerFlag {
+                    flags: vec![ctf_cli::models::ContainerFlag {
                         name: "flag-1".to_string(),
                         env: "FLAG".to_string(),
                     }],
-                    ports: vec![ctf_core::ContainerPort {
+                    ports: vec![ctf_cli::models::ContainerPort {
                         name: "http".to_string(),
                         container_port: 8080,
                         expose: true,
-                        port_type: ctf_core::ChallengePortType::HTTP,
+                        port_type: ctf_cli::models::ChallengePortType::HTTP,
                     }],
                 }],
                 files: vec![ChallengeFileRef::S3 {
@@ -173,7 +173,7 @@ mod tests {
     #[test]
     fn validate_spec_sets_ready_false_for_invalid_spec() {
         let mut challenge = valid_challenge();
-        challenge.spec.flags.push(ctf_core::ChallengeFlag {
+        challenge.spec.flags.push(ctf_cli::models::ChallengeFlag {
             name: "flag-1".to_string(),
             body: "other".to_string(),
             prefix: None,

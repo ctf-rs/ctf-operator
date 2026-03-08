@@ -2,6 +2,7 @@
 name = "ctf-operator"
 version = "0.1.0"
 edition = "2021"
+publish = false
 
 [dependencies]
 anyhow = { workspace = true }
@@ -24,5 +25,4 @@ k8s-openapi = { workspace = true, features = ["schemars", "v1_33"] }
 kube = { workspace = true, features = ["client", "derive", "runtime", "unstable-runtime"] }
 rustls = { workspace = true, default-features = false, features = ["ring", "std"] }
 
-ctf-core = { path = "../core" }
-ctf-k8s = { path = "../k8s" }
+ctf-cli = { path = "../cli" }

@@ -4,7 +4,7 @@ use crate::{
     runtime::{CtfError, CtfState},
     util::Reconciler,
 };
-use ctf_k8s::{ConditionStatus, PortClaim, PortClaimStatus, ReservationSet};
+use ctf_cli::k8s::{ConditionStatus, PortClaim, PortClaimStatus, ReservationSet};
 use kube::{runtime::controller::Action, runtime::reflector::ObjectRef, ResourceExt};
 
 pub struct PortClaimReconciler;
@@ -200,7 +200,7 @@ fn allocate_port(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ctf_k8s::{PortClaimSpec, ReservationRef};
+    use ctf_cli::k8s::{PortClaimSpec, ReservationRef};
 
     fn claim(
         name: &str,

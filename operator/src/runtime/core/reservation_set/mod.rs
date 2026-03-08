@@ -6,7 +6,7 @@ use crate::{
     runtime::{CtfResult, CtfState},
     util::{Controller, Watcher},
 };
-use ctf_k8s::{PortClaim, ReservationSet};
+use ctf_cli::k8s::{PortClaim, ReservationSet};
 use kube::{
     runtime::{
         reflector::ObjectRef,
@@ -53,7 +53,7 @@ fn port_claim_to_reservation_ref(port_claim: &PortClaim) -> Option<ObjectRef<Res
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ctf_k8s::{PortClaimSpec, ReservationRef};
+    use ctf_cli::k8s::{PortClaimSpec, ReservationRef};
 
     fn make_port_claim(name: &str, ns: Option<&str>, reservation_name: &str, reservation_ns: Option<&str>) -> PortClaim {
         let mut claim = PortClaim::new(

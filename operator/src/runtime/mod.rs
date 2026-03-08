@@ -6,7 +6,7 @@ pub use error::*;
 pub use state::*;
 
 use crate::util::{Waiter, Watcher};
-use ctf_k8s::{PortClaim, ReservationSet};
+use ctf_cli::k8s::{PortClaim, ReservationSet};
 use k8s_openapi::api::{apps::v1::Deployment, core::v1::Service};
 use kube::{runtime::watcher::Config, Client};
 use std::{collections::HashSet, sync::Arc};
