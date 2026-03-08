@@ -61,7 +61,7 @@ Permissions include:
 The CLI now includes a local cluster bootstrap flow using `kind`.
 
 ```bash
-cargo run -p ctf -- cluster create
+cargo run -p ctf-cli -- cluster create
 ```
 
 What it does:
@@ -75,13 +75,13 @@ What it does:
 Example with CTF apply:
 
 ```bash
-cargo run -p ctf -- cluster create --ctf ./examples/ctf.yaml
+cargo run -p ctf-cli -- cluster create --ctf ./examples/ctf.yaml
 ```
 
 Example with multiple watched namespaces:
 
 ```bash
-cargo run -p ctf -- cluster create \
+cargo run -p ctf-cli -- cluster create \
 	--namespace ctf,ctf-admin \
 	--instance-namespace-prefix ctf-inst- \
 	--operator-replicas 1

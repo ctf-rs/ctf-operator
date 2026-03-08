@@ -1,7 +1,12 @@
 [package]
-name = "ctf"
+name = "ctf-cli"
 version = "0.1.0"
 edition = "2021"
+default-run = "ctf"
+
+[[bin]]
+name = "ctf"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
