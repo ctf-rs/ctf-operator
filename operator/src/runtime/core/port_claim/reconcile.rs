@@ -6,6 +6,7 @@ use crate::{
 };
 use ctf_cli::k8s::{ConditionStatus, PortClaim, PortClaimStatus, ReservationSet};
 use kube::{runtime::controller::Action, runtime::reflector::ObjectRef, ResourceExt};
+use rand::RngExt;
 
 pub struct PortClaimReconciler;
 
@@ -182,7 +183,7 @@ fn allocate_port(
     let selected = status
         .port
         .filter(|port| range.contains(port) && !used_ports.contains(port))
-        .or_else(|| range.into_iter().find(|port| !used_ports.contains(port)));
+        .or_else(|| pick_free_port(range, &used_ports));
 
     match selected {
         Some(port) => {
@@ -203,10 +204,35 @@ fn allocate_port(
     }
 }
 
+fn pick_free_port(range: std::ops::RangeInclusive<u16>, used_ports: &HashSet<u16>) -> Option<u16> {
+    let mut rng = rand::rng();
+    pick_free_port_with_rng(range, used_ports, &mut rng)
+}
+
+fn pick_free_port_with_rng(
+    range: std::ops::RangeInclusive<u16>,
+    used_ports: &HashSet<u16>,
+    rng: &mut impl rand::Rng,
+) -> Option<u16> {
+    if range.clone().count() == used_ports.len() {
+        return None;
+    }
+
+    for _ in 0..32 {
+        let port = rng.random_range(range.clone());
+        if !used_ports.contains(&port) {
+            return Some(port);
+        }
+    }
+
+    range.into_iter().find(|port| !used_ports.contains(port))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use ctf_cli::k8s::{PortClaimSpec, ReservationRef};
+    use rand::SeedableRng;
 
     fn claim(
         name: &str,
@@ -257,5 +283,40 @@ mod tests {
         let fallback_ref =
             reservation_ref_for_port_claim(&fallback).expect("expected fallback ref");
         assert_eq!(fallback_ref.namespace.as_deref(), Some("ctf"));
+    }
+
+    #[test]
+    fn pick_free_port_returns_none_when_range_exhausted() {
+        let used = [20000_u16, 20001_u16, 20002_u16]
+            .into_iter()
+            .collect::<HashSet<_>>();
+
+        let selected = pick_free_port(20000..=20002, &used);
+        assert!(selected.is_none());
+    }
+
+    #[test]
+    fn pick_free_port_never_returns_reserved_port() {
+        let used = [20000_u16, 20001_u16, 20002_u16]
+            .into_iter()
+            .collect::<HashSet<_>>();
+
+        let selected = pick_free_port(20000..=20005, &used).expect("expected free port");
+        assert!((20000..=20005).contains(&selected));
+        assert!(!used.contains(&selected));
+    }
+
+    #[test]
+    fn pick_free_port_with_rng_is_deterministic_for_seed() {
+        let used = [20000_u16, 20001_u16, 20002_u16]
+            .into_iter()
+            .collect::<HashSet<_>>();
+        let mut left_rng = rand::rngs::StdRng::seed_from_u64(0xC0FFEE);
+        let mut right_rng = rand::rngs::StdRng::seed_from_u64(0xC0FFEE);
+
+        let left = pick_free_port_with_rng(20000..=20010, &used, &mut left_rng);
+        let right = pick_free_port_with_rng(20000..=20010, &used, &mut right_rng);
+
+        assert_eq!(left, right);
     }
 }

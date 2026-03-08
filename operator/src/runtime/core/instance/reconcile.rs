@@ -350,6 +350,18 @@ fn port_claim_name(instance: &Instance, port_name: &str) -> String {
     format!("{}-{}", instance.name_any(), port_name)
 }
 
+fn exposed_port_names(challenge: &Challenge) -> BTreeSet<String> {
+    let mut names = BTreeSet::new();
+    for container in &challenge.spec.containers {
+        for port in &container.ports {
+            if port.expose {
+                names.insert(port.name.clone());
+            }
+        }
+    }
+    names
+}
+
 #[derive(Default)]
 struct ObservedInstanceResources {
     reservation_ready: bool,
@@ -684,6 +696,15 @@ async fn ensure_service(
     }
 
     if ports.is_empty() {
+        if let Err(err) = Api::<Service>::namespaced(state.client.clone(), &namespace)
+            .delete(&name, &DeleteParams::default())
+            .await
+        {
+            match err {
+                kube::Error::Api(ae) if ae.code == 404 => {}
+                other => return Err(other.into()),
+            }
+        }
         return Ok(());
     }
 
@@ -750,6 +771,39 @@ async fn ensure_port_claims(
     labels.insert("app.kubernetes.io/name".to_string(), instance.name_any());
 
     let api: Api<PortClaim> = Api::namespaced(state.client.clone(), target_namespace);
+
+    let desired_port_names = exposed_port_names(challenge);
+    let desired_claim_names = desired_port_names
+        .iter()
+        .map(|port_name| port_claim_name(instance, port_name))
+        .collect::<BTreeSet<_>>();
+
+    let stale_claim_names = state
+        .port_claims
+        .state()
+        .into_iter()
+        .filter(|claim| claim.namespace().as_deref() == Some(target_namespace))
+        .filter(|claim| {
+            claim
+                .metadata
+                .labels
+                .as_ref()
+                .and_then(|labels| labels.get(LABEL_INSTANCE))
+                .map(|label| label == &instance.name_any())
+                .unwrap_or(false)
+        })
+        .map(|claim| claim.name_any())
+        .filter(|name| !desired_claim_names.contains(name))
+        .collect::<Vec<_>>();
+
+    for stale_name in stale_claim_names {
+        if let Err(err) = api.delete(&stale_name, &DeleteParams::default()).await {
+            match err {
+                kube::Error::Api(ae) if ae.code == 404 => {}
+                other => return Err(other.into()),
+            }
+        }
+    }
 
     let mut seen_names = BTreeSet::new();
     for container in &challenge.spec.containers {
@@ -979,5 +1033,66 @@ mod tests {
             .set("Ready", ConditionStatus::False, "NotReady", "");
 
         assert!(all_conditions_true_except(&status, "Ready"));
+    }
+
+    #[test]
+    fn exposed_port_names_only_returns_exposed_ports() {
+        let mut challenge = make_challenge("chall-1", true);
+        challenge.spec.containers = vec![ctf_cli::k8s::ChallengeContainer {
+            name: "svc".to_string(),
+            image: "repo/svc:latest".to_string(),
+            flags: vec![],
+            ports: vec![
+                ctf_cli::models::ContainerPort {
+                    name: "http".to_string(),
+                    container_port: 80,
+                    expose: true,
+                    port_type: ctf_cli::models::ChallengePortType::HTTP,
+                },
+                ctf_cli::models::ContainerPort {
+                    name: "admin".to_string(),
+                    container_port: 8080,
+                    expose: false,
+                    port_type: ctf_cli::models::ChallengePortType::HTTP,
+                },
+            ],
+        }];
+
+        let names = exposed_port_names(&challenge);
+        assert!(names.contains("http"));
+        assert!(!names.contains("admin"));
+    }
+
+    #[test]
+    fn exposed_port_names_deduplicates_names_across_containers() {
+        let mut challenge = make_challenge("chall-1", true);
+        challenge.spec.containers = vec![
+            ctf_cli::k8s::ChallengeContainer {
+                name: "svc-a".to_string(),
+                image: "repo/svc-a:latest".to_string(),
+                flags: vec![],
+                ports: vec![ctf_cli::models::ContainerPort {
+                    name: "http".to_string(),
+                    container_port: 80,
+                    expose: true,
+                    port_type: ctf_cli::models::ChallengePortType::HTTP,
+                }],
+            },
+            ctf_cli::k8s::ChallengeContainer {
+                name: "svc-b".to_string(),
+                image: "repo/svc-b:latest".to_string(),
+                flags: vec![],
+                ports: vec![ctf_cli::models::ContainerPort {
+                    name: "http".to_string(),
+                    container_port: 8080,
+                    expose: true,
+                    port_type: ctf_cli::models::ChallengePortType::HTTP,
+                }],
+            },
+        ];
+
+        let names = exposed_port_names(&challenge);
+        assert_eq!(names.len(), 1);
+        assert!(names.contains("http"));
     }
 }

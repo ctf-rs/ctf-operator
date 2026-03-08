@@ -113,38 +113,49 @@ impl Flag {
         let prefix = &self.prefix;
         let body = &self.body;
         let (start, end) = match self.format {
-            FlagFormat::Curly => (format!("{prefix}{{{body}"), "}"),
-            FlagFormat::Round => (format!("{prefix}({body}"), ")"),
-            FlagFormat::Square => (format!("{prefix}[{body}"), "]"),
-            FlagFormat::Angle => (format!("{prefix}<{body}"), ">"),
+            FlagFormat::Curly => (format!("{prefix}{{"), "}"),
+            FlagFormat::Round => (format!("{prefix}("), ")"),
+            FlagFormat::Square => (format!("{prefix}["), "]"),
+            FlagFormat::Angle => (format!("{prefix}<"), ">"),
             FlagFormat::Underscore => (format!("{prefix}_"), ""),
         };
-
-        let flag_random_len = self.random.as_ref().map(|r| r.len as usize).unwrap_or(0);
-        let flag_len = start.len() + body.len() + flag_random_len + end.len();
-
-        if flag.len() != flag_len {
-            return false;
-        }
 
         if !flag.starts_with(&start) || !flag.ends_with(end) {
             return false;
         }
 
-        let body_start = start.len();
-        let body_end = body_start + body.len();
-        let flag_body = &flag[body_start..body_end];
-        if self.options.ignore_case && !flag_body.eq_ignore_ascii_case(&body) || flag_body != body {
+        if flag.len() < start.len() + body.len() + end.len() {
+            return false;
+        }
+
+        let content_start = start.len();
+        let content_end = flag.len() - end.len();
+        let content = &flag[content_start..content_end];
+
+        if content.len() < body.len() {
+            return false;
+        }
+
+        let (flag_body, flag_random) = content.split_at(body.len());
+        let body_matches = if self.options.ignore_case {
+            flag_body.eq_ignore_ascii_case(body)
+        } else {
+            flag_body == body
+        };
+
+        if !body_matches {
             return false;
         }
 
         if let Some(random) = &self.random {
-            debug_assert_eq!(flag_random_len, random.len as usize);
-            let flag_end = body_end + flag_random_len;
-            let flag_random = &flag[body_end..flag_end];
+            if flag_random.len() != random.len as usize {
+                return false;
+            }
             if !random.verify(flag_random, &self.options) {
                 return false;
             }
+        } else if !flag_random.is_empty() {
+            return false;
         }
 
         true
@@ -152,7 +163,10 @@ impl Flag {
 
     pub fn generate(&self) -> String {
         let prefix = &self.prefix;
-        let body = self.body.to_owned();
+        let mut body = self.body.to_owned();
+        if let Some(random) = &self.random {
+            body.push_str(&random.generate());
+        }
         match self.format {
             FlagFormat::Curly => format!("{prefix}{{{body}}}"),
             FlagFormat::Round => format!("{prefix}({body})"),
@@ -219,8 +233,286 @@ impl FlagRandomRules {
                     alphabet.push(c);
                 }
             }
-            alphabet.push_str(&self.special);
         }
         alphabet
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_flag() -> Flag {
+        Flag {
+            prefix: "SCC".to_string(),
+            format: FlagFormat::Curly,
+            body: "body".to_string(),
+            random: None,
+            options: FlagMatchOptions::default(),
+        }
+    }
+
+    #[test]
+    fn validate_strict_accepts_valid_flag() {
+        let flag = make_flag();
+        assert!(flag.validate_strict().is_ok());
+    }
+
+    #[test]
+    fn validate_strict_rejects_invalid_prefix_lengths() {
+        let mut short = make_flag();
+        short.prefix = "AB".to_string();
+        assert!(short.validate_strict().is_err());
+
+        let mut long = make_flag();
+        long.prefix = "ABCDEFG".to_string();
+        assert!(long.validate_strict().is_err());
+    }
+
+    #[test]
+    fn validate_strict_rejects_non_alphanumeric_prefix() {
+        let mut flag = make_flag();
+        flag.prefix = "SC-1".to_string();
+        assert!(flag.validate_strict().is_err());
+    }
+
+    #[test]
+    fn validate_strict_rejects_invalid_body_lengths() {
+        let mut empty = make_flag();
+        empty.body = String::new();
+        assert!(empty.validate_strict().is_err());
+
+        let mut too_long = make_flag();
+        too_long.body = "a".repeat(128);
+        assert!(too_long.validate_strict().is_err());
+    }
+
+    #[test]
+    fn validate_strict_rejects_invalid_random_bounds() {
+        let mut zero_len = make_flag();
+        zero_len.random = Some(FlagRandomRules {
+            len: 0,
+            upper: true,
+            lower: true,
+            digits: true,
+            special: String::new(),
+        });
+        assert!(zero_len.validate_strict().is_err());
+
+        let mut too_large = make_flag();
+        too_large.random = Some(FlagRandomRules {
+            len: 64,
+            upper: true,
+            lower: true,
+            digits: true,
+            special: String::new(),
+        });
+        assert!(too_large.validate_strict().is_err());
+    }
+
+    #[test]
+    fn validate_strict_rejects_duplicate_or_non_ascii_special_chars() {
+        let mut duplicate_special = make_flag();
+        duplicate_special.random = Some(FlagRandomRules {
+            len: 8,
+            upper: false,
+            lower: false,
+            digits: true,
+            special: "!!".to_string(),
+        });
+        assert!(duplicate_special.validate_strict().is_err());
+
+        let mut non_ascii_special = make_flag();
+        non_ascii_special.random = Some(FlagRandomRules {
+            len: 8,
+            upper: false,
+            lower: false,
+            digits: true,
+            special: "é".to_string(),
+        });
+        assert!(non_ascii_special.validate_strict().is_err());
+    }
+
+    #[test]
+    fn generate_includes_random_suffix_when_configured() {
+        let mut flag = make_flag();
+        flag.random = Some(FlagRandomRules {
+            len: 6,
+            upper: false,
+            lower: false,
+            digits: true,
+            special: String::new(),
+        });
+
+        let generated = flag.generate();
+        assert!(generated.starts_with("SCC{body"));
+        assert!(generated.ends_with('}'));
+        assert_eq!(generated.len(), "SCC{".len() + "body".len() + 6 + "}".len());
+        assert!(flag.verify(&generated));
+    }
+
+    #[test]
+    fn verify_rejects_missing_or_extra_random_content() {
+        let mut flag = make_flag();
+        flag.random = Some(FlagRandomRules {
+            len: 4,
+            upper: false,
+            lower: false,
+            digits: true,
+            special: String::new(),
+        });
+
+        assert!(!flag.verify("SCC{body}"));
+        assert!(!flag.verify("SCC{body12345}"));
+    }
+
+    #[test]
+    fn generate_uses_correct_delimiters_for_all_formats() {
+        let mut flag = make_flag();
+
+        flag.format = FlagFormat::Curly;
+        assert_eq!(flag.generate(), "SCC{body}");
+
+        flag.format = FlagFormat::Round;
+        assert_eq!(flag.generate(), "SCC(body)");
+
+        flag.format = FlagFormat::Square;
+        assert_eq!(flag.generate(), "SCC[body]");
+
+        flag.format = FlagFormat::Angle;
+        assert_eq!(flag.generate(), "SCC<body>");
+
+        flag.format = FlagFormat::Underscore;
+        assert_eq!(flag.generate(), "SCC_body");
+    }
+
+    #[test]
+    fn verify_accepts_generated_output_for_all_formats() {
+        let formats = [
+            FlagFormat::Curly,
+            FlagFormat::Round,
+            FlagFormat::Square,
+            FlagFormat::Angle,
+            FlagFormat::Underscore,
+        ];
+
+        for format in formats {
+            let mut flag = make_flag();
+            flag.format = format;
+            let generated = flag.generate();
+            assert!(flag.verify(&generated));
+        }
+    }
+
+    #[test]
+    fn verify_rejects_prefix_or_delimiter_mismatch() {
+        let flag = make_flag();
+        assert!(!flag.verify("XYZ{body}"));
+        assert!(!flag.verify("SCC(body)"));
+    }
+
+    #[test]
+    fn verify_respects_ignore_case_option() {
+        let mut case_sensitive = make_flag();
+        case_sensitive.body = "AbCd".to_string();
+        case_sensitive.options.ignore_case = false;
+        assert!(!case_sensitive.verify("SCC{abcd}"));
+
+        let mut ignore_case = case_sensitive.clone();
+        ignore_case.options.ignore_case = true;
+        assert!(ignore_case.verify("SCC{abcd}"));
+        assert!(ignore_case.verify("SCC{ABCD}"));
+    }
+
+    #[test]
+    fn random_alphabet_includes_enabled_sets_only() {
+        let rules = FlagRandomRules {
+            len: 8,
+            upper: false,
+            lower: false,
+            digits: true,
+            special: "!@".to_string(),
+        };
+
+        let alphabet = rules.alphabet();
+        assert!(alphabet.contains('0'));
+        assert!(alphabet.contains('9'));
+        assert!(alphabet.contains('!'));
+        assert!(alphabet.contains('@'));
+        assert!(!alphabet.contains('A'));
+        assert!(!alphabet.contains('a'));
+    }
+
+    #[test]
+    fn random_alphabet_deduplicates_special_chars_against_base_sets() {
+        let rules = FlagRandomRules {
+            len: 8,
+            upper: false,
+            lower: false,
+            digits: true,
+            special: "019!".to_string(),
+        };
+
+        let alphabet = rules.alphabet();
+        let count_0 = alphabet.chars().filter(|c| *c == '0').count();
+        let count_1 = alphabet.chars().filter(|c| *c == '1').count();
+        let count_9 = alphabet.chars().filter(|c| *c == '9').count();
+        assert_eq!(count_0, 1);
+        assert_eq!(count_1, 1);
+        assert_eq!(count_9, 1);
+        assert!(alphabet.contains('!'));
+    }
+
+    #[test]
+    fn random_generate_matches_len_and_allowed_charset() {
+        let rules = FlagRandomRules {
+            len: 32,
+            upper: true,
+            lower: false,
+            digits: true,
+            special: "!".to_string(),
+        };
+        let generated = rules.generate();
+        assert_eq!(generated.len(), 32);
+        assert!(rules.verify(&generated, &FlagMatchOptions::default()));
+    }
+
+    #[test]
+    fn random_verify_respects_ignore_case() {
+        let rules = FlagRandomRules {
+            len: 4,
+            upper: true,
+            lower: false,
+            digits: false,
+            special: String::new(),
+        };
+
+        let strict = FlagMatchOptions { ignore_case: false };
+        let insensitive = FlagMatchOptions { ignore_case: true };
+
+        assert!(!rules.verify("abcd", &strict));
+        assert!(rules.verify("abcd", &insensitive));
+    }
+
+    #[test]
+    fn verify_requires_exact_random_length() {
+        let mut flag = make_flag();
+        flag.random = Some(FlagRandomRules {
+            len: 3,
+            upper: false,
+            lower: false,
+            digits: true,
+            special: String::new(),
+        });
+
+        assert!(flag.verify("SCC{body123}"));
+        assert!(!flag.verify("SCC{body12}"));
+        assert!(!flag.verify("SCC{body1234}"));
+    }
+
+    #[test]
+    fn verify_rejects_extra_content_when_random_is_none() {
+        let flag = make_flag();
+        assert!(!flag.verify("SCC{body123}"));
     }
 }
