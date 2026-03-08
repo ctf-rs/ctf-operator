@@ -111,3 +111,82 @@ fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
             .set("Ready", ConditionStatus::False, "NotReady", "");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ctf_k8s::{ChallengeContainer, ChallengeFileRef, ChallengeSpec};
+    use std::collections::HashSet;
+
+    fn valid_challenge() -> Challenge {
+        let mut challenge = Challenge::new(
+            "chall-1",
+            ChallengeSpec {
+                full_name: "Challenge One".to_string(),
+                description: Some("desc".to_string()),
+                categories: HashSet::new(),
+                tags: HashSet::new(),
+                authors: HashSet::new(),
+                conditions: Default::default(),
+                flags: vec![ctf_core::ChallengeFlag {
+                    name: "flag-1".to_string(),
+                    body: "flagbody".to_string(),
+                    prefix: None,
+                    format: None,
+                    random: None,
+                    options: Default::default(),
+                }],
+                containers: vec![ChallengeContainer {
+                    name: "svc".to_string(),
+                    image: "repo/svc:latest".to_string(),
+                    flags: vec![ctf_core::ContainerFlag {
+                        name: "flag-1".to_string(),
+                        env: "FLAG".to_string(),
+                    }],
+                    ports: vec![ctf_core::ContainerPort {
+                        name: "http".to_string(),
+                        container_port: 8080,
+                        expose: true,
+                        port_type: ctf_core::ChallengePortType::HTTP,
+                    }],
+                }],
+                files: vec![ChallengeFileRef::S3 {
+                    bucket: "files".to_string(),
+                    key: "challenge/chall-1/file.zip".to_string(),
+                }],
+            },
+        );
+        challenge.metadata.namespace = Some("ctf".to_string());
+        challenge
+    }
+
+    #[test]
+    fn validate_spec_sets_ready_true_for_valid_spec() {
+        let challenge = valid_challenge();
+        let mut status = ChallengeStatus::default();
+
+        validate_spec(&challenge, &mut status);
+
+        assert!(status.conditions.all_true());
+    }
+
+    #[test]
+    fn validate_spec_sets_ready_false_for_invalid_spec() {
+        let mut challenge = valid_challenge();
+        challenge.spec.flags.push(ctf_core::ChallengeFlag {
+            name: "flag-1".to_string(),
+            body: "other".to_string(),
+            prefix: None,
+            format: None,
+            random: None,
+            options: Default::default(),
+        });
+
+        let mut status = ChallengeStatus::default();
+        validate_spec(&challenge, &mut status);
+
+        assert!(!status.conditions.all_true());
+        assert!(status.conditions.get("Validation").is_some());
+        assert!(status.conditions.get("Ready").is_some());
+    }
+}

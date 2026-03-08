@@ -14,16 +14,16 @@ use crate::Conditions;
     namespaced,
     status = "CtfStatus",
     derive = "PartialEq",
-    validation = Rule::new("self.fullName != ''").message("fullName is empty"),
-    validation = Rule::new("size(self.challenges) > 0").message("at least one challenge reference is required"),
-    validation = Rule::new("self.challenges.all(ch, ch != '')").message("challenge reference name is required"),
-    validation = Rule::new("self.flag.prefix != ''").message("flag prefix is empty"),
-    validation = Rule::new("self.flag.prefix.matches('^[a-zA-Z0-9]+$')").message("flag prefix must be alphanumeric"),
-    validation = Rule::new("size(self.flag.prefix) >= 3 && size(self.flag.prefix) <= 6")
+    validation = Rule::new("self.spec.fullName != ''").message("fullName is empty"),
+    validation = Rule::new("size(self.spec.challenges) > 0").message("at least one challenge reference is required"),
+    validation = Rule::new("self.spec.challenges.all(ch, ch != '')").message("challenge reference name is required"),
+    validation = Rule::new("self.spec.flag.prefix != ''").message("flag prefix is empty"),
+    validation = Rule::new("self.spec.flag.prefix.matches('^[a-zA-Z0-9]+$')").message("flag prefix must be alphanumeric"),
+    validation = Rule::new("size(self.spec.flag.prefix) >= 3 && size(self.spec.flag.prefix) <= 6")
         .message("flag prefix must be between 3 and 6 characters"),
-    validation = Rule::new("self.network.ports.start >= 1024").message("network.ports.start must be >= 1024"),
-    validation = Rule::new("self.network.ports.end <= 49151").message("network.ports.end must be <= 49151"),
-    validation = Rule::new("self.network.ports.start <= self.network.ports.end")
+    validation = Rule::new("self.spec.network.ports.start >= 1024").message("network.ports.start must be >= 1024"),
+    validation = Rule::new("self.spec.network.ports.end <= 49151").message("network.ports.end must be <= 49151"),
+    validation = Rule::new("self.spec.network.ports.start <= self.spec.network.ports.end")
         .message("network.ports.start must be <= network.ports.end")
 )]
 pub struct CtfSpec {

@@ -437,3 +437,162 @@ async fn ensure_service(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ctf_k8s::{ChallengeSpec, CtfSpec};
+    use std::collections::HashSet;
+
+    fn make_ctf(name: &str, ready: bool) -> Ctf {
+        let mut ctf = Ctf::new(
+            name,
+            CtfSpec {
+                full_name: "Sample CTF".to_string(),
+                description: None,
+                conditions: Default::default(),
+                challenges: vec!["chall-1".to_string()],
+                flag: ctf_core::CtfFlag {
+                    prefix: "SCC".to_string(),
+                    format: ctf_core::FlagFormat::Curly,
+                    random: None,
+                },
+                network: ctf_core::CtfNetwork {
+                    ports: ctf_core::CtfPorts {
+                        start: 20000,
+                        end: 20100,
+                    },
+                    ip: None,
+                },
+            },
+        );
+        ctf.metadata.namespace = Some("ctf".to_string());
+        if ready {
+            let mut status = ctf_k8s::CtfStatus::default();
+            status
+                .conditions
+                .set("Validation", ConditionStatus::True, "Validated", "");
+            status
+                .conditions
+                .set("Ready", ConditionStatus::True, "Ready", "");
+            ctf.status = Some(status);
+        }
+        ctf
+    }
+
+    fn make_challenge(name: &str, ready: bool) -> Challenge {
+        let mut challenge = Challenge::new(
+            name,
+            ChallengeSpec {
+                full_name: "Challenge".to_string(),
+                description: None,
+                categories: HashSet::new(),
+                tags: HashSet::new(),
+                authors: HashSet::new(),
+                conditions: Default::default(),
+                flags: vec![ctf_core::ChallengeFlag {
+                    name: "flag-1".to_string(),
+                    body: "body".to_string(),
+                    prefix: None,
+                    format: None,
+                    random: None,
+                    options: Default::default(),
+                }],
+                containers: vec![ctf_k8s::ChallengeContainer {
+                    name: "svc".to_string(),
+                    image: "repo/svc:latest".to_string(),
+                    flags: vec![],
+                    ports: vec![],
+                }],
+                files: vec![],
+            },
+        );
+        challenge.metadata.namespace = Some("ctf".to_string());
+        if ready {
+            let mut status = ctf_k8s::ChallengeStatus::default();
+            status
+                .conditions
+                .set("Validation", ConditionStatus::True, "Validated", "");
+            status
+                .conditions
+                .set("Ready", ConditionStatus::True, "Ready", "");
+            challenge.status = Some(status);
+        }
+        challenge
+    }
+
+    fn make_instance() -> Instance {
+        let mut instance = Instance::new(
+            "inst-1",
+            ctf_k8s::InstanceSpec {
+                ctf: "ctf-1".to_string(),
+                challenge: "chall-1".to_string(),
+                conditions: Default::default(),
+            },
+        );
+        instance.metadata.namespace = Some("ctf".to_string());
+        instance
+    }
+
+    #[test]
+    fn is_ready_helpers_reflect_status_conditions() {
+        assert!(is_ready_ctf(&make_ctf("ctf-1", true)));
+        assert!(!is_ready_ctf(&make_ctf("ctf-1", false)));
+
+        assert!(is_ready_challenge(&make_challenge("chall-1", true)));
+        assert!(!is_ready_challenge(&make_challenge("chall-1", false)));
+    }
+
+    #[test]
+    fn set_not_ready_marks_specific_and_ready_conditions_false() {
+        let mut status = InstanceStatus::default();
+        set_not_ready(&mut status, "References", "MissingCtf", "ctf missing");
+
+        assert!(status.conditions.get("References").is_some());
+        assert!(status.conditions.get("Ready").is_some());
+        assert!(!status.conditions.all_true());
+    }
+
+    #[test]
+    fn base_labels_contains_required_operator_labels() {
+        let labels = base_labels(&make_instance());
+
+        assert_eq!(
+            labels.get(MANAGED_BY_LABEL).map(String::as_str),
+            Some(MANAGED_BY_VALUE)
+        );
+        assert_eq!(labels.get(LABEL_CTF).map(String::as_str), Some("ctf-1"));
+        assert_eq!(
+            labels.get(LABEL_CHALLENGE).map(String::as_str),
+            Some("chall-1")
+        );
+        assert_eq!(
+            labels.get(LABEL_INSTANCE).map(String::as_str),
+            Some("inst-1")
+        );
+        assert_eq!(labels.get(LABEL_NAMESPACE).map(String::as_str), Some("ctf"));
+    }
+
+    #[test]
+    fn resource_labels_override_ctf_and_challenge_to_actual_resource_names() {
+        let instance = make_instance();
+        let ctf = make_ctf("ctf-actual", true);
+        let challenge = make_challenge("chall-actual", true);
+
+        let labels = resource_labels(&instance, &ctf, &challenge);
+
+        assert_eq!(
+            labels.get(LABEL_CTF).map(String::as_str),
+            Some("ctf-actual")
+        );
+        assert_eq!(
+            labels.get(LABEL_CHALLENGE).map(String::as_str),
+            Some("chall-actual")
+        );
+        assert_eq!(
+            labels.get(LABEL_INSTANCE).map(String::as_str),
+            Some("inst-1")
+        );
+        assert_eq!(labels.get(LABEL_NAMESPACE).map(String::as_str), Some("ctf"));
+    }
+}

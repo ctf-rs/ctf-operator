@@ -14,15 +14,15 @@ use crate::Conditions;
 	namespaced,
 	status = "FlagStatus",
 	derive = "PartialEq",
-	validation = Rule::new("self.prefix != ''").message("prefix is empty"),
-	validation = Rule::new("self.prefix.matches('^[a-zA-Z0-9]+$')").message("prefix can only contain letters and numbers"),
-	validation = Rule::new("size(self.prefix) >= 3 && size(self.prefix) <= 6")
+	validation = Rule::new("self.spec.prefix != ''").message("prefix is empty"),
+	validation = Rule::new("self.spec.prefix.matches('^[a-zA-Z0-9]+$')").message("prefix can only contain letters and numbers"),
+	validation = Rule::new("size(self.spec.prefix) >= 3 && size(self.spec.prefix) <= 6")
 		.message("prefix must be between 3 and 6 characters"),
-	validation = Rule::new("self.body != ''").message("body is empty"),
-	validation = Rule::new("size(self.body) < 128").message("body must be shorter than 128 chars"),
-	validation = Rule::new("!has(self.random) || self.random.len != 0")
+	validation = Rule::new("self.spec.body != ''").message("body is empty"),
+	validation = Rule::new("size(self.spec.body) < 128").message("body must be shorter than 128 chars"),
+	validation = Rule::new("!has(self.spec.random) || self.spec.random.len != 0")
 		.message("random.len must be non-zero"),
-	validation = Rule::new("!has(self.random) || self.random.len < 64")
+	validation = Rule::new("!has(self.spec.random) || self.spec.random.len < 64")
 		.message("random.len must be less than 64")
 )]
 pub struct FlagSpec {

@@ -17,7 +17,7 @@ use crate::{Conditions, ReservationRef};
     selectable = ".spec.reservation.name",
     selectable = ".spec.reservation.namespace",
     printcolumn = r#"{"name":"PORT","type":"integer","jsonPath":".status.port"}"#,
-    validation = Rule::new("self.reservation == oldSelf.reservation")
+    validation = Rule::new("self.spec.reservation == oldSelf.spec.reservation")
         .message("reservation field is immutable")
 )]
 pub struct PortClaimSpec {

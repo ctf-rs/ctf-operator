@@ -77,11 +77,8 @@ fn default_storage_path_style() -> bool {
     true
 }
 
-#[derive(
-    Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate,
-)]
+#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]
 pub struct CtfFlag {
-    #[serde(default)]
     #[garde(pattern(r"^[a-zA-Z0-9]+$"))]
     #[garde(length(min = 3, max = 6))]
     pub prefix: String,
@@ -93,9 +90,7 @@ pub struct CtfFlag {
     pub random: Option<FlagRandomRules>,
 }
 
-#[derive(
-    Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate,
-)]
+#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]
 pub struct CtfNetwork {
     #[garde(dive)]
     pub ports: CtfPorts,
@@ -104,14 +99,40 @@ pub struct CtfNetwork {
     pub ip: Option<IpAddr>,
 }
 
-#[derive(
-    Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate,
-)]
+#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]
 pub struct CtfPorts {
     #[garde(range(min = 1024))]
     pub start: u16,
     #[garde(range(max = 49151))]
     pub end: u16,
+}
+
+impl Default for CtfFlag {
+    fn default() -> Self {
+        Self {
+            prefix: "CTF".to_string(),
+            format: FlagFormat::default(),
+            random: None,
+        }
+    }
+}
+
+impl Default for CtfNetwork {
+    fn default() -> Self {
+        Self {
+            ports: CtfPorts::default(),
+            ip: None,
+        }
+    }
+}
+
+impl Default for CtfPorts {
+    fn default() -> Self {
+        Self {
+            start: 1024,
+            end: 49151,
+        }
+    }
 }
 
 impl Ctf {

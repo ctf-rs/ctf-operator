@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use ctf_k8s::{Challenge, Ctf, Flag, Instance};
+use ctf_k8s::{Challenge, Ctf, Flag, Instance, PortClaim, ReservationSet};
 use k8s_openapi::api::{apps::v1::Deployment, core::v1::Service};
 use kube::{runtime::reflector::Store, Client};
 
@@ -11,6 +11,8 @@ pub struct CtfState {
     pub challenges: Store<Challenge>,
     pub instances: Store<Instance>,
     pub flags: Store<Flag>,
+    pub reservation_sets: Store<ReservationSet>,
+    pub port_claims: Store<PortClaim>,
     pub deployments: Store<Deployment>,
     pub services: Store<Service>,
 }
@@ -24,6 +26,8 @@ impl CtfState {
         challenges: Store<Challenge>,
         instances: Store<Instance>,
         flags: Store<Flag>,
+        reservation_sets: Store<ReservationSet>,
+        port_claims: Store<PortClaim>,
         deployments: Store<Deployment>,
         services: Store<Service>,
     ) -> Self {
@@ -34,6 +38,8 @@ impl CtfState {
             challenges,
             instances,
             flags,
+            reservation_sets,
+            port_claims,
             deployments,
             services,
         }

@@ -20,9 +20,9 @@ use crate::Conditions;
     derive = "Default",
     printcolumn = r#"{"name":"START","type":"integer","jsonPath":".spec.start"}"#,
     printcolumn = r#"{"name":"END","type":"integer","jsonPath":".spec.end"}"#,
-    validation = Rule::new("self.start >= 1024").message("start be larger or equal than 1024"),
-    validation = Rule::new("self.end <= 49151").message("end be smaller or equal than 49151"),
-    validation = Rule::new("self.start <= self.end").message("start must be smaller or equal than end")
+    validation = Rule::new("self.spec.start >= 1024").message("start be larger or equal than 1024"),
+    validation = Rule::new("self.spec.end <= 49151").message("end be smaller or equal than 49151"),
+    validation = Rule::new("self.spec.start <= self.spec.end").message("start must be smaller or equal than end")
 )]
 pub struct ReservationSetSpec {
     pub start: u16,

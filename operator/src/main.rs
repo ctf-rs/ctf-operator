@@ -1,10 +1,12 @@
 use clap::Parser;
-use ctf_k8s::{Challenge, Ctf, Flag, Instance};
+use ctf_k8s::{Challenge, Ctf, Flag, Instance, PortClaim, ReservationSet};
 use ctf_operator::{runtime, Args, Command, CrdArgs, OperatorArgs};
 use kube::CustomResourceExt;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
@@ -38,6 +40,14 @@ fn gen_crd(_args: CrdArgs) -> anyhow::Result<()> {
     std::fs::write(
         "crd/instances.yaml",
         serde_yaml::to_string(&Instance::crd())?,
+    )?;
+    std::fs::write(
+        "crd/reservationsets.yaml",
+        serde_yaml::to_string(&ReservationSet::crd())?,
+    )?;
+    std::fs::write(
+        "crd/portclaims.yaml",
+        serde_yaml::to_string(&PortClaim::crd())?,
     )?;
 
     Ok(())

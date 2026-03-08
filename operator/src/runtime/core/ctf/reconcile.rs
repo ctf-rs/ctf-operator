@@ -78,3 +78,58 @@ fn validate_spec(resource: &Ctf, status: &mut CtfStatus) {
             .set("Ready", ConditionStatus::False, "NotReady", "");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ctf_k8s::CtfSpec;
+
+    fn valid_ctf() -> Ctf {
+        let mut ctf = Ctf::new(
+            "sample-ctf",
+            CtfSpec {
+                full_name: "Sample CTF".to_string(),
+                description: Some("desc".to_string()),
+                conditions: Default::default(),
+                challenges: vec!["chall-1".to_string()],
+                flag: ctf_core::CtfFlag {
+                    prefix: "SCC".to_string(),
+                    format: ctf_core::FlagFormat::Curly,
+                    random: None,
+                },
+                network: ctf_core::CtfNetwork {
+                    ports: ctf_core::CtfPorts {
+                        start: 20000,
+                        end: 20100,
+                    },
+                    ip: None,
+                },
+            },
+        );
+        ctf.metadata.namespace = Some("ctf".to_string());
+        ctf
+    }
+
+    #[test]
+    fn validate_spec_sets_ready_true_for_valid_spec() {
+        let ctf = valid_ctf();
+        let mut status = CtfStatus::default();
+
+        validate_spec(&ctf, &mut status);
+
+        assert!(status.conditions.all_true());
+    }
+
+    #[test]
+    fn validate_spec_sets_ready_false_for_invalid_spec() {
+        let mut ctf = valid_ctf();
+        ctf.spec.flag.prefix = "".to_string();
+
+        let mut status = CtfStatus::default();
+        validate_spec(&ctf, &mut status);
+
+        assert!(!status.conditions.all_true());
+        assert!(status.conditions.get("Validation").is_some());
+        assert!(status.conditions.get("Ready").is_some());
+    }
+}

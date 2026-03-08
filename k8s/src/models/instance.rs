@@ -14,8 +14,8 @@ use crate::Conditions;
     namespaced,
     status = "InstanceStatus",
     derive = "PartialEq",
-    validation = Rule::new("self.ctf != ''").message("ctf reference name is required"),
-    validation = Rule::new("self.challenge != ''").message("challenge reference name is required")
+    validation = Rule::new("self.spec.ctf != ''").message("ctf reference name is required"),
+    validation = Rule::new("self.spec.challenge != ''").message("challenge reference name is required")
 )]
 pub struct InstanceSpec {
     pub ctf: String,
