@@ -32,9 +32,6 @@ pub struct ClusterCreateArgs {
     #[arg(index = 1)]
     pub ctf: PathBuf,
 
-    #[arg(long = "name", default_value = "ctf")]
-    pub cluster_name: String,
-
     #[arg(
         short = 'n',
         long = "namespace",
@@ -57,12 +54,6 @@ pub struct ClusterCreateArgs {
 
     #[arg(long = "operator-replicas", default_value_t = 1)]
     pub operator_replicas: u16,
-
-    #[arg(long = "expose-port-start", default_value_t = 20000)]
-    pub expose_port_start: u16,
-
-    #[arg(long = "expose-port-end", default_value_t = 20100)]
-    pub expose_port_end: u16,
 
     #[arg(long = "skip-cilium", default_value_t = false)]
     pub skip_cilium: bool,

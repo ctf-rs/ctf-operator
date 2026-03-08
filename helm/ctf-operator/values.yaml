@@ -1,8 +1,8 @@
 replicaCount: 1
 
 image:
-  repository: registry.ctf.rs/ctf/ctf-operator
-  tag: local
+  repository: registry.ctf.rs/ctf/operator
+  tag: edge
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []

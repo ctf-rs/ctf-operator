@@ -11,25 +11,26 @@ use crate::{
     cli::{ClusterBackend, ClusterCreateArgs, KindProvider},
     read_ctf,
 };
+use ctf_cli::models::Ctf;
 
 pub async fn create(args: ClusterCreateArgs) -> anyhow::Result<()> {
     let ClusterCreateArgs {
-        cluster_name,
+        ctf,
         namespaces,
         instance_namespace_prefix,
-        ctf,
         backend,
         kind_provider,
         operator_namespace,
         operator_replicas,
-        expose_port_start,
-        expose_port_end,
         skip_cilium,
     } = args;
 
-    if expose_port_start > expose_port_end {
-        bail!("--expose-port-start must be <= --expose-port-end");
-    }
+    let ctf_abs = std::fs::canonicalize(&ctf)
+        .with_context(|| format!("failed to read ctf path {}", ctf.display()))?;
+    let ctf_model = read_ctf(ctf_abs.clone()).await?;
+    let cluster_name = ctf_model.name.clone();
+    let expose_port_start = ctf_model.network.ports.start;
+    let expose_port_end = ctf_model.network.ports.end;
 
     let namespaces = namespaces
         .into_iter()
@@ -54,6 +55,10 @@ pub async fn create(args: ClusterCreateArgs) -> anyhow::Result<()> {
                 ensure_command("cilium").await?;
             }
 
+            if kind_cluster_exists(&cluster_name, &provider).await? {
+                delete_kind_cluster(&cluster_name, &provider).await?;
+            }
+
             create_kind_cluster(&cluster_name, expose_port_start, expose_port_end, &provider)
                 .await?;
 
@@ -61,9 +66,9 @@ pub async fn create(args: ClusterCreateArgs) -> anyhow::Result<()> {
                 install_cilium().await?;
             }
 
-            build_operator_image().await?;
-            kind_load_operator_image(&cluster_name, &provider).await?;
+            let chart = pull_operator_chart().await?;
             install_operator_chart(
+                &chart,
                 &operator_namespace,
                 operator_replicas,
                 &namespaces,
@@ -74,7 +79,7 @@ pub async fn create(args: ClusterCreateArgs) -> anyhow::Result<()> {
         }
     }
 
-    apply_ctf_bundle(ctf, &cluster_name).await?;
+    apply_ctf_bundle(&ctf_model, &ctf_abs, &cluster_name).await?;
 
     Ok(())
 }
@@ -148,14 +153,6 @@ where
     Ok(())
 }
 
-fn workspace_root() -> anyhow::Result<PathBuf> {
-    let cli_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    cli_dir
-        .parent()
-        .map(Path::to_path_buf)
-        .context("failed to detect workspace root")
-}
-
 async fn create_kind_cluster(
     cluster_name: &str,
     expose_port_start: u16,
@@ -193,6 +190,37 @@ async fn create_kind_cluster(
     Ok(())
 }
 
+async fn delete_kind_cluster(cluster_name: &str, provider: &str) -> anyhow::Result<()> {
+    run_streamed_os_with_env(
+        "kind",
+        [
+            OsStr::new("delete"),
+            OsStr::new("cluster"),
+            OsStr::new("--name"),
+            OsStr::new(cluster_name),
+        ],
+        &[("KIND_EXPERIMENTAL_PROVIDER", provider)],
+    )
+    .await
+}
+
+async fn kind_cluster_exists(cluster_name: &str, provider: &str) -> anyhow::Result<bool> {
+    let mut command = Command::new("kind");
+    command.args(["get", "clusters"]);
+    command.env("KIND_EXPERIMENTAL_PROVIDER", provider);
+    let output = command
+        .output()
+        .await
+        .context("failed to list kind clusters")?;
+
+    if !output.status.success() {
+        return Ok(false);
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout.lines().any(|line| line.trim() == cluster_name))
+}
+
 async fn install_cilium() -> anyhow::Result<()> {
     run_streamed(
         "cilium",
@@ -208,33 +236,23 @@ async fn install_cilium() -> anyhow::Result<()> {
     .await
 }
 
-async fn build_operator_image() -> anyhow::Result<()> {
-    let root = workspace_root()?;
-    run_streamed_os(
-        "docker",
-        [
-            OsStr::new("build"),
-            OsStr::new("-t"),
-            OsStr::new("ctf-operator:local"),
-            root.as_os_str(),
-        ],
-    )
-    .await
-}
+async fn pull_operator_chart() -> anyhow::Result<PathBuf> {
+    let pull_dir = temp_dir_path("ctf-operator-chart");
+    fs::create_dir_all(&pull_dir).await?;
 
-async fn kind_load_operator_image(cluster_name: &str, provider: &str) -> anyhow::Result<()> {
-    run_streamed_os_with_env(
-        "kind",
+    run_streamed_os(
+        "helm",
         [
-            OsStr::new("load"),
-            OsStr::new("docker-image"),
-            OsStr::new("ctf-operator:local"),
-            OsStr::new("--name"),
-            OsStr::new(cluster_name),
+            OsStr::new("pull"),
+            OsStr::new("oci://registry.ctf.rs/ctf/ctf-operator"),
+            OsStr::new("--untar"),
+            OsStr::new("--untardir"),
+            pull_dir.as_os_str(),
         ],
-        &[("KIND_EXPERIMENTAL_PROVIDER", provider)],
     )
-    .await
+    .await?;
+
+    Ok(pull_dir.join("ctf-operator"))
 }
 
 fn kind_provider_command(provider: &str) -> &'static str {
@@ -281,22 +299,27 @@ async fn command_succeeds(cmd: &str, args: &[&str]) -> bool {
 }
 
 async fn install_operator_chart(
+    chart: &Path,
     operator_namespace: &str,
     operator_replicas: u16,
     namespaces: &[String],
     instance_namespace_prefix: &str,
     cluster_name: &str,
 ) -> anyhow::Result<()> {
-    let root = workspace_root()?;
-    let chart = root.join("helm/ctf-operator");
     if !chart.exists() {
         bail!("operator chart not found at {}", chart.display());
     }
 
+    let image_pull_secret = ensure_registry_pull_secret(operator_namespace, cluster_name).await?;
+
     let values_path = temp_file_path("ctf-operator-values", "yaml");
     let mut values = format!(
-        "replicaCount: {operator_replicas}\nimage:\n  repository: ctf-operator\n  tag: local\n  pullPolicy: IfNotPresent\nwatchNamespaces:\n"
+        "replicaCount: {operator_replicas}\nimage:\n  repository: registry.ctf.rs/ctf/operator\n  tag: edge\nwatchNamespaces:\n"
     );
+    if let Some(image_pull_secret) = image_pull_secret {
+        values.push_str("imagePullSecrets:\n");
+        values.push_str(&format!("  - name: {image_pull_secret}\n"));
+    }
     for namespace in namespaces {
         values.push_str(&format!("  - {namespace}\n"));
     }
@@ -328,17 +351,129 @@ async fn install_operator_chart(
     .await
 }
 
-async fn apply_ctf_bundle(ctf_path: PathBuf, cluster_name: &str) -> anyhow::Result<()> {
-    let ctf_abs = std::fs::canonicalize(&ctf_path)
-        .with_context(|| format!("failed to read ctf path {}", ctf_path.display()))?;
+async fn ensure_registry_pull_secret(
+    operator_namespace: &str,
+    cluster_name: &str,
+) -> anyhow::Result<Option<String>> {
+    let registry_config = helm_registry_config_path()?;
+    if !registry_config.exists() {
+        return Ok(None);
+    }
 
-    let ctf = read_ctf(ctf_abs.clone()).await?;
+    ensure_namespace(operator_namespace, cluster_name).await?;
+
+    let secret_name = "ctf-operator-registry-creds".to_owned();
+    let from_file = format!(
+        "--from-file=.dockerconfigjson={}",
+        registry_config.display()
+    );
+    let output = run_capture_os(
+        "kubectl",
+        [
+            OsStr::new("create"),
+            OsStr::new("secret"),
+            OsStr::new("generic"),
+            OsStr::new(&secret_name),
+            OsStr::new(&from_file),
+            OsStr::new("--type=kubernetes.io/dockerconfigjson"),
+            OsStr::new("--namespace"),
+            OsStr::new(operator_namespace),
+            OsStr::new("--context"),
+            OsStr::new(&format!("kind-{cluster_name}")),
+            OsStr::new("--dry-run=client"),
+            OsStr::new("-o"),
+            OsStr::new("yaml"),
+        ],
+    )
+    .await?;
+
+    let manifest_path = temp_file_path("ctf-operator-regcred", "yaml");
+    fs::write(&manifest_path, output).await?;
+
+    run_streamed_os(
+        "kubectl",
+        [
+            OsStr::new("apply"),
+            OsStr::new("-f"),
+            manifest_path.as_os_str(),
+            OsStr::new("--context"),
+            OsStr::new(&format!("kind-{cluster_name}")),
+        ],
+    )
+    .await?;
+
+    Ok(Some(secret_name))
+}
+
+async fn ensure_namespace(operator_namespace: &str, cluster_name: &str) -> anyhow::Result<()> {
+    let output = run_capture_os(
+        "kubectl",
+        [
+            OsStr::new("create"),
+            OsStr::new("namespace"),
+            OsStr::new(operator_namespace),
+            OsStr::new("--dry-run=client"),
+            OsStr::new("-o"),
+            OsStr::new("yaml"),
+            OsStr::new("--context"),
+            OsStr::new(&format!("kind-{cluster_name}")),
+        ],
+    )
+    .await?;
+
+    let manifest_path = temp_file_path("ctf-operator-namespace", "yaml");
+    fs::write(&manifest_path, output).await?;
+
+    run_streamed_os(
+        "kubectl",
+        [
+            OsStr::new("apply"),
+            OsStr::new("-f"),
+            manifest_path.as_os_str(),
+            OsStr::new("--context"),
+            OsStr::new(&format!("kind-{cluster_name}")),
+        ],
+    )
+    .await
+}
+
+fn helm_registry_config_path() -> anyhow::Result<PathBuf> {
+    if let Ok(path) = std::env::var("HELM_REGISTRY_CONFIG") {
+        return Ok(PathBuf::from(path));
+    }
+
+    let home = std::env::var("HOME").context("HOME is not set")?;
+    Ok(PathBuf::from(home).join(".config/helm/registry/config.json"))
+}
+
+async fn run_capture_os<'a, I>(cmd: &str, args: I) -> anyhow::Result<Vec<u8>>
+where
+    I: IntoIterator<Item = &'a OsStr>,
+{
+    let mut command = Command::new(cmd);
+    command.args(args);
+    command.stdin(std::process::Stdio::null());
+    command.stderr(std::process::Stdio::inherit());
+
+    let output = command
+        .output()
+        .await
+        .with_context(|| format!("failed to spawn command: {cmd}"))?;
+
+    if !output.status.success() {
+        bail!("command failed: {cmd} (exit {})", output.status);
+    }
+
+    Ok(output.stdout)
+}
+
+async fn apply_ctf_bundle(ctf: &Ctf, ctf_abs: &Path, cluster_name: &str) -> anyhow::Result<()> {
     let ctf_dir = ctf_abs
         .parent()
         .context("ctf yaml must have parent directory")?
         .to_path_buf();
 
-    for challenge in ctf.challenges {
+    for challenge in &ctf.challenges {
         let challenge_path = ctf_dir.join(challenge);
         run_streamed_os(
             "kubectl",
@@ -374,4 +509,12 @@ fn temp_file_path(prefix: &str, ext: &str) -> PathBuf {
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
     std::env::temp_dir().join(format!("{prefix}-{nanos}.{ext}"))
+}
+
+fn temp_dir_path(prefix: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    std::env::temp_dir().join(format!("{prefix}-{nanos}"))
 }

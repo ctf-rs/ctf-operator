@@ -10,8 +10,8 @@ registry:
 network:
   ip: 10.4.10.1
   ports:
-    start: 6000
-    end: 7000
+    start: 12000
+    end: 13000
 storage:
   type: s3
   bucket: cyberhero-playground-storage
