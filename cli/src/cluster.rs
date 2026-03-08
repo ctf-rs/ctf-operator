@@ -314,12 +314,13 @@ async fn install_operator_chart(
 
     let values_path = temp_file_path("ctf-operator-values", "yaml");
     let mut values = format!(
-        "replicaCount: {operator_replicas}\nimage:\n  repository: registry.ctf.rs/ctf/operator\n  tag: edge\nwatchNamespaces:\n"
+        "replicaCount: {operator_replicas}\nimage:\n  repository: registry.ctf.rs/ctf/operator\n  tag: edge\n"
     );
     if let Some(image_pull_secret) = image_pull_secret {
         values.push_str("imagePullSecrets:\n");
         values.push_str(&format!("  - name: {image_pull_secret}\n"));
     }
+    values.push_str("watchNamespaces:\n");
     for namespace in namespaces {
         values.push_str(&format!("  - {namespace}\n"));
     }

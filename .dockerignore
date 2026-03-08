@@ -1,0 +1,9 @@
+target
+.git
+.gitignore
+.github
+.vscode
+.zed
+operator-old
+**/*.log
+**/.DS_Store

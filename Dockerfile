@@ -3,6 +3,7 @@ FROM rust:1.93
 WORKDIR /usr/src/ctf-operator
 COPY . .
 
-RUN cargo build --release
+RUN cargo build --bin ctf-operator --release 
 
-CMD ["/usr/src/ctf-operator/target/release/ctf-operator"]
+ENTRYPOINT ["/usr/src/ctf-operator/target/release/ctf-operator"]
+CMD ["operator"]
