@@ -8,6 +8,7 @@
     "kubectl --context kind-playground": true,
     "cargo run -p ctf-cli --": true,
     "cargo run -p ctf-cli --bin ctf --": true,
-    "cargo run -p ctf-operator -- operator": true
+    "cargo run -p ctf-operator -- operator": true,
+    "docker build": true
   }
 }

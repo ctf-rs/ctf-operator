@@ -89,6 +89,7 @@ pub fn ctf_from_core(
         CtfSpec {
             full_name: ctf.full_name.clone(),
             description: ctf.description.clone(),
+            public: ctf.public,
             conditions: Default::default(),
             challenges: challenge_refs,
             flag: ctf.flag.clone(),

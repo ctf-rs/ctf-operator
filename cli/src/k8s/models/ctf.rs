@@ -31,11 +31,17 @@ pub struct CtfSpec {
     pub full_name: String,
     #[serde(default)]
     pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub public: bool,
     #[serde(default)]
     pub conditions: Conditions,
     pub challenges: Vec<String>,
     pub flag: crate::models::CtfFlag,
     pub network: crate::models::CtfNetwork,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema, Default)]

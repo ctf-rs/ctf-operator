@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ctf-app.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "ctf-app.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "ctf-app.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "ctf-app.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+{{- with .Values.podAnnotations }}
+      annotations:
+{{- toYaml . | nindent 8 }}
+{{- end }}
+    spec:
+      serviceAccountName: {{ include "ctf-app.fullname" . }}
+{{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{- toYaml . | nindent 8 }}
+{{- end }}
+      containers:
+        - name: ctf-app
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_BIND_ADDR
+              value: 0.0.0.0:8080
+            - name: DATABASE_URL
+              value: {{ .Values.database.url | quote }}
+            - name: OIDC_ISSUER_URL
+              value: {{ .Values.oauth.issuerUrl | quote }}
+            - name: OIDC_CLIENT_ID
+              value: {{ .Values.oauth.clientId | quote }}
+            - name: OIDC_CLIENT_SECRET
+              value: {{ .Values.oauth.clientSecret | quote }}
+            - name: OIDC_REDIRECT_URL
+              value: {{ .Values.oauth.redirectUrl | quote }}
+            - name: WATCH_NAMESPACES
+              value: {{ join "," .Values.watchNamespaces | quote }}
+            - name: INSTANCE_NAME_PREFIX
+              value: {{ .Values.instanceNamePrefix | quote }}
+            - name: SESSION_COOKIE_NAME
+              value: {{ .Values.session.cookieName | quote }}
+          resources:
+{{- toYaml .Values.resources | nindent 12 }}
+{{- with .Values.nodeSelector }}
+      nodeSelector:
+{{- toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.affinity }}
+      affinity:
+{{- toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.tolerations }}
+      tolerations:
+{{- toYaml . | nindent 8 }}
+{{- end }}

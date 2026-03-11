@@ -23,6 +23,9 @@ pub struct Ctf {
     #[garde(skip)]
     pub description: Option<String>,
     #[serde(default)]
+    #[garde(skip)]
+    pub public: bool,
+    #[serde(default)]
     #[garde(dive)]
     pub registry: Option<CtfRegistry>,
     #[serde(default)]

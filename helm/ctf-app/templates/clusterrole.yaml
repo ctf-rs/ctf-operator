@@ -1,0 +1,8 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "ctf-app.fullname" . }}
+rules:
+  - apiGroups: ["operator.ctf.rs"]
+    resources: ["ctfs", "challenges", "instances", "flags"]
+    verbs: ["get", "list", "watch", "create", "patch", "update"]

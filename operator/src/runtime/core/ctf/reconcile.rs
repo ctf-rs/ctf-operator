@@ -45,6 +45,7 @@ fn validate_spec(resource: &Ctf, status: &mut CtfStatus) {
         name: resource.name_any(),
         full_name: resource.spec.full_name.clone(),
         description: resource.spec.description.clone(),
+        public: resource.spec.public,
         registry: None,
         storage: None,
         challenges: vec![],

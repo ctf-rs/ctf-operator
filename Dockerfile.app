@@ -1,0 +1,32 @@
+FROM rust:1.93 AS builder
+
+WORKDIR /usr/src/ctf-operator
+
+COPY Cargo.toml Cargo.lock ./
+COPY operator/Cargo.toml ./operator/Cargo.toml
+COPY cli/Cargo.toml ./cli/Cargo.toml
+COPY app/Cargo.toml ./app/Cargo.toml
+
+RUN mkdir -p app/src cli/src operator/src \
+    && printf 'fn main() {}\n' > app/src/main.rs \
+    && printf 'fn main() {}\n' > cli/src/main.rs \
+    && printf 'pub fn placeholder() {}\n' > cli/src/lib.rs \
+    && printf 'fn main() {}\n' > operator/src/main.rs \
+    && printf 'pub fn placeholder() {}\n' > operator/src/lib.rs
+
+RUN cargo fetch --locked
+
+COPY cli/src ./cli/src
+COPY app/src ./app/src
+
+RUN cargo build --release -p app --bin app
+
+FROM debian:trixie-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /usr/src/ctf-operator/target/release/app /usr/local/bin/app
+
+ENTRYPOINT ["/usr/local/bin/app"]

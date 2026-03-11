@@ -1,0 +1,8 @@
+{{- if not .Values.watchNamespaces }}
+{{ fail "watchNamespaces cannot be empty" }}
+{{- end }}
+{{- range $i, $ns := .Values.watchNamespaces }}
+{{- if eq (trim $ns) "" }}
+{{ fail "watchNamespaces cannot contain empty values" }}
+{{- end }}
+{{- end }}

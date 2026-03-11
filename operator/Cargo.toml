@@ -22,7 +22,7 @@ async-stream = { workspace = true }
 jiff = { workspace = true }
 rand = { workspace = true }
 
-k8s-openapi = { workspace = true, features = ["schemars", "v1_33"] }
+k8s-openapi = { workspace = true }
 kube = { workspace = true, features = ["client", "derive", "runtime", "unstable-runtime"] }
 rustls = { workspace = true, default-features = false, features = ["ring", "std"] }
 

@@ -1,0 +1,43 @@
+replicaCount: 1
+
+image:
+  repository: registry.ctf.rs/ctf/app
+  tag: edge
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+watchNamespaces:
+  - ctf
+
+instanceNamePrefix: app-inst
+
+database:
+  url: ""
+
+oauth:
+  issuerUrl: ""
+  clientId: ""
+  clientSecret: ""
+  redirectUrl: ""
+
+session:
+  cookieName: ctf_app_session
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+podAnnotations: {}
+nodeSelector: {}
+affinity: {}
+tolerations: []

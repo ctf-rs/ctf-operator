@@ -1,0 +1,39 @@
+{
+  "realm": "ctf",
+  "enabled": true,
+  "displayName": "CTF Local",
+  "registrationAllowed": false,
+  "users": [
+    {
+      "username": "player",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "CTF",
+      "lastName": "Player",
+      "email": "player@example.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "player",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["offline_access", "uma_authorization"]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "ctf-app",
+      "name": "ctf-app",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "ctf-app-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:8090/oauth/callback"],
+      "webOrigins": ["http://localhost:8090"]
+    }
+  ]
+}

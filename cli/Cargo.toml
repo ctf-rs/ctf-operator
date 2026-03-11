@@ -26,6 +26,6 @@ schemars = { workspace = true, features = ["uuid1"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-k8s-openapi = { workspace = true, features = ["schemars", "v1_33"] }
+k8s-openapi = { workspace = true }
 kube = { workspace = true, features = ["client", "derive", "runtime", "unstable-runtime"] }
 jiff = { workspace = true }
