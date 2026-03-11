@@ -2,7 +2,7 @@ FROM rust:1.93 AS builder
 
 WORKDIR /usr/src/ctf-operator
 
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml ./
 COPY operator/Cargo.toml ./operator/Cargo.toml
 COPY cli/Cargo.toml ./cli/Cargo.toml
 COPY app/Cargo.toml ./app/Cargo.toml
@@ -14,7 +14,7 @@ RUN mkdir -p app/src cli/src operator/src \
     && printf 'fn main() {}\n' > operator/src/main.rs \
     && printf 'pub fn placeholder() {}\n' > operator/src/lib.rs
 
-RUN cargo fetch --locked
+RUN cargo fetch
 
 COPY cli/src ./cli/src
 COPY app/src ./app/src
