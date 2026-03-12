@@ -1151,6 +1151,27 @@ fn render_challenge_detail_html(
     }
     out.push_str("</ul>");
 
+    let instance_status_text = if solved {
+        "This challenge is solved. Instance is stopped and submissions are disabled.".to_string()
+    } else {
+        match (instance, ready, time_left_seconds) {
+            (None, _, _) => "No active instance. Spawn to start the challenge.".to_string(),
+            (Some(_), false, Some(0)) => {
+                "Instance expired. Spawn a new one to continue.".to_string()
+            }
+            (Some(_), false, _) => {
+                "Instance is starting. This page updates automatically when it is ready."
+                    .to_string()
+            }
+            (Some(_), true, _) => "Instance is ready.".to_string(),
+        }
+    };
+
+    out.push_str(&format!(
+        "<p id=\"instance-status\" class=\"muted\">{}</p>",
+        escape_html(&instance_status_text)
+    ));
+
     out.push_str(&format!(
         "<p id=\"instance-timer\" class=\"muted\">{}</p>",
         escape_html(
@@ -1166,9 +1187,6 @@ fn render_challenge_detail_html(
     }
 
     if solved {
-        out.push_str(
-            "<p class=\"muted\">This challenge is solved. Instance is stopped and submissions are disabled.</p>",
-        );
     } else {
         match (instance, ready) {
             (None, _) => {
@@ -1178,9 +1196,6 @@ fn render_challenge_detail_html(
                 ));
             }
             (Some(_), false) => {
-                out.push_str(
-                    "<p class=\"muted\">Instance spawning... refresh in a few seconds.</p>",
-                );
                 out.push_str(&format!(
                     "<form method=\"post\" action=\"{}\"><button class=\"btn\" type=\"submit\">Spawn again</button></form>",
                     escape_html(&spawn_action)
@@ -1293,7 +1308,7 @@ fn render_instance_live_script(ctf_name: &str, challenge_name: &str) -> String {
     );
 
     format!(
-        "<script>(function(){{const endpoint='{endpoint}';const timerEl=document.getElementById('instance-timer');const extendEl=document.getElementById('extend-form');let lastState=null;let localSeconds=null;function fmt(s){{const h=Math.floor(s/3600);const m=Math.floor((s%3600)/60);const sec=s%60;if(h>0) return `${{h}}h ${{m}}m ${{sec}}s`;if(m>0) return `${{m}}m ${{sec}}s`;return `${{sec}}s`;}}function tick(){{if(localSeconds===null) return;localSeconds=Math.max(0,localSeconds-1);if(timerEl) timerEl.textContent='Time left: '+fmt(localSeconds);if(extendEl) extendEl.style.display=(localSeconds<=300 && localSeconds>0)?'block':'none';}}async function poll(){{try{{const res=await fetch(endpoint,{{credentials:'same-origin',cache:'no-store'}});if(!res.ok) return;const state=await res.json();const key=`${{state.solved}}|${{state.has_instance}}|${{state.ready}}|${{state.instance_name||''}}`;if(lastState!==null && key!==lastState){{window.location.reload();return;}}lastState=key;if(state.solved){{localSeconds=null;if(timerEl) timerEl.textContent='';if(extendEl) extendEl.style.display='none';return;}}if(!state.has_instance){{localSeconds=null;if(timerEl) timerEl.textContent='';if(extendEl) extendEl.style.display='none';return;}}if(typeof state.time_left_seconds==='number'){{localSeconds=state.time_left_seconds;if(timerEl) timerEl.textContent='Time left: '+fmt(localSeconds);}} else {{localSeconds=null;if(timerEl) timerEl.textContent='';}}if(extendEl) extendEl.style.display=state.can_extend?'block':'none';}}catch(_err){{}}}}setInterval(tick,1000);setInterval(poll,5000);poll();}})();</script>",
+        "<script>(function(){{const endpoint='{endpoint}';const statusEl=document.getElementById('instance-status');const timerEl=document.getElementById('instance-timer');const extendEl=document.getElementById('extend-form');let lastState=null;let localSeconds=null;function fmt(s){{const h=Math.floor(s/3600);const m=Math.floor((s%3600)/60);const sec=s%60;if(h>0) return `${{h}}h ${{m}}m ${{sec}}s`;if(m>0) return `${{m}}m ${{sec}}s`;return `${{sec}}s`;}}function setStatus(state){{if(!statusEl) return;if(state.solved){{statusEl.textContent='This challenge is solved. Instance is stopped and submissions are disabled.';return;}}if(!state.has_instance){{statusEl.textContent='No active instance. Spawn to start the challenge.';return;}}if(!state.ready){{if(typeof state.time_left_seconds==='number'&&state.time_left_seconds===0){{statusEl.textContent='Instance expired. Spawn a new one to continue.';}}else{{statusEl.textContent='Instance is starting. This page updates automatically when it is ready.';}}return;}}statusEl.textContent='Instance is ready.';}}function tick(){{if(localSeconds===null) return;localSeconds=Math.max(0,localSeconds-1);if(timerEl) timerEl.textContent='Time left: '+fmt(localSeconds);if(extendEl) extendEl.style.display=(localSeconds<=300 && localSeconds>0)?'block':'none';}}async function poll(){{try{{const res=await fetch(endpoint,{{credentials:'same-origin',cache:'no-store'}});if(!res.ok) return;const state=await res.json();setStatus(state);const key=`${{state.solved}}|${{state.has_instance}}|${{state.ready}}|${{state.instance_name||''}}`;if(lastState!==null&&key!==lastState){{window.location.reload();return;}}lastState=key;if(state.solved){{localSeconds=null;if(timerEl) timerEl.textContent='';if(extendEl) extendEl.style.display='none';return;}}if(!state.has_instance){{localSeconds=null;if(timerEl) timerEl.textContent='';if(extendEl) extendEl.style.display='none';return;}}if(typeof state.time_left_seconds==='number'){{localSeconds=state.time_left_seconds;if(timerEl) timerEl.textContent='Time left: '+fmt(localSeconds);}}else{{localSeconds=null;if(timerEl) timerEl.textContent='';}}if(extendEl) extendEl.style.display=state.can_extend?'block':'none';}}catch(_err){{}}}}setInterval(tick,1000);setInterval(poll,5000);poll();}})();</script>",
     )
 }
 
