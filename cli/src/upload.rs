@@ -142,7 +142,9 @@ async fn build_s3_client(
     let mut builder = aws_sdk_s3::config::Builder::from(&shared)
         .region(Region::new(region.to_string()))
         .endpoint_url(endpoint)
-        .force_path_style(path_style);
+        .force_path_style(path_style)
+        .aws_chunked_encoding_chunk_size(Some(8 * 1024))
+        .request_checksum_calculation(aws_sdk_s3::config::RequestChecksumCalculation::WhenRequired);
 
     if let Some(credentials_provider) = shared.credentials_provider() {
         builder = builder.credentials_provider(credentials_provider.clone());

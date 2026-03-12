@@ -18,7 +18,9 @@ network:
 storage:
   type: s3
   bucket: cyberhero-playground-storage
-  endpoint: https://s3.ctf.rs
+  endpoint: http://localhost:3900
+  pathStyle: true
+  region: garage
 challenges:
   - challenge-test.yaml
   - challenge-test2.yaml

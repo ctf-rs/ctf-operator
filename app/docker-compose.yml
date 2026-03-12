@@ -26,5 +26,16 @@ services:
     ports:
       - "8081:8081"
 
+  garage:
+    image: dxflrs/garage:v1.2.0
+    volumes:
+      - ./dev/garage.toml:/etc/garage.toml:ro
+      - garage_data:/var/lib/garage
+    ports:
+      - "3900:3900"
+      - "3901:3901"
+      - "3903:3903"
+
 volumes:
   pg_data:
+  garage_data:
