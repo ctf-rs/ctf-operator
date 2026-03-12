@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -55,6 +55,7 @@ pub struct InstanceStateResponse {
     has_instance: bool,
     ready: bool,
     can_extend: bool,
+    solved: bool,
     time_left_seconds: Option<u64>,
     instance_name: Option<String>,
 }
@@ -178,7 +179,21 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
     let cards = challenges
         .into_iter()
         .filter(|challenge| has_ctf_access(&user, challenge))
-        .map(|challenge| ChallengeCardView { challenge })
+        .collect::<Vec<_>>();
+
+    let solved_keys = db::list_solved_challenges_for_user(&state.db, user.id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|entry| format!("{}::{}", entry.ctf_name, entry.challenge_name))
+        .collect::<HashSet<_>>();
+
+    let cards = cards
+        .into_iter()
+        .map(|challenge| {
+            let solved = solved_keys.contains(&format!("{}::{}", challenge.ctf_name, challenge.name));
+            ChallengeCardView { challenge, solved }
+        })
         .collect::<Vec<_>>();
 
     let user_label = user
@@ -214,6 +229,18 @@ pub async fn spawn_instance(
         Ok(Some(user)) => user,
         _ => return Redirect::to("/").into_response(),
     };
+
+    if db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, &ctf_name)
+        .await
+        .unwrap_or(false)
+    {
+        return Redirect::to(&format!(
+            "{}?message={}",
+            challenge_route(&ctf_name, &challenge_name),
+            urlencoding::encode("challenge already solved")
+        ))
+        .into_response();
+    }
 
     let instance_name = format!(
         "{}-{}-{}",
@@ -321,6 +348,19 @@ pub async fn submit_flag(
         Ok(Some(user)) => user,
         _ => return Redirect::to("/").into_response(),
     };
+
+    if db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, &ctf_name)
+        .await
+        .unwrap_or(false)
+    {
+        return Redirect::to(&format!(
+            "{}?submit=bad&flag={}&message={}",
+            challenge_route(&ctf_name, &challenge_name),
+            urlencoding::encode(&form.flag_name),
+            urlencoding::encode("challenge already solved")
+        ))
+        .into_response();
+    }
 
     let submitted_flag = form.submitted_flag.trim();
     let challenge_namespace = db::find_challenge_namespace(&state.db, &challenge_name, &ctf_name)
@@ -474,6 +514,38 @@ pub async fn submit_flag(
             .into_response();
     }
 
+    if accepted {
+        if let Err(err) = db::mark_challenge_solved(
+            &state.db,
+            user.id,
+            &instance.namespace,
+            &challenge_name,
+            &ctf_name,
+        )
+        .await
+        {
+            warn!(error = %err, "failed to persist solved challenge state");
+        }
+
+        let api: Api<Instance> = Api::namespaced(state.kube.clone(), &instance.namespace);
+        match api
+            .delete(&instance.instance_name, &kube::api::DeleteParams::default())
+            .await
+        {
+            Ok(_) => {}
+            Err(kube::Error::Api(ae)) if ae.code == 404 => {}
+            Err(err) => warn!(error = %err, "failed to delete solved instance"),
+        }
+
+        if let Err(err) =
+            db::clear_instance_for_user(&state.db, user.id, &challenge_name, &ctf_name).await
+        {
+            warn!(error = %err, "failed to clear solved instance relation");
+        }
+
+        return redirect_with("good", "challenge solved").into_response();
+    }
+
     redirect_with(
         if accepted { "good" } else { "bad" },
         if accepted {
@@ -494,6 +566,18 @@ pub async fn extend_instance(
         Ok(Some(user)) => user,
         _ => return Redirect::to("/").into_response(),
     };
+
+    if db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, &ctf_name)
+        .await
+        .unwrap_or(false)
+    {
+        return Redirect::to(&format!(
+            "{}?extend=bad&message={}",
+            challenge_route(&ctf_name, &challenge_name),
+            urlencoding::encode("challenge already solved")
+        ))
+        .into_response();
+    }
 
     let redirect_with = |extend: &str, message: &str| {
         Redirect::to(&format!(
@@ -604,6 +688,7 @@ pub async fn instance_state(
                 has_instance: false,
                 ready: false,
                 can_extend: false,
+                solved: false,
                 time_left_seconds: None,
                 instance_name: None,
             }),
@@ -615,6 +700,22 @@ pub async fn instance_state(
         return (axum::http::StatusCode::FORBIDDEN, "forbidden").into_response();
     }
 
+    let solved = db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, &ctf_name)
+        .await
+        .unwrap_or(false);
+
+    if solved {
+        return Json(InstanceStateResponse {
+            has_instance: false,
+            ready: false,
+            can_extend: false,
+            solved: true,
+            time_left_seconds: None,
+            instance_name: None,
+        })
+        .into_response();
+    }
+
     let Some(instance) = db::get_instance_for_user(&state.db, user.id, &challenge_name, &ctf_name)
         .await
         .ok()
@@ -624,6 +725,7 @@ pub async fn instance_state(
             has_instance: false,
             ready: false,
             can_extend: false,
+            solved: false,
             time_left_seconds: None,
             instance_name: None,
         })
@@ -636,6 +738,7 @@ pub async fn instance_state(
             has_instance: false,
             ready: false,
             can_extend: false,
+            solved: false,
             time_left_seconds: None,
             instance_name: None,
         })
@@ -647,6 +750,7 @@ pub async fn instance_state(
             has_instance: false,
             ready: false,
             can_extend: false,
+            solved: false,
             time_left_seconds: None,
             instance_name: None,
         })
@@ -664,6 +768,7 @@ pub async fn instance_state(
         has_instance: true,
         ready,
         can_extend,
+        solved: false,
         time_left_seconds,
         instance_name: Some(instance.instance_name),
     })
@@ -783,6 +888,10 @@ pub async fn challenge_page(
         return (axum::http::StatusCode::FORBIDDEN, "forbidden").into_response();
     }
 
+    let solved = db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, &ctf_name)
+        .await
+        .unwrap_or(false);
+
     let mut instance = db::get_instance_for_user(&state.db, user.id, &challenge_name, &ctf_name)
         .await
         .ok()
@@ -834,6 +943,7 @@ pub async fn challenge_page(
         ready,
         time_left_seconds,
         can_extend,
+        solved,
         submit_feedback.as_ref(),
         extend_feedback.as_deref(),
     );
@@ -951,14 +1061,21 @@ fn sanitize_k8s_name(name: &str) -> String {
 #[derive(Clone)]
 struct ChallengeCardView {
     challenge: ChallengeView,
+    solved: bool,
 }
 
 fn render_card_html(card: &ChallengeCardView) -> String {
     let challenge = &card.challenge;
     let mut out = String::new();
 
-    out.push_str("<article class=\"tile\">");
+    out.push_str(&format!(
+        "<article class=\"tile{}\">",
+        if card.solved { " solved" } else { "" }
+    ));
     out.push_str(&format!("<h2>{}</h2>", escape_html(&challenge.full_name)));
+    if card.solved {
+        out.push_str("<p class=\"solved-badge\">Solved</p>");
+    }
     out.push_str(&format!(
         "<p class=\"muted\">{}</p>",
         escape_html(challenge.description.as_deref().unwrap_or("No description"))
@@ -995,6 +1112,7 @@ fn render_challenge_detail_html(
     ready: bool,
     time_left_seconds: Option<u64>,
     can_extend: bool,
+    solved: bool,
     submit_feedback: Option<&SubmissionFeedback>,
     extend_feedback: Option<&str>,
 ) -> String {
@@ -1004,8 +1122,14 @@ fn render_challenge_detail_html(
     let extend_action = format!("{base}extend");
     let submit_action = format!("{base}submit");
 
-    out.push_str("<article class=\"tile\">");
+    out.push_str(&format!(
+        "<article class=\"tile{}\">",
+        if solved { " solved" } else { "" }
+    ));
     out.push_str(&format!("<h2>{}</h2>", escape_html(&challenge.full_name)));
+    if solved {
+        out.push_str("<p class=\"solved-badge\">Challenge solved</p>");
+    }
     out.push_str(&format!(
         "<p class=\"muted\">{}</p>",
         escape_html(challenge.description.as_deref().unwrap_or("No description"))
@@ -1041,42 +1165,52 @@ fn render_challenge_detail_html(
         out.push_str(&format!("<p>{}</p>", escape_html(message)));
     }
 
-    match (instance, ready) {
-        (None, _) => {
-            out.push_str(&format!(
-                "<form method=\"post\" action=\"{}\"><button class=\"btn\" type=\"submit\">Spawn</button></form>",
-                escape_html(&spawn_action)
-            ));
-        }
-        (Some(_), false) => {
-            out.push_str("<p class=\"muted\">Instance spawning... refresh in a few seconds.</p>");
-            out.push_str(&format!(
-                "<form method=\"post\" action=\"{}\"><button class=\"btn\" type=\"submit\">Spawn again</button></form>",
-                escape_html(&spawn_action)
-            ));
-            out.push_str(&render_extend_form(&extend_action, can_extend));
-        }
-        (Some(_), true) => {
-            out.push_str(&render_extend_form(&extend_action, can_extend));
-            out.push_str("<h3>Submit flags</h3>");
-            for flag_name in &challenge.flags {
+    if solved {
+        out.push_str(
+            "<p class=\"muted\">This challenge is solved. Instance is stopped and submissions are disabled.</p>",
+        );
+    } else {
+        match (instance, ready) {
+            (None, _) => {
                 out.push_str(&format!(
-                    "<form method=\"post\" action=\"{}\" class=\"flag-form\">",
-                    escape_html(&submit_action)
+                    "<form method=\"post\" action=\"{}\"><button class=\"btn\" type=\"submit\">Spawn</button></form>",
+                    escape_html(&spawn_action)
                 ));
+            }
+            (Some(_), false) => {
+                out.push_str(
+                    "<p class=\"muted\">Instance spawning... refresh in a few seconds.</p>",
+                );
                 out.push_str(&format!(
-                    "<input type=\"hidden\" name=\"flag_name\" value=\"{}\" />",
-                    escape_html(flag_name)
+                    "<form method=\"post\" action=\"{}\"><button class=\"btn\" type=\"submit\">Spawn again</button></form>",
+                    escape_html(&spawn_action)
                 ));
-                out.push_str(&format!(
-                    "<input type=\"text\" name=\"submitted_flag\" placeholder=\"{} flag\" required />",
-                    escape_html(flag_name)
-                ));
-                out.push_str("<button class=\"btn\" type=\"submit\">Submit</button></form>");
-                if let Some(feedback) =
-                    submit_feedback.filter(|feedback| feedback.flag_name == *flag_name)
-                {
-                    out.push_str(&render_submission_feedback_for_flag(feedback));
+                out.push_str(&render_extend_form(&extend_action, can_extend));
+            }
+            (Some(_), true) => {
+                out.push_str(&render_extend_form(&extend_action, can_extend));
+                out.push_str("<h3>Submit flags</h3>");
+                for flag_name in &challenge.flags {
+                    out.push_str(&format!(
+                        "<form method=\"post\" action=\"{}\" class=\"flag-form\">",
+                        escape_html(&submit_action)
+                    ));
+                    out.push_str(&format!(
+                        "<input type=\"hidden\" name=\"flag_name\" value=\"{}\" />",
+                        escape_html(flag_name)
+                    ));
+                    out.push_str(&format!(
+                        "<input type=\"text\" name=\"submitted_flag\" placeholder=\"{} flag\" required />",
+                        escape_html(flag_name)
+                    ));
+                    out.push_str(
+                        "<button class=\"btn\" type=\"submit\">Submit</button></form>",
+                    );
+                    if let Some(feedback) =
+                        submit_feedback.filter(|feedback| feedback.flag_name == *flag_name)
+                    {
+                        out.push_str(&render_submission_feedback_for_flag(feedback));
+                    }
                 }
             }
         }
@@ -1159,7 +1293,7 @@ fn render_instance_live_script(ctf_name: &str, challenge_name: &str) -> String {
     );
 
     format!(
-        "<script>(function(){{const endpoint='{endpoint}';const timerEl=document.getElementById('instance-timer');const extendEl=document.getElementById('extend-form');let lastState=null;let localSeconds=null;function fmt(s){{const h=Math.floor(s/3600);const m=Math.floor((s%3600)/60);const sec=s%60;if(h>0) return `${{h}}h ${{m}}m ${{sec}}s`;if(m>0) return `${{m}}m ${{sec}}s`;return `${{sec}}s`;}}function tick(){{if(localSeconds===null) return;localSeconds=Math.max(0,localSeconds-1);if(timerEl) timerEl.textContent='Time left: '+fmt(localSeconds);if(extendEl) extendEl.style.display=(localSeconds<=300 && localSeconds>0)?'block':'none';}}async function poll(){{try{{const res=await fetch(endpoint,{{credentials:'same-origin',cache:'no-store'}});if(!res.ok) return;const state=await res.json();const key=`${{state.has_instance}}|${{state.ready}}|${{state.instance_name||''}}`;if(lastState!==null && key!==lastState){{window.location.reload();return;}}lastState=key;if(!state.has_instance){{localSeconds=null;if(timerEl) timerEl.textContent='';if(extendEl) extendEl.style.display='none';return;}}if(typeof state.time_left_seconds==='number'){{localSeconds=state.time_left_seconds;if(timerEl) timerEl.textContent='Time left: '+fmt(localSeconds);}} else {{localSeconds=null;if(timerEl) timerEl.textContent='';}}if(extendEl) extendEl.style.display=state.can_extend?'block':'none';}}catch(_err){{}}}}setInterval(tick,1000);setInterval(poll,5000);poll();}})();</script>",
+        "<script>(function(){{const endpoint='{endpoint}';const timerEl=document.getElementById('instance-timer');const extendEl=document.getElementById('extend-form');let lastState=null;let localSeconds=null;function fmt(s){{const h=Math.floor(s/3600);const m=Math.floor((s%3600)/60);const sec=s%60;if(h>0) return `${{h}}h ${{m}}m ${{sec}}s`;if(m>0) return `${{m}}m ${{sec}}s`;return `${{sec}}s`;}}function tick(){{if(localSeconds===null) return;localSeconds=Math.max(0,localSeconds-1);if(timerEl) timerEl.textContent='Time left: '+fmt(localSeconds);if(extendEl) extendEl.style.display=(localSeconds<=300 && localSeconds>0)?'block':'none';}}async function poll(){{try{{const res=await fetch(endpoint,{{credentials:'same-origin',cache:'no-store'}});if(!res.ok) return;const state=await res.json();const key=`${{state.solved}}|${{state.has_instance}}|${{state.ready}}|${{state.instance_name||''}}`;if(lastState!==null && key!==lastState){{window.location.reload();return;}}lastState=key;if(state.solved){{localSeconds=null;if(timerEl) timerEl.textContent='';if(extendEl) extendEl.style.display='none';return;}}if(!state.has_instance){{localSeconds=null;if(timerEl) timerEl.textContent='';if(extendEl) extendEl.style.display='none';return;}}if(typeof state.time_left_seconds==='number'){{localSeconds=state.time_left_seconds;if(timerEl) timerEl.textContent='Time left: '+fmt(localSeconds);}} else {{localSeconds=null;if(timerEl) timerEl.textContent='';}}if(extendEl) extendEl.style.display=state.can_extend?'block':'none';}}catch(_err){{}}}}setInterval(tick,1000);setInterval(poll,5000);poll();}})();</script>",
     )
 }
 

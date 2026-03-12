@@ -5,9 +5,11 @@ a { color: #93c5fd; }
 .muted { color: #9ca3af; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1rem; }
 .tile { background: #2a2f38; border: 1px solid #3a404a; border-radius: 8px; padding: 1rem; }
+.tile.solved { border-color: #16a34a; background: #1f2f26; }
 .tile h2 { margin: 0 0 .5rem 0; }
 .tile h3 { margin: .9rem 0 .4rem 0; font-size: 1rem; }
 .meta { font-size: .85rem; color: #9ca3af; margin: .5rem 0; }
+.solved-badge { display: inline-block; margin: 0 0 .6rem 0; padding: .2rem .5rem; border: 1px solid #16a34a; border-radius: 999px; color: #86efac; font-size: .8rem; }
 .btn { background: #374151; border: 1px solid #4b5563; color: #e5e7eb; border-radius: 6px; padding: .5rem .8rem; cursor: pointer; }
 .btn.secondary { background: transparent; }
 .flag-form { display: flex; gap: .5rem; margin-bottom: .5rem; }
