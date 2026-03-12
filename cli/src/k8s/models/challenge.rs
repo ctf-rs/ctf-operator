@@ -28,6 +28,8 @@ pub struct ChallengeSpec {
     pub full_name: String,
     #[serde(default)]
     pub description: Option<String>,
+    #[serde(default, rename = "instanceDurationSeconds")]
+    pub instance_duration_seconds: Option<u32>,
     pub categories: HashSet<crate::models::ChallengeCategory>,
     #[serde(default)]
     pub tags: HashSet<String>,
@@ -60,5 +62,16 @@ pub struct ChallengeContainer {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum ChallengeFileRef {
-    S3 { bucket: String, key: String },
+    S3 {
+        bucket: String,
+        key: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        endpoint: Option<String>,
+        #[serde(default = "default_path_style")]
+        path_style: bool,
+    },
+}
+
+fn default_path_style() -> bool {
+    true
 }

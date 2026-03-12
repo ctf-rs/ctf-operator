@@ -136,8 +136,21 @@ async fn flush_namespace(
                 .files
                 .iter()
                 .map(|file| match file {
-                    ChallengeFileRef::S3 { bucket, key } => {
-                        format!("https://{bucket}.s3.amazonaws.com/{key}")
+                    ChallengeFileRef::S3 {
+                        bucket,
+                        key,
+                        endpoint,
+                        path_style,
+                    } => {
+                        let effective_endpoint = endpoint
+                            .as_deref()
+                            .or(state.config.challenge_files_s3_endpoint.as_deref());
+                        let effective_path_style = if endpoint.is_some() {
+                            *path_style
+                        } else {
+                            state.config.challenge_files_s3_path_style
+                        };
+                        render_s3_url(bucket, key, effective_endpoint, effective_path_style)
                     }
                 })
                 .collect::<Vec<_>>();
@@ -163,4 +176,27 @@ async fn flush_namespace(
     }
 
     db::replace_challenges_for_namespace(&state.db, namespace, &rows).await
+}
+
+fn render_s3_url(bucket: &str, key: &str, endpoint: Option<&str>, path_style: bool) -> String {
+    let key = key.trim_start_matches('/');
+
+    let Some(endpoint) = endpoint.map(str::trim).filter(|value| !value.is_empty()) else {
+        return format!("https://{bucket}.s3.amazonaws.com/{key}");
+    };
+
+    let endpoint = endpoint.trim_end_matches('/');
+    if path_style {
+        return format!("{endpoint}/{bucket}/{key}");
+    }
+
+    if let Some(rest) = endpoint.strip_prefix("https://") {
+        return format!("https://{bucket}.{rest}/{key}");
+    }
+
+    if let Some(rest) = endpoint.strip_prefix("http://") {
+        return format!("http://{bucket}.{rest}/{key}");
+    }
+
+    format!("https://{bucket}.{endpoint}/{key}")
 }

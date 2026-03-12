@@ -70,8 +70,12 @@ spec:
               options:
                 default:
                   ignoreCase: false
+                  ignoreRandom: false
                 properties:
                   ignoreCase:
+                    default: false
+                    type: boolean
+                  ignoreRandom:
                     default: false
                     type: boolean
                 type: object

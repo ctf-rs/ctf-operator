@@ -8,6 +8,13 @@ pub struct AppConfig {
     pub watch_namespaces: Vec<String>,
     pub instance_name_prefix: String,
     pub session_cookie_name: String,
+    pub challenge_files_s3_endpoint: Option<String>,
+    pub challenge_files_s3_path_style: bool,
+    pub challenge_files_s3_region: String,
+    pub challenge_files_presign_ttl_seconds: u64,
+    pub challenge_files_s3_access_key_id: Option<String>,
+    pub challenge_files_s3_secret_access_key: Option<String>,
+    pub challenge_files_s3_session_token: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -49,6 +56,44 @@ impl AppConfig {
             std::env::var("INSTANCE_NAME_PREFIX").unwrap_or_else(|_| "app-inst".to_string());
         let session_cookie_name =
             std::env::var("SESSION_COOKIE_NAME").unwrap_or_else(|_| "ctf_app_session".to_string());
+        let challenge_files_s3_endpoint = std::env::var("CHALLENGE_FILES_S3_ENDPOINT")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        let challenge_files_s3_path_style = std::env::var("CHALLENGE_FILES_S3_PATH_STYLE")
+            .ok()
+            .as_deref()
+            .map(|value| {
+                matches!(
+                    value.to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+            .unwrap_or(true);
+        let challenge_files_s3_region =
+            std::env::var("CHALLENGE_FILES_S3_REGION").unwrap_or_else(|_| "us-east-1".to_string());
+        let challenge_files_presign_ttl_seconds =
+            std::env::var("CHALLENGE_FILES_PRESIGN_TTL_SECONDS")
+                .ok()
+                .and_then(|value| value.parse::<u64>().ok())
+                .filter(|value| *value > 0)
+                .unwrap_or(600);
+        let challenge_files_s3_access_key_id = std::env::var("CHALLENGE_FILES_S3_ACCESS_KEY_ID")
+            .ok()
+            .or_else(|| std::env::var("AWS_ACCESS_KEY_ID").ok())
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        let challenge_files_s3_secret_access_key =
+            std::env::var("CHALLENGE_FILES_S3_SECRET_ACCESS_KEY")
+                .ok()
+                .or_else(|| std::env::var("AWS_SECRET_ACCESS_KEY").ok())
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty());
+        let challenge_files_s3_session_token = std::env::var("CHALLENGE_FILES_S3_SESSION_TOKEN")
+            .ok()
+            .or_else(|| std::env::var("AWS_SESSION_TOKEN").ok())
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
 
         Ok(Self {
             bind_addr,
@@ -63,6 +108,13 @@ impl AppConfig {
             watch_namespaces,
             instance_name_prefix,
             session_cookie_name,
+            challenge_files_s3_endpoint,
+            challenge_files_s3_path_style,
+            challenge_files_s3_region,
+            challenge_files_presign_ttl_seconds,
+            challenge_files_s3_access_key_id,
+            challenge_files_s3_secret_access_key,
+            challenge_files_s3_session_token,
         })
     }
 }

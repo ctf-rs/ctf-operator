@@ -7,7 +7,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    validate_relative_existing_file, FlagFormat, FlagRandomRules, ValidationError, ValidationResult,
+    validate_relative_existing_file, FlagFormat, FlagMatchOptions, FlagRandomRules,
+    ValidationError, ValidationResult,
 };
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]
@@ -25,6 +26,9 @@ pub struct Ctf {
     #[serde(default)]
     #[garde(skip)]
     pub public: bool,
+    #[serde(default = "default_instance_duration_seconds", rename = "instanceDurationSeconds")]
+    #[garde(range(min = 1))]
+    pub instance_duration_seconds: u32,
     #[serde(default)]
     #[garde(dive)]
     pub registry: Option<CtfRegistry>,
@@ -80,6 +84,10 @@ fn default_storage_path_style() -> bool {
     true
 }
 
+fn default_instance_duration_seconds() -> u32 {
+    15 * 60
+}
+
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]
 pub struct CtfFlag {
     #[garde(pattern(r"^[a-zA-Z0-9]+$"))]
@@ -91,6 +99,9 @@ pub struct CtfFlag {
     #[serde(default)]
     #[garde(dive)]
     pub random: Option<FlagRandomRules>,
+    #[serde(default)]
+    #[garde(dive)]
+    pub options: FlagMatchOptions,
 }
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]
@@ -116,6 +127,7 @@ impl Default for CtfFlag {
             prefix: "CTF".to_string(),
             format: FlagFormat::default(),
             random: None,
+            options: FlagMatchOptions::default(),
         }
     }
 }

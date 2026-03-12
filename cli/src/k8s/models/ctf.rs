@@ -31,8 +31,13 @@ pub struct CtfSpec {
     pub full_name: String,
     #[serde(default)]
     pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "is_false")]
+    #[serde(default)]
     pub public: bool,
+    #[serde(
+        default = "default_instance_duration_seconds",
+        rename = "instanceDurationSeconds"
+    )]
+    pub instance_duration_seconds: u32,
     #[serde(default)]
     pub conditions: Conditions,
     pub challenges: Vec<String>,
@@ -40,8 +45,8 @@ pub struct CtfSpec {
     pub network: crate::models::CtfNetwork,
 }
 
-fn is_false(value: &bool) -> bool {
-    !*value
+fn default_instance_duration_seconds() -> u32 {
+    15 * 60
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema, Default)]

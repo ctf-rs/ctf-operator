@@ -60,6 +60,11 @@ spec:
               description:
                 nullable: true
                 type: string
+              instanceDurationSeconds:
+                default: 900
+                format: uint32
+                minimum: 1.0
+                type: integer
               flag:
                 properties:
                   format:
@@ -71,6 +76,18 @@ spec:
                     - angle
                     - underscore
                     type: string
+                  options:
+                    default:
+                      ignoreCase: false
+                      ignoreRandom: false
+                    properties:
+                      ignoreCase:
+                        default: false
+                        type: boolean
+                      ignoreRandom:
+                        default: false
+                        type: boolean
+                    type: object
                   prefix:
                     maxLength: 6
                     minLength: 3
@@ -197,6 +214,8 @@ spec:
           rule: self.spec.network.ports.end <= 49151
         - message: network.ports.start must be <= network.ports.end
           rule: self.spec.network.ports.start <= self.spec.network.ports.end
+        - message: instanceDurationSeconds must be >= 1
+          rule: self.spec.instanceDurationSeconds >= 1
     served: true
     storage: true
     subresources:

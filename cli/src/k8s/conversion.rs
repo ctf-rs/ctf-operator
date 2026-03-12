@@ -51,6 +51,8 @@ pub fn challenge_from_core(
             Ok(ChallengeFileRef::S3 {
                 bucket: storage.bucket.clone(),
                 key,
+                endpoint: Some(storage.endpoint.clone()),
+                path_style: storage.path_style,
             })
         })
         .collect::<ConversionResult<Vec<_>>>()?;
@@ -60,6 +62,7 @@ pub fn challenge_from_core(
         ChallengeSpec {
             full_name: challenge.full_name.clone(),
             description: challenge.description.clone(),
+            instance_duration_seconds: challenge.instance_duration_seconds,
             categories: challenge.categories.clone(),
             tags: challenge.tags.clone(),
             authors: challenge.authors.clone(),
@@ -90,6 +93,7 @@ pub fn ctf_from_core(
             full_name: ctf.full_name.clone(),
             description: ctf.description.clone(),
             public: ctf.public,
+            instance_duration_seconds: ctf.instance_duration_seconds,
             conditions: Default::default(),
             challenges: challenge_refs,
             flag: ctf.flag.clone(),

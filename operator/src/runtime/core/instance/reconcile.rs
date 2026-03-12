@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use crate::{
@@ -13,6 +13,7 @@ use crate::{
 };
 use ctf_cli::k8s::{Challenge, ConditionStatus, Ctf, Flag, FlagSpec, Instance, InstanceStatus};
 use ctf_cli::k8s::{PortClaim, PortClaimSpec, ReservationRef, ReservationSet, ReservationSetSpec};
+use jiff::Timestamp;
 use k8s_openapi::{
     api::{
         apps::v1::{Deployment, DeploymentSpec},
@@ -107,6 +108,33 @@ async fn reconcile_apply(
         patch_status_if_needed(instance.as_ref(), &state, status).await?;
         return Ok(Action::requeue(Duration::from_secs(30)));
     }
+
+    let duration_seconds = resolve_instance_duration_seconds(ctf.as_ref(), challenge.as_ref());
+    let now_unix = now_unix_seconds();
+    let expires_at = resolve_instance_expires_at(instance.as_ref(), duration_seconds, now_unix);
+    status.expires_at = unix_seconds_to_time(expires_at);
+    status.time_left = Some(humanize_duration(expires_at.saturating_sub(now_unix)));
+    if now_unix >= expires_at {
+        let api: Api<Instance> = Api::namespaced(state.client.clone(), &namespace);
+        match api
+            .delete(&instance.name_any(), &DeleteParams::default())
+            .await
+        {
+            Ok(_) => {}
+            Err(kube::Error::Api(ae)) if ae.code == 404 => {}
+            Err(err) => return Err(err.into()),
+        }
+        return Ok(Action::await_change());
+    }
+
+    ensure_instance_expiry_annotations(
+        instance.as_ref(),
+        &namespace,
+        duration_seconds,
+        expires_at,
+        &state,
+    )
+    .await?;
 
     ensure_target_namespace(instance.as_ref(), &target_namespace, &state).await?;
 
@@ -212,7 +240,7 @@ async fn reconcile_apply(
     patch_status_if_needed(instance.as_ref(), &state, status).await?;
 
     if all_ready {
-        Ok(Action::await_change())
+        Ok(Action::requeue(Duration::from_secs(30)))
     } else {
         Ok(Action::requeue(Duration::from_secs(10)))
     }
@@ -303,6 +331,92 @@ fn is_ready_challenge(challenge: &Challenge) -> bool {
         .as_ref()
         .map(|status| status.conditions.all_true())
         .unwrap_or(false)
+}
+
+fn resolve_instance_duration_seconds(ctf: &Ctf, challenge: &Challenge) -> u64 {
+    challenge
+        .spec
+        .instance_duration_seconds
+        .map(u64::from)
+        .unwrap_or_else(|| u64::from(ctf.spec.instance_duration_seconds))
+}
+
+fn now_unix_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
+}
+
+fn unix_seconds_to_time(seconds: u64) -> Option<k8s_openapi::apimachinery::pkg::apis::meta::v1::Time> {
+    let seconds = i64::try_from(seconds).ok()?;
+    let timestamp = Timestamp::from_second(seconds).ok()?;
+    Some(k8s_openapi::apimachinery::pkg::apis::meta::v1::Time(timestamp))
+}
+
+fn humanize_duration(seconds: u64) -> String {
+    let hours = seconds / 3600;
+    let minutes = (seconds % 3600) / 60;
+    let secs = seconds % 60;
+
+    if hours > 0 {
+        format!("{}h {}m {}s", hours, minutes, secs)
+    } else if minutes > 0 {
+        format!("{}m {}s", minutes, secs)
+    } else {
+        format!("{}s", secs)
+    }
+}
+
+fn resolve_instance_expires_at(instance: &Instance, duration_seconds: u64, now_unix: u64) -> u64 {
+    if let Some(value) = instance
+        .metadata
+        .annotations
+        .as_ref()
+        .and_then(|annotations| annotations.get("app.ctf.rs/expires-at"))
+        .and_then(|value| value.parse::<u64>().ok())
+    {
+        return value;
+    }
+
+    now_unix.saturating_add(duration_seconds)
+}
+
+async fn ensure_instance_expiry_annotations(
+    instance: &Instance,
+    namespace: &str,
+    duration_seconds: u64,
+    expires_at: u64,
+    state: &CtfState,
+) -> Result<(), CtfError> {
+    let mut annotations = instance.metadata.annotations.clone().unwrap_or_default();
+    let duration_value = duration_seconds.to_string();
+    let expires_value = expires_at.to_string();
+
+    if annotations.get("app.ctf.rs/duration-seconds") == Some(&duration_value)
+        && annotations.get("app.ctf.rs/expires-at") == Some(&expires_value)
+    {
+        return Ok(());
+    }
+
+    annotations.insert("app.ctf.rs/duration-seconds".to_string(), duration_value);
+    annotations.insert("app.ctf.rs/expires-at".to_string(), expires_value);
+
+    let api: Api<Instance> = Api::namespaced(state.client.clone(), namespace);
+    let patch = serde_json::json!({
+        "metadata": {
+            "annotations": annotations,
+        }
+    });
+
+    api.patch(
+        &instance.name_any(),
+        &PatchParams::apply(InstanceReconciler::NAME),
+        &Patch::Merge(&patch),
+    )
+    .await?;
+
+    Ok(())
 }
 
 fn base_labels(instance: &Instance) -> BTreeMap<String, String> {
@@ -549,7 +663,11 @@ async fn ensure_flags(
                 .random
                 .clone()
                 .or(ctf.spec.flag.random.clone()),
-            options: challenge_flag.options.clone(),
+            options: ctf_cli::models::FlagMatchOptions {
+                ignore_case: challenge_flag.options.ignore_case || ctf.spec.flag.options.ignore_case,
+                ignore_random: challenge_flag.options.ignore_random
+                    || ctf.spec.flag.options.ignore_random,
+            },
             conditions: Default::default(),
         };
 
@@ -864,12 +982,14 @@ mod tests {
             CtfSpec {
                 full_name: "Sample CTF".to_string(),
                 description: None,
+                instance_duration_seconds: 15 * 60,
                 conditions: Default::default(),
                 challenges: vec!["chall-1".to_string()],
                 flag: ctf_cli::models::CtfFlag {
                     prefix: "SCC".to_string(),
                     format: ctf_cli::models::FlagFormat::Curly,
                     random: None,
+                    options: Default::default(),
                 },
                 network: ctf_cli::models::CtfNetwork {
                     ports: ctf_cli::models::CtfPorts {
@@ -900,6 +1020,7 @@ mod tests {
             ChallengeSpec {
                 full_name: "Challenge".to_string(),
                 description: None,
+                instance_duration_seconds: None,
                 categories: HashSet::new(),
                 tags: HashSet::new(),
                 authors: HashSet::new(),

@@ -32,6 +32,9 @@ pub struct Challenge {
     #[serde(default)]
     #[garde(skip)]
     pub authors: HashSet<String>,
+    #[serde(default, rename = "instanceDurationSeconds")]
+    #[garde(range(min = 1))]
+    pub instance_duration_seconds: Option<u32>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[garde(skip)]
     pub files: Vec<PathBuf>,
@@ -150,7 +153,10 @@ impl ChallengeFlag {
             .unwrap_or_else(|| ctf.flag.prefix.clone());
         let format = self.format.unwrap_or(ctf.flag.format);
         let random = self.random.clone().or_else(|| ctf.flag.random.clone());
-        let options = self.options.clone();
+        let options = FlagMatchOptions {
+            ignore_case: self.options.ignore_case || ctf.flag.options.ignore_case,
+            ignore_random: self.options.ignore_random || ctf.flag.options.ignore_random,
+        };
 
         Flag {
             prefix,

@@ -217,7 +217,14 @@ pub async fn replace_challenges_for_namespace(
         sqlx::query(
             r#"INSERT INTO app_challenges(
                 namespace, name, ctf_name, ctf_public, full_name, description, files_json, flags_json
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"#,
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT(namespace, name, ctf_name) DO UPDATE
+              SET ctf_public = EXCLUDED.ctf_public,
+                  full_name = EXCLUDED.full_name,
+                  description = EXCLUDED.description,
+                  files_json = EXCLUDED.files_json,
+                  flags_json = EXCLUDED.flags_json,
+                  updated_at = now()"#,
         )
         .bind(&row.namespace)
         .bind(&row.name)

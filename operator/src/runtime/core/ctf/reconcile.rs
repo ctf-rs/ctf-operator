@@ -46,6 +46,7 @@ fn validate_spec(resource: &Ctf, status: &mut CtfStatus) {
         full_name: resource.spec.full_name.clone(),
         description: resource.spec.description.clone(),
         public: resource.spec.public,
+        instance_duration_seconds: resource.spec.instance_duration_seconds,
         registry: None,
         storage: None,
         challenges: vec![],
@@ -91,12 +92,14 @@ mod tests {
             CtfSpec {
                 full_name: "Sample CTF".to_string(),
                 description: Some("desc".to_string()),
+                instance_duration_seconds: 15 * 60,
                 conditions: Default::default(),
                 challenges: vec!["chall-1".to_string()],
                 flag: ctf_cli::models::CtfFlag {
                     prefix: "SCC".to_string(),
                     format: ctf_cli::models::FlagFormat::Curly,
                     random: None,
+                    options: Default::default(),
                 },
                 network: ctf_cli::models::CtfNetwork {
                     ports: ctf_cli::models::CtfPorts {

@@ -21,7 +21,7 @@ COPY operator/src ./operator/src
 
 RUN cargo build --release -p ctf-operator --bin ctf-operator
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \

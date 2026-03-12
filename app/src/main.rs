@@ -59,12 +59,24 @@ async fn main() -> Result<()> {
             get(web::challenge_page),
         )
         .route(
+            "/ctf/{ctf_name}/challenge/{challenge_name}/instance-state",
+            get(web::instance_state),
+        )
+        .route(
             "/ctf/{ctf_name}/challenge/{challenge_name}/spawn",
             axum::routing::post(web::spawn_instance),
         )
         .route(
             "/ctf/{ctf_name}/challenge/{challenge_name}/submit",
             axum::routing::post(web::submit_flag),
+        )
+        .route(
+            "/ctf/{ctf_name}/challenge/{challenge_name}/extend",
+            axum::routing::post(web::extend_instance),
+        )
+        .route(
+            "/file/{ctf_name}/{challenge_name}/{file_idx}",
+            get(web::download_file),
         )
         .with_state(state);
 

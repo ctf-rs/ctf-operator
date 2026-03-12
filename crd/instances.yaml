@@ -12,7 +12,13 @@ spec:
     singular: instance
   scope: Namespaced
   versions:
-  - additionalPrinterColumns: []
+  - additionalPrinterColumns:
+    - jsonPath: .status.timeLeft
+      name: TimeLeft
+      type: string
+    - jsonPath: .status.expiresAt
+      name: ExpiresAt
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -64,6 +70,10 @@ spec:
           status:
             nullable: true
             properties:
+              expiresAt:
+                nullable: true
+                format: date-time
+                type: string
               conditions:
                 default: []
                 items:
@@ -97,6 +107,9 @@ spec:
                   - type
                   type: object
                 type: array
+              timeLeft:
+                nullable: true
+                type: string
             type: object
         required:
         - spec

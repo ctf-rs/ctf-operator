@@ -65,6 +65,9 @@ pub struct FlagMatchOptions {
     #[serde(rename = "ignoreCase", default)]
     #[garde(skip)]
     pub ignore_case: bool,
+    #[serde(rename = "ignoreRandom", default)]
+    #[garde(skip)]
+    pub ignore_random: bool,
 }
 
 fn validate_unique_chars(value: &str, _: &()) -> garde::Result {
@@ -148,11 +151,13 @@ impl Flag {
         }
 
         if let Some(random) = &self.random {
-            if flag_random.len() != random.len as usize {
-                return false;
-            }
-            if !random.verify(flag_random, &self.options) {
-                return false;
+            if !self.options.ignore_random {
+                if flag_random.len() != random.len as usize {
+                    return false;
+                }
+                if !random.verify(flag_random, &self.options) {
+                    return false;
+                }
             }
         } else if !flag_random.is_empty() {
             return false;
@@ -487,8 +492,14 @@ mod tests {
             special: String::new(),
         };
 
-        let strict = FlagMatchOptions { ignore_case: false };
-        let insensitive = FlagMatchOptions { ignore_case: true };
+        let strict = FlagMatchOptions {
+            ignore_case: false,
+            ignore_random: false,
+        };
+        let insensitive = FlagMatchOptions {
+            ignore_case: true,
+            ignore_random: false,
+        };
 
         assert!(!rules.verify("abcd", &strict));
         assert!(rules.verify("abcd", &insensitive));
@@ -514,5 +525,22 @@ mod tests {
     fn verify_rejects_extra_content_when_random_is_none() {
         let flag = make_flag();
         assert!(!flag.verify("SCC{body123}"));
+    }
+
+    #[test]
+    fn verify_accepts_any_random_suffix_when_ignore_random_enabled() {
+        let mut flag = make_flag();
+        flag.random = Some(FlagRandomRules {
+            len: 8,
+            upper: true,
+            lower: true,
+            digits: true,
+            special: String::new(),
+        });
+        flag.options.ignore_random = true;
+
+        assert!(flag.verify("SCC{body}"));
+        assert!(flag.verify("SCC{bodyabc}"));
+        assert!(flag.verify("SCC{body__any-random__}"));
     }
 }

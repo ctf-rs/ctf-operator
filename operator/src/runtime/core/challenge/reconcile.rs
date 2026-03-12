@@ -49,6 +49,7 @@ fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
         categories: resource.spec.categories.clone(),
         tags: resource.spec.tags.clone(),
         authors: resource.spec.authors.clone(),
+        instance_duration_seconds: resource.spec.instance_duration_seconds,
         files: resource
             .spec
             .files
@@ -124,6 +125,7 @@ mod tests {
             ChallengeSpec {
                 full_name: "Challenge One".to_string(),
                 description: Some("desc".to_string()),
+                instance_duration_seconds: None,
                 categories: HashSet::new(),
                 tags: HashSet::new(),
                 authors: HashSet::new(),
@@ -153,6 +155,8 @@ mod tests {
                 files: vec![ChallengeFileRef::S3 {
                     bucket: "files".to_string(),
                     key: "challenge/chall-1/file.zip".to_string(),
+                    endpoint: None,
+                    path_style: true,
                 }],
             },
         );

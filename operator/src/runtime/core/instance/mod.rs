@@ -128,12 +128,14 @@ mod tests {
             CtfSpec {
                 full_name: "CTF".to_string(),
                 description: None,
+                instance_duration_seconds: 15 * 60,
                 conditions: Default::default(),
                 challenges: vec!["chall-a".to_string()],
                 flag: ctf_cli::models::CtfFlag {
                     prefix: "SCC".to_string(),
                     format: ctf_cli::models::FlagFormat::Curly,
                     random: None,
+                    options: Default::default(),
                 },
                 network: ctf_cli::models::CtfNetwork {
                     ports: ctf_cli::models::CtfPorts {
@@ -154,6 +156,7 @@ mod tests {
             ChallengeSpec {
                 full_name: "Challenge".to_string(),
                 description: None,
+                instance_duration_seconds: None,
                 categories: HashSet::new(),
                 tags: HashSet::new(),
                 authors: HashSet::new(),

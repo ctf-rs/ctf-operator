@@ -132,6 +132,11 @@ spec:
               description:
                 nullable: true
                 type: string
+              instanceDurationSeconds:
+                nullable: true
+                format: uint32
+                minimum: 1.0
+                type: integer
               files:
                 items:
                   oneOf:
@@ -175,8 +180,12 @@ spec:
                     options:
                       default:
                         ignoreCase: false
+                        ignoreRandom: false
                       properties:
                         ignoreCase:
+                          default: false
+                          type: boolean
+                        ignoreRandom:
                           default: false
                           type: boolean
                       type: object
