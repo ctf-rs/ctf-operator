@@ -12,271 +12,298 @@ spec:
     singular: challenge
   scope: Namespaced
   versions:
-  - additionalPrinterColumns: []
-    name: v1alpha1
-    schema:
-      openAPIV3Schema:
-        description: Auto-generated derived type for ChallengeSpec via `CustomResource`
-        properties:
-          spec:
-            properties:
-              authors:
-                default: []
-                items:
+    - additionalPrinterColumns: []
+      name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          description: Auto-generated derived type for ChallengeSpec via `CustomResource`
+          properties:
+            spec:
+              properties:
+                authors:
+                  default: []
+                  items:
+                    type: string
+                  type: array
+                categories:
+                  items:
+                    enum:
+                      - rev
+                      - pwn
+                      - web
+                      - foren
+                      - crypto
+                      - hw
+                      - osint
+                      - misc
+                    type: string
+                  type: array
+                conditions:
+                  default: []
+                  items:
+                    properties:
+                      lastProbeTime:
+                        description: >-
+                          Time is a wrapper around time.Time which supports correct marshaling to YAML
+                          and JSON.  Wrappers are provided for many of the factory methods that the time
+                          package offers.
+                        format: date-time
+                        nullable: true
+                        type: string
+                      lastTransitionTime:
+                        description: >-
+                          Time is a wrapper around time.Time which supports correct marshaling to YAML
+                          and JSON.  Wrappers are provided for many of the factory methods that the time
+                          package offers.
+                        format: date-time
+                        nullable: true
+                        type: string
+                      message:
+                        nullable: true
+                        type: string
+                      reason:
+                        nullable: true
+                        type: string
+                      status:
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                        type: string
+                      type:
+                        type: string
+                    required:
+                      - status
+                      - type
+                    type: object
+                  type: array
+                containers:
+                  items:
+                    properties:
+                      flags:
+                        items:
+                          properties:
+                            env:
+                              minLength: 1
+                              type: string
+                            name:
+                              maxLength: 63
+                              minLength: 1
+                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                              type: string
+                          required:
+                            - env
+                            - name
+                          type: object
+                        type: array
+                      image:
+                        type: string
+                      name:
+                        type: string
+                      ports:
+                        items:
+                          properties:
+                            containerPort:
+                              format: uint16
+                              maximum: 65535.0
+                              minimum: 0.0
+                              type: integer
+                            expose:
+                              default: false
+                              type: boolean
+                            name:
+                              maxLength: 63
+                              minLength: 1
+                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                              type: string
+                            type:
+                              enum:
+                                - http
+                                - https
+                                - netcat
+                                - ssh
+                                - stty
+                              type: string
+                          required:
+                            - containerPort
+                            - name
+                            - type
+                          type: object
+                        type: array
+                    required:
+                      - image
+                      - name
+                    type: object
+                  type: array
+                description:
+                  nullable: true
                   type: string
-                type: array
-              categories:
-                items:
-                  enum:
-                  - rev
-                  - pwn
-                  - web
-                  - foren
-                  - crypto
-                  - hw
-                  - osint
-                  - misc
-                  type: string
-                type: array
-              conditions:
-                default: []
-                items:
-                  properties:
-                    lastProbeTime:
-                      description: Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.  Wrappers are provided for many of the factory methods that the time package offers.
-                      format: date-time
-                      nullable: true
-                      type: string
-                    lastTransitionTime:
-                      description: Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.  Wrappers are provided for many of the factory methods that the time package offers.
-                      format: date-time
-                      nullable: true
-                      type: string
-                    message:
-                      nullable: true
-                      type: string
-                    reason:
-                      nullable: true
-                      type: string
-                    status:
-                      enum:
-                      - 'True'
-                      - 'False'
-                      - Unknown
-                      type: string
-                    type:
-                      type: string
-                  required:
-                  - status
-                  - type
-                  type: object
-                type: array
-              containers:
-                items:
-                  properties:
-                    flags:
-                      items:
+                files:
+                  items:
+                    oneOf:
+                      - required:
+                          - bucket
+                          - key
+                          - type
+                    properties:
+                      bucket:
+                        type: string
+                      endpoint:
+                        nullable: true
+                        type: string
+                      key:
+                        type: string
+                      path_style:
+                        default: true
+                        type: boolean
+                      type:
+                        enum:
+                          - s3
+                        type: string
+                    type: object
+                  type: array
+                flags:
+                  items:
+                    properties:
+                      body:
+                        maxLength: 127
+                        minLength: 1
+                        type: string
+                      format:
+                        enum:
+                          - curly
+                          - round
+                          - square
+                          - angle
+                          - underscore
+                          - null
+                        nullable: true
+                        type: string
+                      name:
+                        maxLength: 63
+                        minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                        type: string
+                      options:
+                        default:
+                          ignoreCase: false
+                          ignoreRandom: false
                         properties:
-                          env:
-                            minLength: 1
-                            type: string
-                          name:
-                            maxLength: 63
-                            minLength: 1
-                            pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
-                            type: string
-                        required:
-                        - env
-                        - name
-                        type: object
-                      type: array
-                    image:
-                      type: string
-                    name:
-                      type: string
-                    ports:
-                      items:
-                        properties:
-                          containerPort:
-                            format: uint16
-                            maximum: 65535.0
-                            minimum: 0.0
-                            type: integer
-                          expose:
+                          ignoreCase:
                             default: false
                             type: boolean
-                          name:
-                            maxLength: 63
-                            minLength: 1
-                            pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
-                            type: string
-                          type:
-                            enum:
-                            - http
-                            - https
-                            - netcat
-                            - ssh
-                            - stty
-                            type: string
-                        required:
-                        - containerPort
-                        - name
-                        - type
+                          ignoreRandom:
+                            default: false
+                            type: boolean
                         type: object
-                      type: array
-                  required:
-                  - image
-                  - name
-                  type: object
-                type: array
-              description:
-                nullable: true
-                type: string
-              files:
-                items:
-                  oneOf:
-                  - required:
-                    - bucket
-                    - key
-                    - type
-                  properties:
-                    bucket:
-                      type: string
-                    key:
-                      type: string
-                    type:
-                      enum:
-                      - s3
-                      type: string
-                  type: object
-                type: array
-              flags:
-                items:
-                  properties:
-                    body:
-                      maxLength: 127
-                      minLength: 1
-                      type: string
-                    format:
-                      enum:
-                      - curly
-                      - round
-                      - square
-                      - angle
-                      - underscore
-                      - null
-                      nullable: true
-                      type: string
-                    name:
-                      maxLength: 63
-                      minLength: 1
-                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
-                      type: string
-                    options:
-                      default:
-                        ignoreCase: false
-                      properties:
-                        ignoreCase:
-                          default: false
-                          type: boolean
-                      type: object
-                    prefix:
-                      maxLength: 6
-                      minLength: 3
-                      nullable: true
-                      pattern: ^[a-zA-Z0-9]+$
-                      type: string
-                    random:
-                      nullable: true
-                      properties:
-                        digits:
-                          default: true
-                          type: boolean
-                        len:
-                          default: 8
-                          format: uint8
-                          maximum: 63.0
-                          minimum: 1.0
-                          type: integer
-                        lower:
-                          default: true
-                          type: boolean
-                        special:
-                          default: ''
-                          type: string
-                        upper:
-                          default: true
-                          type: boolean
-                      type: object
-                  required:
-                  - body
-                  - name
-                  type: object
-                type: array
-              fullName:
-                type: string
-              tags:
-                default: []
-                items:
+                      prefix:
+                        maxLength: 6
+                        minLength: 3
+                        nullable: true
+                        pattern: ^[a-zA-Z0-9]+$
+                        type: string
+                      random:
+                        nullable: true
+                        properties:
+                          digits:
+                            default: true
+                            type: boolean
+                          len:
+                            default: 8
+                            format: uint8
+                            maximum: 63.0
+                            minimum: 1.0
+                            type: integer
+                          lower:
+                            default: true
+                            type: boolean
+                          special:
+                            default: ""
+                            type: string
+                          upper:
+                            default: true
+                            type: boolean
+                        type: object
+                    required:
+                      - body
+                      - name
+                    type: object
+                  type: array
+                fullName:
                   type: string
-                type: array
-            required:
-            - categories
-            - containers
-            - flags
-            - fullName
-            type: object
-          status:
-            nullable: true
-            properties:
-              conditions:
-                default: []
-                items:
-                  properties:
-                    lastProbeTime:
-                      description: Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.  Wrappers are provided for many of the factory methods that the time package offers.
-                      format: date-time
-                      nullable: true
-                      type: string
-                    lastTransitionTime:
-                      description: Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.  Wrappers are provided for many of the factory methods that the time package offers.
-                      format: date-time
-                      nullable: true
-                      type: string
-                    message:
-                      nullable: true
-                      type: string
-                    reason:
-                      nullable: true
-                      type: string
-                    status:
-                      enum:
-                      - 'True'
-                      - 'False'
-                      - Unknown
-                      type: string
-                    type:
-                      type: string
-                  required:
-                  - status
-                  - type
-                  type: object
-                type: array
-            type: object
-        required:
-        - spec
-        title: ChallengeValidated
-        type: object
-        x-kubernetes-validations:
-        - message: fullName is empty
-          rule: self.spec.fullName != ''
-        - message: at least one container is required
-          rule: size(self.spec.containers) > 0
-        - message: container name and image are required
-          rule: self.spec.containers.all(c, c.name != '' && c.image != '')
-        - message: flag name and body are required
-          rule: self.spec.flags.all(f, f.name != '' && f.body != '')
-    served: true
-    storage: true
-    subresources:
-      status: {}
+                instanceDurationSeconds:
+                  format: uint32
+                  minimum: 0.0
+                  nullable: true
+                  type: integer
+                tags:
+                  default: []
+                  items:
+                    type: string
+                  type: array
+              required:
+                - categories
+                - containers
+                - flags
+                - fullName
+              type: object
+            status:
+              nullable: true
+              properties:
+                conditions:
+                  default: []
+                  items:
+                    properties:
+                      lastProbeTime:
+                        description: >-
+                          Time is a wrapper around time.Time which supports correct marshaling to YAML
+                          and JSON.  Wrappers are provided for many of the factory methods that the time
+                          package offers.
+                        format: date-time
+                        nullable: true
+                        type: string
+                      lastTransitionTime:
+                        description: >-
+                          Time is a wrapper around time.Time which supports correct marshaling to YAML
+                          and JSON.  Wrappers are provided for many of the factory methods that the time
+                          package offers.
+                        format: date-time
+                        nullable: true
+                        type: string
+                      message:
+                        nullable: true
+                        type: string
+                      reason:
+                        nullable: true
+                        type: string
+                      status:
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                        type: string
+                      type:
+                        type: string
+                    required:
+                      - status
+                      - type
+                    type: object
+                  type: array
+              type: object
+          required:
+            - spec
+          title: ChallengeValidated
+          type: object
+          x-kubernetes-validations:
+            - message: fullName is empty
+              rule: self.spec.fullName != ''
+            - message: at least one container is required
+              rule: size(self.spec.containers) > 0
+            - message: container name and image are required
+              rule: self.spec.containers.all(c, c.name != '' && c.image != '')
+            - message: flag name and body are required
+              rule: self.spec.flags.all(f, f.name != '' && f.body != '')
+      served: true
+      storage: true
+      subresources:
+        status: {}

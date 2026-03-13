@@ -12,211 +12,221 @@ spec:
     singular: ctf
   scope: Namespaced
   versions:
-  - additionalPrinterColumns: []
-    name: v1alpha1
-    schema:
-      openAPIV3Schema:
-        description: Auto-generated derived type for CtfSpec via `CustomResource`
-        properties:
-          spec:
-            properties:
-              challenges:
-                items:
-                  type: string
-                type: array
-              conditions:
-                default: []
-                items:
-                  properties:
-                    lastProbeTime:
-                      description: Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.  Wrappers are provided for many of the factory methods that the time package offers.
-                      format: date-time
-                      nullable: true
-                      type: string
-                    lastTransitionTime:
-                      description: Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.  Wrappers are provided for many of the factory methods that the time package offers.
-                      format: date-time
-                      nullable: true
-                      type: string
-                    message:
-                      nullable: true
-                      type: string
-                    reason:
-                      nullable: true
-                      type: string
-                    status:
-                      enum:
-                      - 'True'
-                      - 'False'
-                      - Unknown
-                      type: string
-                    type:
-                      type: string
-                  required:
-                  - status
-                  - type
-                  type: object
-                type: array
-              description:
-                nullable: true
-                type: string
-              instanceDurationSeconds:
-                default: 900
-                format: uint32
-                minimum: 1.0
-                type: integer
-              flag:
-                properties:
-                  format:
-                    default: curly
-                    enum:
-                    - curly
-                    - round
-                    - square
-                    - angle
-                    - underscore
+    - additionalPrinterColumns: []
+      name: v1alpha1
+      schema:
+        openAPIV3Schema:
+          description: Auto-generated derived type for CtfSpec via `CustomResource`
+          properties:
+            spec:
+              properties:
+                challenges:
+                  items:
                     type: string
-                  options:
-                    default:
-                      ignoreCase: false
-                      ignoreRandom: false
+                  type: array
+                conditions:
+                  default: []
+                  items:
                     properties:
-                      ignoreCase:
-                        default: false
-                        type: boolean
-                      ignoreRandom:
-                        default: false
-                        type: boolean
-                    type: object
-                  prefix:
-                    maxLength: 6
-                    minLength: 3
-                    pattern: ^[a-zA-Z0-9]+$
-                    type: string
-                  random:
-                    nullable: true
-                    properties:
-                      digits:
-                        default: true
-                        type: boolean
-                      len:
-                        default: 8
-                        format: uint8
-                        maximum: 63.0
-                        minimum: 1.0
-                        type: integer
-                      lower:
-                        default: true
-                        type: boolean
-                      special:
-                        default: ''
+                      lastProbeTime:
+                        description: >-
+                          Time is a wrapper around time.Time which supports correct marshaling to YAML
+                          and JSON.  Wrappers are provided for many of the factory methods that the time
+                          package offers.
+                        format: date-time
+                        nullable: true
                         type: string
-                      upper:
-                        default: true
-                        type: boolean
-                    type: object
-                required:
-                - prefix
-                type: object
-              fullName:
-                type: string
-              public:
-                default: false
-                type: boolean
-              network:
-                properties:
-                  ip:
-                    format: ip
-                    nullable: true
-                    type: string
-                  ports:
-                    properties:
-                      end:
-                        format: uint16
-                        maximum: 49151.0
-                        minimum: 0.0
-                        type: integer
-                      start:
-                        format: uint16
-                        maximum: 65535.0
-                        minimum: 1024.0
-                        type: integer
+                      lastTransitionTime:
+                        description: >-
+                          Time is a wrapper around time.Time which supports correct marshaling to YAML
+                          and JSON.  Wrappers are provided for many of the factory methods that the time
+                          package offers.
+                        format: date-time
+                        nullable: true
+                        type: string
+                      message:
+                        nullable: true
+                        type: string
+                      reason:
+                        nullable: true
+                        type: string
+                      status:
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                        type: string
+                      type:
+                        type: string
                     required:
-                    - end
-                    - start
+                      - status
+                      - type
                     type: object
-                required:
-                - ports
-                type: object
-            required:
-            - challenges
-            - flag
-            - fullName
-            - network
-            type: object
-          status:
-            nullable: true
-            properties:
-              conditions:
-                default: []
-                items:
+                  type: array
+                description:
+                  nullable: true
+                  type: string
+                flag:
                   properties:
-                    lastProbeTime:
-                      description: Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.  Wrappers are provided for many of the factory methods that the time package offers.
-                      format: date-time
-                      nullable: true
-                      type: string
-                    lastTransitionTime:
-                      description: Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.  Wrappers are provided for many of the factory methods that the time package offers.
-                      format: date-time
-                      nullable: true
-                      type: string
-                    message:
-                      nullable: true
-                      type: string
-                    reason:
-                      nullable: true
-                      type: string
-                    status:
+                    format:
+                      default: curly
                       enum:
-                      - 'True'
-                      - 'False'
-                      - Unknown
+                        - curly
+                        - round
+                        - square
+                        - angle
+                        - underscore
                       type: string
-                    type:
+                    options:
+                      default:
+                        ignoreCase: false
+                        ignoreRandom: false
+                      properties:
+                        ignoreCase:
+                          default: false
+                          type: boolean
+                        ignoreRandom:
+                          default: false
+                          type: boolean
+                      type: object
+                    prefix:
+                      maxLength: 6
+                      minLength: 3
+                      pattern: ^[a-zA-Z0-9]+$
                       type: string
+                    random:
+                      nullable: true
+                      properties:
+                        digits:
+                          default: true
+                          type: boolean
+                        len:
+                          default: 8
+                          format: uint8
+                          maximum: 63.0
+                          minimum: 1.0
+                          type: integer
+                        lower:
+                          default: true
+                          type: boolean
+                        special:
+                          default: ""
+                          type: string
+                        upper:
+                          default: true
+                          type: boolean
+                      type: object
                   required:
-                  - status
-                  - type
+                    - prefix
                   type: object
-                type: array
-            type: object
-        required:
-        - spec
-        title: CtfValidated
-        type: object
-        x-kubernetes-validations:
-        - message: fullName is empty
-          rule: self.spec.fullName != ''
-        - message: at least one challenge reference is required
-          rule: size(self.spec.challenges) > 0
-        - message: challenge reference name is required
-          rule: self.spec.challenges.all(ch, ch != '')
-        - message: flag prefix is empty
-          rule: self.spec.flag.prefix != ''
-        - message: flag prefix must be alphanumeric
-          rule: self.spec.flag.prefix.matches('^[a-zA-Z0-9]+$')
-        - message: flag prefix must be between 3 and 6 characters
-          rule: size(self.spec.flag.prefix) >= 3 && size(self.spec.flag.prefix) <= 6
-        - message: network.ports.start must be >= 1024
-          rule: self.spec.network.ports.start >= 1024
-        - message: network.ports.end must be <= 49151
-          rule: self.spec.network.ports.end <= 49151
-        - message: network.ports.start must be <= network.ports.end
-          rule: self.spec.network.ports.start <= self.spec.network.ports.end
-        - message: instanceDurationSeconds must be >= 1
-          rule: self.spec.instanceDurationSeconds >= 1
-    served: true
-    storage: true
-    subresources:
-      status: {}
+                fullName:
+                  type: string
+                instanceDurationSeconds:
+                  default: 900
+                  format: uint32
+                  minimum: 0.0
+                  type: integer
+                network:
+                  properties:
+                    ip:
+                      format: ip
+                      nullable: true
+                      type: string
+                    ports:
+                      properties:
+                        end:
+                          format: uint16
+                          maximum: 49151.0
+                          minimum: 0.0
+                          type: integer
+                        start:
+                          format: uint16
+                          maximum: 65535.0
+                          minimum: 1024.0
+                          type: integer
+                      required:
+                        - end
+                        - start
+                      type: object
+                  required:
+                    - ports
+                  type: object
+                public:
+                  default: false
+                  type: boolean
+              required:
+                - challenges
+                - flag
+                - fullName
+                - network
+              type: object
+            status:
+              nullable: true
+              properties:
+                conditions:
+                  default: []
+                  items:
+                    properties:
+                      lastProbeTime:
+                        description: >-
+                          Time is a wrapper around time.Time which supports correct marshaling to YAML
+                          and JSON.  Wrappers are provided for many of the factory methods that the time
+                          package offers.
+                        format: date-time
+                        nullable: true
+                        type: string
+                      lastTransitionTime:
+                        description: >-
+                          Time is a wrapper around time.Time which supports correct marshaling to YAML
+                          and JSON.  Wrappers are provided for many of the factory methods that the time
+                          package offers.
+                        format: date-time
+                        nullable: true
+                        type: string
+                      message:
+                        nullable: true
+                        type: string
+                      reason:
+                        nullable: true
+                        type: string
+                      status:
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                        type: string
+                      type:
+                        type: string
+                    required:
+                      - status
+                      - type
+                    type: object
+                  type: array
+              type: object
+          required:
+            - spec
+          title: CtfValidated
+          type: object
+          x-kubernetes-validations:
+            - message: fullName is empty
+              rule: self.spec.fullName != ''
+            - message: at least one challenge reference is required
+              rule: size(self.spec.challenges) > 0
+            - message: challenge reference name is required
+              rule: self.spec.challenges.all(ch, ch != '')
+            - message: flag prefix is empty
+              rule: self.spec.flag.prefix != ''
+            - message: flag prefix must be alphanumeric
+              rule: self.spec.flag.prefix.matches('^[a-zA-Z0-9]+$')
+            - message: flag prefix must be between 3 and 6 characters
+              rule: size(self.spec.flag.prefix) >= 3 && size(self.spec.flag.prefix) <= 6
+            - message: network.ports.start must be >= 1024
+              rule: self.spec.network.ports.start >= 1024
+            - message: network.ports.end must be <= 49151
+              rule: self.spec.network.ports.end <= 49151
+            - message: network.ports.start must be <= network.ports.end
+              rule: self.spec.network.ports.start <= self.spec.network.ports.end
+      served: true
+      storage: true
+      subresources:
+        status: {}

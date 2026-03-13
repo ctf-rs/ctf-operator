@@ -1,0 +1,10 @@
+registry: []
+storage:
+  s3: []
+instance:
+  deployment:
+    replicas: 1
+    imagePullPolicy: Never
+  service:
+    type: NodePort
+    nodePortMode: Auto

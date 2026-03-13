@@ -9,6 +9,7 @@ COPY operator/Cargo.toml ./operator/Cargo.toml
 
 RUN mkdir -p app/src cli/src operator/src \
     && printf 'fn main() {}\n' > app/src/main.rs \
+    && printf 'pub fn placeholder() {}\n' > app/src/lib.rs \
     && printf 'fn main() {}\n' > cli/src/main.rs \
     && printf 'pub fn placeholder() {}\n' > cli/src/lib.rs \
     && printf 'fn main() {}\n' > operator/src/main.rs \
