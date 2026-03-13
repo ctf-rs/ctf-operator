@@ -5,9 +5,9 @@ use std::{
 };
 
 use axum::{
+    Json,
     extract::{Path, State},
     response::{IntoResponse, Redirect, Response},
-    Json,
 };
 use axum_extra::extract::cookie::CookieJar;
 use ctf_cli::k8s::{Instance, InstanceSpec};
@@ -17,7 +17,6 @@ use kube::{
 };
 use serde::Serialize;
 use tracing::warn;
-use uuid::Uuid;
 
 use crate::{
     db,
@@ -71,15 +70,50 @@ pub async fn spawn_instance(
         .into_response();
     }
 
-    let instance_name = format!(
-        "{}-{}-{}",
+    let Some(challenge_namespace) =
+        db::find_challenge_namespace(&state.db, &challenge_name, ctf_name)
+            .await
+            .ok()
+            .flatten()
+    else {
+        return (
+            axum::http::StatusCode::NOT_FOUND,
+            "challenge not found in watched namespaces",
+        )
+            .into_response();
+    };
+
+    // ---- Guard: one instance per user per challenge -------------------
+    // If the user already has a tracked instance, check whether it still
+    // exists in the cluster.  If it does, redirect back – no double-spawn.
+    if let Ok(Some(existing)) =
+        db::get_instance_for_user(&state.db, user.id, &challenge_name, ctf_name).await
+    {
+        let api: Api<Instance> = Api::namespaced(state.kube.clone(), &existing.namespace);
+        match api.get_opt(&existing.instance_name).await {
+            Ok(Some(_)) => {
+                // Instance still alive → redirect back, no new instance.
+                return Redirect::to(&challenge_route(&challenge_name)).into_response();
+            }
+            _ => {
+                // Instance gone from cluster → clean up DB row so we can
+                // re-create below.
+                let _ = db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
+                    .await;
+            }
+        }
+    }
+
+    // ---- Deterministic name: prefix-challenge-userId ------------------
+    let instance_name: String = format!(
+        "{}-{}-u{}",
         state.config.instance_name_prefix,
         sanitize_k8s_name(&challenge_name),
-        &Uuid::new_v4().to_string()[..8]
+        user.id,
     )
     .chars()
     .take(63)
-    .collect::<String>();
+    .collect();
 
     let mut instance = Instance::new(
         &instance_name,
@@ -99,19 +133,6 @@ pub async fn spawn_instance(
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or(0);
-
-    let Some(challenge_namespace) =
-        db::find_challenge_namespace(&state.db, &challenge_name, ctf_name)
-            .await
-            .ok()
-            .flatten()
-    else {
-        return (
-            axum::http::StatusCode::NOT_FOUND,
-            "challenge not found in watched namespaces",
-        )
-            .into_response();
-    };
 
     let duration_seconds =
         resolve_instance_duration_seconds(&state, &challenge_namespace, ctf_name, &challenge_name)
@@ -204,11 +225,10 @@ pub async fn extend_instance(
         ))
     };
 
-    let Some(instance) =
-        db::get_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
-            .await
-            .ok()
-            .flatten()
+    let Some(instance) = db::get_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
+        .await
+        .ok()
+        .flatten()
     else {
         return redirect_with("bad", "spawn an instance first").into_response();
     };
@@ -336,11 +356,10 @@ pub async fn instance_state(
         .into_response();
     }
 
-    let Some(instance) =
-        db::get_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
-            .await
-            .ok()
-            .flatten()
+    let Some(instance) = db::get_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
+        .await
+        .ok()
+        .flatten()
     else {
         return Json(InstanceStateResponse {
             has_instance: false,
