@@ -1,13 +1,41 @@
-replicaCount: 1
+installCRDs: true
 
-image:
-  repository: registry.ctf.rs/ctf/operator
-  tag: edge
-  pullPolicy: IfNotPresent
-
-imagePullSecrets: []
-  # Example:
-  # - name: ctf-registry-pull-secret
+operator:
+  enabled: true
+  deployment:
+    replicaCount: 1
+    image:
+      repository: registry.ctf.rs/ctf/operator
+      tag: edge
+      pullPolicy: IfNotPresent
+    imagePullSecrets: []
+      # Example:
+      # - name: ctf-registry-pull-secret
+    env: []
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 65532
+      runAsGroup: 65532
+      fsGroup: 65532
+      seccompProfile:
+        type: RuntimeDefault
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+    podAnnotations: {}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
 
 nameOverride: ""
 fullnameOverride: ""
@@ -46,43 +74,10 @@ instance:
     type: ClusterIP
     nodePortMode: Auto
 
-crds:
-  install: true
-
 serviceAccount:
   create: true
   name: ""
   annotations: {}
-
-env: []
-
-resources:
-  requests:
-    cpu: 100m
-    memory: 128Mi
-  limits:
-    cpu: 500m
-    memory: 512Mi
-
-podSecurityContext:
-  runAsNonRoot: true
-  runAsUser: 65532
-  runAsGroup: 65532
-  fsGroup: 65532
-  seccompProfile:
-    type: RuntimeDefault
-
-securityContext:
-  allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: true
-  capabilities:
-    drop:
-      - ALL
-
-podAnnotations: {}
-nodeSelector: {}
-tolerations: []
-affinity: {}
 
 rbac:
   create: true

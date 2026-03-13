@@ -55,8 +55,11 @@ pub struct ClusterCreateArgs {
     #[arg(long = "operator-replicas", default_value_t = 1)]
     pub operator_replicas: u16,
 
-    #[arg(long = "skip-cilium", default_value_t = false)]
-    pub skip_cilium: bool,
+    #[arg(long = "no-operator", default_value_t = false)]
+    pub no_operator: bool,
+
+    #[arg(long = "cilium", default_value_t = false)]
+    pub cilium: bool,
 }
 
 #[derive(Debug, Parser)]

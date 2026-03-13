@@ -38,11 +38,21 @@ tests:
 
   - it: applies replica count override
     set:
-      replicaCount: 3
+      operator:
+        deployment:
+          replicaCount: 3
     asserts:
       - equal:
           path: spec.replicas
           value: 3
+
+  - it: does not render deployment when operator is disabled
+    set:
+      operator:
+        enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
 
   - it: mounts operator config and sets config path env var
     set:
@@ -102,8 +112,10 @@ tests:
 
   - it: renders imagePullSecrets when configured
     set:
-      imagePullSecrets:
-        - name: ctf-registry-pull-secret
+      operator:
+        deployment:
+          imagePullSecrets:
+            - name: ctf-registry-pull-secret
     asserts:
       - contains:
           path: spec.template.spec.imagePullSecrets

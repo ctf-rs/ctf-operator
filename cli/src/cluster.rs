@@ -22,7 +22,8 @@ pub async fn create(args: ClusterCreateArgs) -> anyhow::Result<()> {
         kind_provider,
         operator_namespace,
         operator_replicas,
-        skip_cilium,
+        no_operator,
+        cilium,
     } = args;
 
     let ctf_abs = std::fs::canonicalize(&ctf)
@@ -51,7 +52,7 @@ pub async fn create(args: ClusterCreateArgs) -> anyhow::Result<()> {
             ensure_command("kubectl").await?;
             ensure_command("helm").await?;
             ensure_command(kind_provider_command(&provider)).await?;
-            if !skip_cilium {
+            if cilium {
                 ensure_command("cilium").await?;
             }
 
@@ -62,15 +63,16 @@ pub async fn create(args: ClusterCreateArgs) -> anyhow::Result<()> {
             create_kind_cluster(&cluster_name, expose_port_start, expose_port_end, &provider)
                 .await?;
 
-            if !skip_cilium {
+            if cilium {
                 install_cilium().await?;
             }
 
+            let effective_operator_replicas = if no_operator { 0 } else { operator_replicas };
             let chart = pull_operator_chart().await?;
             install_operator_chart(
                 &chart,
                 &operator_namespace,
-                operator_replicas,
+                effective_operator_replicas,
                 &namespaces,
                 &instance_namespace_prefix,
                 &cluster_name,
@@ -314,11 +316,11 @@ async fn install_operator_chart(
 
     let values_path = temp_file_path("ctf-operator-values", "yaml");
     let mut values = format!(
-        "replicaCount: {operator_replicas}\nimage:\n  repository: registry.ctf.rs/ctf/operator\n  tag: edge\n"
+        "installCRDs: true\noperator:\n  enabled: true\n  deployment:\n    replicaCount: {operator_replicas}\n    image:\n      repository: registry.ctf.rs/ctf/operator\n      tag: edge\n"
     );
     if let Some(image_pull_secret) = image_pull_secret {
-        values.push_str("imagePullSecrets:\n");
-        values.push_str(&format!("  - name: {image_pull_secret}\n"));
+        values.push_str("    imagePullSecrets:\n");
+        values.push_str(&format!("      - name: {image_pull_secret}\n"));
     }
     values.push_str("watchNamespaces:\n");
     for namespace in namespaces {

@@ -1,4 +1,11 @@
-{{- if .Values.crds.install }}
+{{- $installCRDs := true -}}
+{{- if and (hasKey .Values "crds") (hasKey .Values.crds "install") -}}
+{{- $installCRDs = .Values.crds.install -}}
+{{- end -}}
+{{- if hasKey .Values "installCRDs" -}}
+{{- $installCRDs = .Values.installCRDs -}}
+{{- end -}}
+{{- if $installCRDs }}
 {{ .Files.Get "files/crds/ctfs.yaml" }}
 ---
 {{ .Files.Get "files/crds/challenges.yaml" }}

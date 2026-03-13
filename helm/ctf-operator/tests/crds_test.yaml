@@ -12,6 +12,13 @@ tests:
 
   - it: does not render CRDs when disabled
     set:
+      installCRDs: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not render CRDs when disabled via legacy key
+    set:
       crds:
         install: false
     asserts:

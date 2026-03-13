@@ -67,10 +67,12 @@ cargo run -p ctf-cli -- cluster create
 What it does:
 
 1. creates a local `kind` cluster (default name: `ctf`)
-2. installs Cilium (`cilium install --wait`)
+2. optionally installs Cilium when `--cilium` is set
 3. builds `ctf-operator:local` image and loads it into kind
 4. installs the operator from `./helm/ctf-operator`
 5. optionally applies a CTF and all referenced challenges
+
+Default behavior is **without Cilium**. Use `--cilium` to enable it.
 
 Example with CTF apply:
 
@@ -88,6 +90,12 @@ cargo run -p ctf-cli -- cluster create \
 ```
 
 `operator-replicas` defaults to `1` because leader election/lease coordination is not yet implemented.
+
+To install Helm/CRDs but keep the in-cluster operator scaled to zero (for local manual operator runs), use:
+
+```bash
+cargo run -p ctf-cli -- cluster create ./examples/ctf.yaml --no-operator
+```
 
 ## Helm unit tests
 
