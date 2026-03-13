@@ -1,0 +1,40 @@
+{{- if .Values.ctf.install }}
+apiVersion: operator.ctf.rs/v1alpha1
+kind: Ctf
+metadata:
+  name: {{ required "ctf.name is required" .Values.ctf.name }}
+  namespace: {{ .Values.ctf.namespace | default "ctf" }}
+spec:
+  fullName: {{ required "ctf.fullName is required when ctf.install is true" .Values.ctf.fullName | quote }}
+  {{- if .Values.ctf.description }}
+  description: {{ .Values.ctf.description | quote }}
+  {{- end }}
+  public: {{ .Values.ctf.public }}
+  instanceDurationSeconds: {{ .Values.ctf.instanceDurationSeconds | default 900 }}
+  challenges:
+  {{- range .Values.ctf.challenges }}
+    - {{ . | quote }}
+  {{- end }}
+  flag:
+    prefix: {{ .Values.ctf.flag.prefix | default "CTF" | quote }}
+    {{- if .Values.ctf.flag.format }}
+    format: {{ .Values.ctf.flag.format | quote }}
+    {{- end }}
+    {{- if .Values.ctf.flag.random }}
+    random:
+      length: {{ .Values.ctf.flag.random.length | default 8 }}
+    {{- end }}
+    {{- if .Values.ctf.flag.options }}
+    options:
+      {{- if .Values.ctf.flag.options.ignoreRandom }}
+      ignoreRandom: {{ .Values.ctf.flag.options.ignoreRandom }}
+      {{- end }}
+    {{- end }}
+  network:
+    {{- if .Values.ctf.network.ip }}
+    ip: {{ .Values.ctf.network.ip | quote }}
+    {{- end }}
+    ports:
+      start: {{ .Values.ctf.network.ports.start | default 12000 }}
+      end: {{ .Values.ctf.network.ports.end | default 13000 }}
+{{- end }}

@@ -12,8 +12,32 @@ service:
   port: 80
   targetPort: 8080
 
-watchNamespaces:
-  - ctf
+# Single CTF that this app instance serves.
+ctf:
+  # Kubernetes resource name of the Ctf object.
+  name: ""
+  # Namespace where the Ctf and its Challenge resources live.
+  namespace: ctf
+  # Install a Ctf custom resource via this chart.
+  install: false
+  # --- fields below are only used when ctf.install is true ---
+  fullName: ""
+  description: ""
+  public: true
+  instanceDurationSeconds: 900
+  challenges: []
+  flag:
+    prefix: CTF
+    format: curly
+    random:
+      length: 8
+    options:
+      ignoreRandom: true
+  network:
+    ip: ""
+    ports:
+      start: 12000
+      end: 13000
 
 instanceNamePrefix: app-inst
 

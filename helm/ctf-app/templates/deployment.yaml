@@ -46,8 +46,10 @@ spec:
               value: {{ .Values.oauth.clientSecret | quote }}
             - name: OIDC_REDIRECT_URL
               value: {{ .Values.oauth.redirectUrl | quote }}
-            - name: WATCH_NAMESPACES
-              value: {{ join "," .Values.watchNamespaces | quote }}
+            - name: CTF_NAME
+              value: {{ required "ctf.name is required" .Values.ctf.name | quote }}
+            - name: CTF_NAMESPACE
+              value: {{ .Values.ctf.namespace | default "ctf" | quote }}
             - name: INSTANCE_NAME_PREFIX
               value: {{ .Values.instanceNamePrefix | quote }}
             - name: SESSION_COOKIE_NAME

@@ -5,7 +5,8 @@ pub struct AppConfig {
     pub bind_addr: String,
     pub database_url: String,
     pub oidc: OidcConfig,
-    pub watch_namespaces: Vec<String>,
+    pub ctf_name: String,
+    pub ctf_namespace: String,
     pub instance_name_prefix: String,
     pub session_cookie_name: String,
     pub challenge_files_s3_endpoint: Option<String>,
@@ -40,17 +41,8 @@ impl AppConfig {
         let redirect_url =
             std::env::var("OIDC_REDIRECT_URL").context("OIDC_REDIRECT_URL is required")?;
 
-        let watch_namespaces = std::env::var("WATCH_NAMESPACES")
-            .unwrap_or_else(|_| "ctf".to_string())
-            .split(',')
-            .map(str::trim)
-            .filter(|ns| !ns.is_empty())
-            .map(ToOwned::to_owned)
-            .collect::<Vec<_>>();
-
-        if watch_namespaces.is_empty() {
-            anyhow::bail!("WATCH_NAMESPACES must contain at least one namespace");
-        }
+        let ctf_name = std::env::var("CTF_NAME").context("CTF_NAME is required")?;
+        let ctf_namespace = std::env::var("CTF_NAMESPACE").unwrap_or_else(|_| "ctf".to_string());
 
         let instance_name_prefix =
             std::env::var("INSTANCE_NAME_PREFIX").unwrap_or_else(|_| "app-inst".to_string());
@@ -105,7 +97,8 @@ impl AppConfig {
                 client_secret,
                 redirect_url,
             },
-            watch_namespaces,
+            ctf_name,
+            ctf_namespace,
             instance_name_prefix,
             session_cookie_name,
             challenge_files_s3_endpoint,

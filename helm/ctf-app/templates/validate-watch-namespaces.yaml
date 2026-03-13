@@ -1,8 +1,6 @@
-{{- if not .Values.watchNamespaces }}
-{{ fail "watchNamespaces cannot be empty" }}
+{{- if not .Values.ctf.name }}
+{{ fail "ctf.name is required" }}
 {{- end }}
-{{- range $i, $ns := .Values.watchNamespaces }}
-{{- if eq (trim $ns) "" }}
-{{ fail "watchNamespaces cannot contain empty values" }}
-{{- end }}
+{{- if eq (trim .Values.ctf.name) "" }}
+{{ fail "ctf.name cannot be empty" }}
 {{- end }}
