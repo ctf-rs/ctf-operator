@@ -1,0 +1,44 @@
+apiVersion: operator.ctf.rs/v1alpha1
+kind: Challenge
+metadata:
+  name: web-foren-combo
+spec:
+  fullName: Web Forensics Combo
+  description: |
+    This hybrid challenge combines web exploitation with forensic analysis!
+    
+    First, exploit the web application to access a hidden admin panel.
+    Then, analyze the server logs to find the forensic evidence.
+    
+    Two flags are required to complete this challenge - one for each skill!
+  authors:
+    - CTF Team
+  categories:
+    - web
+    - foren
+  difficulty: mid
+  tags:
+    - http
+    - logs
+    - analysis
+    - multi-flag
+  flags:
+    - name: web-flag
+      label: Web Exploitation Flag
+      body: web_part_completed
+    - name: foren-flag
+      label: Forensics Analysis Flag
+      body: forensic_part_completed
+  containers:
+    - name: webapp
+      image: registry.ctf.rs/playground/web-foren-combo:test
+      flags:
+        - name: web-flag
+          env: WEB_FLAG
+        - name: foren-flag
+          env: FOREN_FLAG
+      ports:
+        - name: http
+          type: http
+          expose: true
+          containerPort: 8080

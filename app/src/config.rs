@@ -16,6 +16,8 @@ pub struct AppConfig {
     pub challenge_files_s3_access_key_id: Option<String>,
     pub challenge_files_s3_secret_access_key: Option<String>,
     pub challenge_files_s3_session_token: Option<String>,
+    /// Base domain for instance connections (e.g., "ctf.local").
+    pub instance_base_domain: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -86,6 +88,10 @@ impl AppConfig {
             .or_else(|| std::env::var("AWS_SESSION_TOKEN").ok())
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty());
+        let instance_base_domain = std::env::var("INSTANCE_BASE_DOMAIN")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
 
         Ok(Self {
             bind_addr,
@@ -108,6 +114,7 @@ impl AppConfig {
             challenge_files_s3_access_key_id,
             challenge_files_s3_secret_access_key,
             challenge_files_s3_session_token,
+            instance_base_domain,
         })
     }
 }

@@ -189,6 +189,10 @@ spec:
                           - null
                         nullable: true
                         type: string
+                      label:
+                        description: Optional human-readable label for the flag (e.g., "Web Flag", "Forensics Flag").
+                        nullable: true
+                        type: string
                       name:
                         maxLength: 63
                         minLength: 1

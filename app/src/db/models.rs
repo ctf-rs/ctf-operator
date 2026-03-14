@@ -14,6 +14,19 @@ pub struct User {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FlagView {
+    pub name: String,
+    pub label: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortView {
+    pub name: String,
+    pub port: u16,
+    pub port_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChallengeView {
     pub namespace: String,
     pub name: String,
@@ -24,7 +37,8 @@ pub struct ChallengeView {
     pub categories: Vec<ChallengeCategory>,
     pub difficulty: Option<ChallengeDifficulty>,
     pub files: Vec<String>,
-    pub flags: Vec<String>,
+    pub flags: Vec<FlagView>,
+    pub exposed_ports: Vec<PortView>,
 }
 
 #[derive(Debug, Clone)]
@@ -61,7 +75,8 @@ pub(super) struct ChallengeRow {
     pub(super) categories_json: sqlx::types::Json<Vec<ChallengeCategory>>,
     pub(super) difficulty: Option<String>,
     pub(super) files_json: sqlx::types::Json<Vec<String>>,
-    pub(super) flags_json: sqlx::types::Json<Vec<String>>,
+    pub(super) flags_json: sqlx::types::Json<Vec<FlagView>>,
+    pub(super) exposed_ports_json: sqlx::types::Json<Vec<PortView>>,
 }
 
 #[derive(Debug, FromRow)]
@@ -97,5 +112,6 @@ pub(super) fn challenge_from_row(row: ChallengeRow) -> ChallengeView {
         difficulty,
         files: row.files_json.0,
         flags: row.flags_json.0,
+        exposed_ports: row.exposed_ports_json.0,
     }
 }

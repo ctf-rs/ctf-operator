@@ -8,7 +8,7 @@ use tracing::{error, info};
 
 use crate::{
     config::AppConfig,
-    db::{self, ChallengeView},
+    db::{self, ChallengeView, FlagView, PortView},
     state::AppState,
 };
 
@@ -168,8 +168,25 @@ async fn flush_namespace(
             .spec
             .flags
             .iter()
-            .map(|flag| flag.name.clone())
+            .map(|flag| FlagView {
+                name: flag.name.clone(),
+                label: flag.label.clone(),
+            })
             .collect::<Vec<_>>();
+
+        // Collect exposed ports from all containers
+        let exposed_ports: Vec<PortView> = challenge
+            .spec
+            .containers
+            .iter()
+            .flat_map(|container| {
+                container.ports.iter().filter(|p| p.expose).map(|p| PortView {
+                    name: p.name.clone(),
+                    port: p.container_port,
+                    port_type: format!("{:?}", p.port_type).to_lowercase(),
+                })
+            })
+            .collect();
 
         let categories: Vec<_> = challenge.spec.categories.iter().copied().collect();
 
@@ -186,6 +203,7 @@ async fn flush_namespace(
             difficulty,
             files,
             flags,
+            exposed_ports,
         });
     }
 

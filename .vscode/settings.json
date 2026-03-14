@@ -10,6 +10,7 @@
     "cargo run -p ctf-cli --bin ctf --": true,
     "cargo run -p ctf-operator -- operator": true,
     "cargo leptos": true,
-    "./target/debug/ctf-operator": true
+    "./target/debug/ctf-operator": true,
+    "cargo run": true
   }
 }

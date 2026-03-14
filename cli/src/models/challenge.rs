@@ -144,6 +144,10 @@ pub struct ChallengeFlag {
     #[garde(length(min = 1, max = 63))]
     #[garde(pattern(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"))]
     pub name: String,
+    /// Optional human-readable label for the flag (e.g., "Web Flag", "Forensics Flag").
+    #[serde(default)]
+    #[garde(skip)]
+    pub label: Option<String>,
     #[garde(length(min = 1, max = 127))]
     #[garde(ascii)]
     pub body: String,

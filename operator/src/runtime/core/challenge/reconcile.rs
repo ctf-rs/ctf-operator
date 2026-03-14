@@ -65,6 +65,7 @@ fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
             .iter()
             .map(|flag| ChallengeFlag {
                 name: flag.name.clone(),
+                label: flag.label.clone(),
                 body: flag.body.clone(),
                 prefix: flag.prefix.clone(),
                 format: flag.format,

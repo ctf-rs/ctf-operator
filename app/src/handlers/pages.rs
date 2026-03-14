@@ -203,6 +203,9 @@ pub async fn challenge_page(
     let extend_feedback =
         views::parse_extend_feedback(query.extend.as_deref(), query.message.as_deref());
 
+    let instance_name = instance.as_ref().map(|i| i.instance_name.clone());
+    let instance_base_domain = state.config.instance_base_domain.clone();
+
     let page_data = views::ChallengePageData {
         challenge,
         ctf_title: ctf_name.clone(),
@@ -214,6 +217,8 @@ pub async fn challenge_page(
         solved,
         submit_feedback,
         extend_feedback,
+        instance_name,
+        instance_base_domain,
     };
 
     let html = views::render_to_html(move || {
