@@ -172,35 +172,59 @@ pub async fn submit_flag(
     .await;
 
     if accepted {
-        if let Err(err) = db::mark_challenge_solved(
+        // Check if all flags are now solved
+        let solved_flag_count = db::count_solved_flags_for_user(
             &state.db,
             user.id,
-            &instance.namespace,
             &challenge_name,
             ctf_name,
         )
         .await
-        {
-            warn!(error = %err, "failed to persist solved challenge state");
-        }
+        .unwrap_or(0) as usize;
 
-        let api: Api<Instance> = Api::namespaced(state.kube.clone(), &instance.namespace);
-        match api
-            .delete(&instance.instance_name, &kube::api::DeleteParams::default())
+        let total_flags = db::get_challenge(&state.db, ctf_name, &challenge_name)
             .await
-        {
-            Ok(_) => {}
-            Err(kube::Error::Api(ae)) if ae.code == 404 => {}
-            Err(err) => warn!(error = %err, "failed to delete solved instance"),
+            .ok()
+            .flatten()
+            .map(|ch| ch.flags.len())
+            .unwrap_or(1);
+
+        let all_flags_solved = solved_flag_count >= total_flags;
+
+        if all_flags_solved {
+            if let Err(err) = db::mark_challenge_solved(
+                &state.db,
+                user.id,
+                &instance.namespace,
+                &challenge_name,
+                ctf_name,
+            )
+            .await
+            {
+                warn!(error = %err, "failed to persist solved challenge state");
+            }
+
+            let api: Api<Instance> = Api::namespaced(state.kube.clone(), &instance.namespace);
+            match api
+                .delete(&instance.instance_name, &kube::api::DeleteParams::default())
+                .await
+            {
+                Ok(_) => {}
+                Err(kube::Error::Api(ae)) if ae.code == 404 => {}
+                Err(err) => warn!(error = %err, "failed to delete solved instance"),
+            }
+
+            if let Err(err) =
+                db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name).await
+            {
+                warn!(error = %err, "failed to clear solved instance relation");
+            }
+
+            return redirect_with("good", "challenge solved").into_response();
         }
 
-        if let Err(err) =
-            db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name).await
-        {
-            warn!(error = %err, "failed to clear solved instance relation");
-        }
-
-        return redirect_with("good", "challenge solved").into_response();
+        // Flag accepted but more flags remain
+        return redirect_with("good", "flag accepted").into_response();
     }
 
     redirect_with("bad", "flag is not correct").into_response()

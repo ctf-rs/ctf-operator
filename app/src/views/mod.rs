@@ -18,6 +18,10 @@ pub struct ChallengeCardData {
     pub challenge: ChallengeView,
     pub solved: bool,
     pub partial_solve: bool, // Some flags submitted but not all
+    pub solved_flags: usize,
+    pub total_flags: usize,
+    pub time_left_seconds: Option<u64>,
+    pub has_instance: bool,
 }
 
 pub struct CategorySection {

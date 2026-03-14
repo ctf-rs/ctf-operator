@@ -13,7 +13,10 @@ pub use flags::{
     get_solved_flags_for_user, is_challenge_solved_for_user, list_solved_challenges_for_user,
     mark_challenge_solved,
 };
-pub use instances::{clear_instance_for_user, get_instance_for_user, set_instance};
+pub use instances::{
+    InstanceInfo, clear_instance_for_user, get_instance_for_user, list_instances_for_user,
+    set_instance,
+};
 #[allow(unused_imports)] // re-exported as public API
 pub use models::{ChallengeView, FlagView, InstanceView, PortView, SolvedKey, User};
 pub use users::{create_session, delete_session, get_user_by_session, upsert_user};
@@ -87,12 +90,6 @@ pub async fn migrate(db: &PgPool) -> Result<()> {
 
     sqlx::query(
         "ALTER TABLE app_challenges ADD COLUMN IF NOT EXISTS exposed_ports_json JSONB NOT NULL DEFAULT '[]'::jsonb",
-    )
-    .execute(db)
-    .await?;
-
-    sqlx::query(
-        "ALTER TABLE app_challenges ADD COLUMN IF NOT EXISTS flag_hint TEXT NOT NULL DEFAULT ''",
     )
     .execute(db)
     .await?;

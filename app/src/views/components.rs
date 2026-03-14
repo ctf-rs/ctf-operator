@@ -2,7 +2,7 @@ use leptos::prelude::*;
 
 use crate::helpers::challenge_route;
 
-use super::ChallengeCardData;
+use super::{ChallengeCardData, format_countdown};
 use crate::db::{FlagView, PortView};
 
 // ---------------------------------------------------------------------------
@@ -41,12 +41,35 @@ pub fn ChallengeCard(data: ChallengeCardData) -> impl IntoView {
         None
     };
 
+    // Flag progress indicator (N/M)
+    let flag_progress = format!("{}/{}", data.solved_flags, data.total_flags);
+    let flag_progress_class = if data.solved {
+        "flag-progress completed"
+    } else if data.partial_solve {
+        "flag-progress partial"
+    } else {
+        "flag-progress"
+    };
+
+    // Instance timer (only show if has instance and time remaining)
+    let timer_badge = if data.has_instance {
+        if let Some(secs) = data.time_left_seconds {
+            Some(view! { <span class="card-timer">{format_countdown(secs)}</span> }.into_any())
+        } else {
+            Some(view! { <span class="card-timer running">"Running"</span> }.into_any())
+        }
+    } else {
+        None
+    };
+
     view! {
         <article class={tile_class}>
             <div class="card-content">
                 <div class="tile-header">
-                    <h2>{full_name}</h2>
+                    <span class="tile-title">{full_name}</span>
                     {diff_badge}
+                    {timer_badge}
+                    <span class={flag_progress_class}>{flag_progress}</span>
                 </div>
                 {status_badge}
                 <p class="muted desc">{description}</p>
@@ -109,7 +132,7 @@ pub fn InstanceControls(
     // Generate connection details when instance is ready
     let connection_details = if ready && !exposed_ports.is_empty() {
         let base_domain = &instance_base_domain;
-        
+
         let connections: Vec<_> = exposed_ports
             .into_iter()
             .map(|port| {

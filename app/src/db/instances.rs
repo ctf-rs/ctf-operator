@@ -72,3 +72,41 @@ pub async fn get_instance_for_user(
         namespace: r.challenge_namespace,
     }))
 }
+
+/// Instance info with associated challenge name (for bulk queries)
+pub struct InstanceInfo {
+    pub challenge_name: String,
+    pub ctf_name: String,
+    pub instance_name: String,
+    pub namespace: String,
+}
+
+/// List all active instances for a user
+pub async fn list_instances_for_user(db: &PgPool, user_id: i64) -> Result<Vec<InstanceInfo>> {
+    let rows = sqlx::query_as::<_, InstanceInfoRow>(
+        r#"SELECT challenge_name, ctf_name, instance_name, challenge_namespace
+           FROM app_instances
+           WHERE user_id = $1"#,
+    )
+    .bind(user_id)
+    .fetch_all(db)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| InstanceInfo {
+            challenge_name: r.challenge_name,
+            ctf_name: r.ctf_name,
+            instance_name: r.instance_name,
+            namespace: r.challenge_namespace,
+        })
+        .collect())
+}
+
+#[derive(sqlx::FromRow)]
+struct InstanceInfoRow {
+    challenge_name: String,
+    ctf_name: String,
+    instance_name: String,
+    challenge_namespace: String,
+}

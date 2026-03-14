@@ -80,20 +80,59 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         .await
         .unwrap_or_default();
 
+    // Get all instances for this user and fetch their time left from k8s
+    let instances = db::list_instances_for_user(&state.db, user.id)
+        .await
+        .unwrap_or_default();
+
+    // Build a map of (ctf_name, challenge_name) -> time_left_seconds
+    let mut instance_times: std::collections::HashMap<(String, String), Option<u64>> =
+        std::collections::HashMap::new();
+
+    for inst in instances {
+        let api: Api<Instance> = Api::namespaced(state.kube.clone(), &inst.namespace);
+        match api.get(&inst.instance_name).await {
+            Ok(instance_obj) => {
+                let time_left = instance_time_left_seconds(&instance_obj);
+                instance_times.insert((inst.ctf_name, inst.challenge_name), time_left);
+            }
+            Err(_) => {
+                // Instance no longer exists in k8s, mark as no instance
+            }
+        }
+    }
+
     // Build category → cards map. Challenges with multiple categories appear in all of them.
     let mut category_map: std::collections::BTreeMap<ChallengeCategory, Vec<views::ChallengeCardData>> =
         std::collections::BTreeMap::new();
 
     for challenge in challenges {
-        let solved =
-            solved_keys.contains(&format!("{}::{}", challenge.ctf_name, challenge.name));
-        // Partial solve: some flags submitted but not fully solved
-        let partial_solve = !solved
-            && partial_solve_counts
+        let key = format!("{}::{}", challenge.ctf_name, challenge.name);
+        let solved = solved_keys.contains(&key);
+        let total_flags = challenge.flags.len();
+
+        // Get solved flags count
+        let solved_flags = if solved {
+            total_flags
+        } else {
+            partial_solve_counts
                 .get(&(challenge.ctf_name.clone(), challenge.name.clone()))
                 .copied()
-                .unwrap_or(0)
-                > 0;
+                .unwrap_or(0) as usize
+        };
+
+        // Partial solve: some flags submitted but not fully solved
+        let partial_solve = !solved && solved_flags > 0;
+
+        // Check for instance
+        let instance_key = (challenge.ctf_name.clone(), challenge.name.clone());
+        let (has_instance, time_left_seconds) =
+            if let Some(time_left) = instance_times.get(&instance_key) {
+                (true, *time_left)
+            } else {
+                (false, None)
+            };
+
         let cats: Vec<ChallengeCategory> = if challenge.categories.is_empty() {
             vec![ChallengeCategory::Misc]
         } else {
@@ -107,6 +146,10 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
                     challenge: challenge.clone(),
                     solved,
                     partial_solve,
+                    solved_flags,
+                    total_flags,
+                    time_left_seconds,
+                    has_instance,
                 });
         }
     }
