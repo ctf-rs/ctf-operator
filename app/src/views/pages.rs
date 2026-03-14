@@ -160,57 +160,55 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                 </div>
 
                 <div class="detail-body">
-                    <div class="detail-main">
-                        <section class="description-section">
-                            <h2>"Description"</h2>
-                            <p>{description}</p>
-                        </section>
+                    <section class="description-section">
+                        <h2>"Description"</h2>
+                        <p>{description}</p>
+                    </section>
 
-                        <section class="files-section">
-                            <h2>"Files"</h2>
-                            {if files.is_empty() {
-                                view! { <p class="muted">"No files for this challenge"</p> }.into_any()
-                            } else {
-                                view! {
-                                    <div class="files-list">
-                                        {files.into_iter().map(|(href, label)| {
-                                            view! { <a class="file-link" href={href} target="_blank">{label}</a> }
-                                        }).collect_view()}
-                                    </div>
-                                }.into_any()
-                            }}
-                        </section>
-                    </div>
-
-                    <div class="detail-sidebar">
-                        <section class="instance-section">
-                            <h2>"Instance"</h2>
-                            <p id="instance-status" class={if data.ready { "status ready" } else { "status" }}>{status_text}</p>
-                            <p id="instance-timer" class="timer">{timer_text}</p>
-                            {extend_fb.map(|msg| view! { <p class="feedback">{msg}</p> })}
-                        </section>
-
-                        {(!data.solved).then(move || {
+                    <section class="files-section">
+                        <h2>"Files"</h2>
+                        {if files.is_empty() {
+                            view! { <p class="muted">"No files for this challenge"</p> }.into_any()
+                        } else {
                             view! {
-                                <InstanceControls
-                                    has_instance=data.has_instance
-                                    ready=data.ready
-                                    can_extend=data.can_extend
-                                    spawn_action=spawn_action.clone()
-                                    extend_action=extend_action.clone()
-                                    submit_action=submit_action.clone()
-                                    extend_display=extend_display.to_string()
-                                    flags=flags.clone()
-                                    submit_fb_flag_name=submit_fb_flag_name.clone()
-                                    submit_fb_kind=submit_fb_kind.clone()
-                                    submit_fb_message=submit_fb_message.clone()
-                                    exposed_ports=exposed_ports.clone()
-                                    instance_name=data.instance_name.clone()
-                                    instance_base_domain=data.instance_base_domain.clone()
-                                />
-                            }
-                        })}
+                                <div class="files-list">
+                                    {files.into_iter().map(|(href, label)| {
+                                        view! { <a class="file-link" href={href} target="_blank">{label}</a> }
+                                    }).collect_view()}
+                                </div>
+                            }.into_any()
+                        }}
+                    </section>
+                </div>
+
+                <div class="instance-panel">
+                    <div class="instance-status-bar">
+                        <h2>"Instance"</h2>
+                        <p id="instance-status" class={if data.ready { "status ready" } else { "status" }}>{status_text}</p>
+                        <p id="instance-timer" class="timer">{timer_text}</p>
+                        {extend_fb.map(|msg| view! { <p class="feedback">{msg}</p> })}
                     </div>
+
+                    {(!data.solved).then(move || {
+                        view! {
+                            <InstanceControls
+                                has_instance=data.has_instance
+                                ready=data.ready
+                                can_extend=data.can_extend
+                                spawn_action=spawn_action.clone()
+                                extend_action=extend_action.clone()
+                                submit_action=submit_action.clone()
+                                extend_display=extend_display.to_string()
+                                flags=flags.clone()
+                                submit_fb_flag_name=submit_fb_flag_name.clone()
+                                submit_fb_kind=submit_fb_kind.clone()
+                                submit_fb_message=submit_fb_message.clone()
+                                exposed_ports=exposed_ports.clone()
+                                instance_name=data.instance_name.clone()
+                                instance_base_domain=data.instance_base_domain.clone()
+                            />
+                        }
+                    })}
                 </div>
             </div>
             <script>{instance_script}</script>

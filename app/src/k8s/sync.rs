@@ -46,8 +46,7 @@ async fn run_namespace_sync(state: Arc<AppState>, namespace: String, ctf_name: S
                         Ok(watcher::Event::Apply(ctf)) | Ok(watcher::Event::InitApply(ctf)) => {
                             if ctf.name_any() == ctf_name {
                                 cache.write().await.ctf = Some(ctf);
-                                if let Err(err) =
-                                    flush_namespace(&state, &cache, &namespace).await
+                                if let Err(err) = flush_namespace(&state, &cache, &namespace).await
                                 {
                                     error!(namespace = %namespace, error = %err, "failed to flush ctf sync");
                                 }
@@ -56,8 +55,7 @@ async fn run_namespace_sync(state: Arc<AppState>, namespace: String, ctf_name: S
                         Ok(watcher::Event::Delete(ctf)) => {
                             if ctf.name_any() == ctf_name {
                                 cache.write().await.ctf = None;
-                                if let Err(err) =
-                                    flush_namespace(&state, &cache, &namespace).await
+                                if let Err(err) = flush_namespace(&state, &cache, &namespace).await
                                 {
                                     error!(namespace = %namespace, error = %err, "failed to flush ctf delete");
                                 }
@@ -93,17 +91,13 @@ async fn run_namespace_sync(state: Arc<AppState>, namespace: String, ctf_name: S
                                 .await
                                 .challenges
                                 .insert(challenge.name_any(), challenge);
-                            if let Err(err) =
-                                flush_namespace(&state, &cache, &namespace).await
-                            {
+                            if let Err(err) = flush_namespace(&state, &cache, &namespace).await {
                                 error!(namespace = %namespace, error = %err, "failed to flush challenge sync");
                             }
                         }
                         Ok(watcher::Event::Delete(challenge)) => {
                             cache.write().await.challenges.remove(&challenge.name_any());
-                            if let Err(err) =
-                                flush_namespace(&state, &cache, &namespace).await
-                            {
+                            if let Err(err) = flush_namespace(&state, &cache, &namespace).await {
                                 error!(namespace = %namespace, error = %err, "failed to flush challenge delete");
                             }
                         }
@@ -180,11 +174,15 @@ async fn flush_namespace(
             .containers
             .iter()
             .flat_map(|container| {
-                container.ports.iter().filter(|p| p.expose).map(|p| PortView {
-                    name: p.name.clone(),
-                    port: p.container_port,
-                    port_type: format!("{:?}", p.port_type).to_lowercase(),
-                })
+                container
+                    .ports
+                    .iter()
+                    .filter(|p| p.expose)
+                    .map(|p| PortView {
+                        name: p.name.clone(),
+                        port: p.container_port,
+                        port_type: format!("{:?}", p.port_type).to_lowercase(),
+                    })
             })
             .collect();
 

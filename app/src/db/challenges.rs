@@ -47,10 +47,7 @@ pub async fn replace_challenges_for_namespace(
     Ok(())
 }
 
-pub async fn list_challenges_for_ctf(
-    db: &PgPool,
-    ctf_name: &str,
-) -> Result<Vec<ChallengeView>> {
+pub async fn list_challenges_for_ctf(db: &PgPool, ctf_name: &str) -> Result<Vec<ChallengeView>> {
     let rows = sqlx::query_as::<_, ChallengeRow>(
         r#"SELECT namespace, name, ctf_name, ctf_public, full_name, description, categories_json, difficulty, files_json, flags_json, exposed_ports_json
            FROM app_challenges
