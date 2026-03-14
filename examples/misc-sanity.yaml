@@ -1,31 +1,36 @@
-name: misc-sanity
-fullName: Sanity Check
-description: |
-  Welcome to the CTF! This is a sanity check challenge to make sure
-  your environment is set up correctly. Connect to the service
-  and follow the instructions to get your first flag.
-authors:
+apiVersion: operator.ctf.rs/v1alpha1
+kind: Challenge
+metadata:
+  name: misc-sanity
+spec:
+  fullName: Sanity Check
+  description: 'Welcome to the CTF! This is a sanity check challenge to make sure
+
+    your environment is set up correctly. Connect to the service
+
+    and follow the instructions to get your first flag.
+
+    '
+  authors:
   - CTF Team
-categories:
+  categories:
   - misc
-difficulty: veryeasy
-tags:
+  difficulty: veryeasy
+  tags:
   - sanity
   - welcome
   - beginner
-flags:
+  flags:
   - name: flag
     body: fake_flag_value
-containers:
+  containers:
   - name: test
-    image:
-      type: dockerfile
-      path: challenge-test/Dockerfile
+    image: nginx:alpine
     flags:
-      - name: flag
-        env: FLAG
+    - name: flag
+      env: FLAG
     ports:
-      - name: socat
-        type: netcat
-        expose: true
-        containerPort: 1337
+    - name: socat
+      type: http
+      expose: true
+      containerPort: 80

@@ -1,31 +1,36 @@
-name: crypto-ecc
-fullName: Elliptic Curve Cryptography
-description: |
-  A custom elliptic curve implementation uses non-standard parameters.
-  The curve order has a smooth factor that makes it vulnerable to
-  Pohlig-Hellman attack. Solve the discrete log to recover the flag.
-authors:
+apiVersion: operator.ctf.rs/v1alpha1
+kind: Challenge
+metadata:
+  name: crypto-ecc
+spec:
+  fullName: Elliptic Curve Cryptography
+  description: 'A custom elliptic curve implementation uses non-standard parameters.
+
+    The curve order has a smooth factor that makes it vulnerable to
+
+    Pohlig-Hellman attack. Solve the discrete log to recover the flag.
+
+    '
+  authors:
   - CTF Team
-categories:
+  categories:
   - crypto
-difficulty: hard
-tags:
+  difficulty: hard
+  tags:
   - ecc
   - discrete-log
   - pohlig-hellman
-flags:
+  flags:
   - name: flag
     body: fake_flag_value
-containers:
+  containers:
   - name: test
-    image:
-      type: dockerfile
-      path: challenge-test/Dockerfile
+    image: nginx:alpine
     flags:
-      - name: flag
-        env: FLAG
+    - name: flag
+      env: FLAG
     ports:
-      - name: socat
-        type: netcat
-        expose: true
-        containerPort: 1337
+    - name: socat
+      type: http
+      expose: true
+      containerPort: 80

@@ -1,31 +1,36 @@
-name: rev-xor
-fullName: XOR Cipher
-description: |
-  The flag has been encrypted with a repeating XOR key before being
-  embedded in the binary. Reverse engineer the encryption routine
-  to determine the key and decrypt the flag.
-authors:
+apiVersion: operator.ctf.rs/v1alpha1
+kind: Challenge
+metadata:
+  name: rev-xor
+spec:
+  fullName: XOR Cipher
+  description: 'The flag has been encrypted with a repeating XOR key before being
+
+    embedded in the binary. Reverse engineer the encryption routine
+
+    to determine the key and decrypt the flag.
+
+    '
+  authors:
   - CTF Team
-categories:
+  categories:
   - rev
-difficulty: easy
-tags:
+  difficulty: easy
+  tags:
   - xor
   - encryption
   - disassembly
-flags:
+  flags:
   - name: flag
     body: fake_flag_value
-containers:
+  containers:
   - name: test
-    image:
-      type: dockerfile
-      path: challenge-test/Dockerfile
+    image: nginx:alpine
     flags:
-      - name: flag
-        env: FLAG
+    - name: flag
+      env: FLAG
     ports:
-      - name: socat
-        type: netcat
-        expose: true
-        containerPort: 1337
+    - name: socat
+      type: http
+      expose: true
+      containerPort: 80

@@ -1,31 +1,36 @@
-name: pwn-overflow
-fullName: Buffer Overflow Basics
-description: |
-  A simple C program reads user input without bounds checking.
-  Overflow the buffer to overwrite the return address and
-  redirect execution to the win function that prints the flag.
-authors:
+apiVersion: operator.ctf.rs/v1alpha1
+kind: Challenge
+metadata:
+  name: pwn-overflow
+spec:
+  fullName: Buffer Overflow Basics
+  description: 'A simple C program reads user input without bounds checking.
+
+    Overflow the buffer to overwrite the return address and
+
+    redirect execution to the win function that prints the flag.
+
+    '
+  authors:
   - CTF Team
-categories:
+  categories:
   - pwn
-difficulty: veryeasy
-tags:
+  difficulty: veryeasy
+  tags:
   - buffer-overflow
   - stack
   - beginner
-flags:
+  flags:
   - name: flag
     body: fake_flag_value
-containers:
+  containers:
   - name: test
-    image:
-      type: dockerfile
-      path: challenge-test/Dockerfile
+    image: nginx:alpine
     flags:
-      - name: flag
-        env: FLAG
+    - name: flag
+      env: FLAG
     ports:
-      - name: socat
-        type: netcat
-        expose: true
-        containerPort: 1337
+    - name: socat
+      type: http
+      expose: true
+      containerPort: 80

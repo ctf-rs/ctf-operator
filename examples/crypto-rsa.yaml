@@ -1,32 +1,37 @@
-name: crypto-rsa
-fullName: RSA Basics
-description: |
-  You intercepted an RSA-encrypted message along with the public key.
-  The key was generated with suspiciously small primes.
-  Factor the modulus and decrypt the ciphertext to obtain the flag.
-authors:
+apiVersion: operator.ctf.rs/v1alpha1
+kind: Challenge
+metadata:
+  name: crypto-rsa
+spec:
+  fullName: RSA Basics
+  description: 'You intercepted an RSA-encrypted message along with the public key.
+
+    The key was generated with suspiciously small primes.
+
+    Factor the modulus and decrypt the ciphertext to obtain the flag.
+
+    '
+  authors:
   - CTF Team
-categories:
+  categories:
   - crypto
   - misc
-difficulty: easy
-tags:
+  difficulty: easy
+  tags:
   - rsa
   - factoring
   - public-key
-flags:
+  flags:
   - name: flag
     body: fake_flag_value
-containers:
+  containers:
   - name: test
-    image:
-      type: dockerfile
-      path: challenge-test/Dockerfile
+    image: nginx:alpine
     flags:
-      - name: flag
-        env: FLAG
+    - name: flag
+      env: FLAG
     ports:
-      - name: socat
-        type: netcat
-        expose: true
-        containerPort: 1337
+    - name: socat
+      type: http
+      expose: true
+      containerPort: 80

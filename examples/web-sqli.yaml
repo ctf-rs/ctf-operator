@@ -1,32 +1,37 @@
-name: web-sqli
-fullName: SQL Injection 101
-description: |
-  A classic login form stands between you and the flag.
-  The developer forgot to sanitize user inputs.
-  Use SQL injection techniques to bypass authentication and retrieve the flag.
-authors:
+apiVersion: operator.ctf.rs/v1alpha1
+kind: Challenge
+metadata:
+  name: web-sqli
+spec:
+  fullName: SQL Injection 101
+  description: 'A classic login form stands between you and the flag.
+
+    The developer forgot to sanitize user inputs.
+
+    Use SQL injection techniques to bypass authentication and retrieve the flag.
+
+    '
+  authors:
   - CTF Team
-categories:
+  categories:
   - web
   - foren
-difficulty: easy
-tags:
+  difficulty: easy
+  tags:
   - sql
   - injection
   - authentication
-flags:
+  flags:
   - name: flag
     body: fake_flag_value
-containers:
+  containers:
   - name: test
-    image:
-      type: dockerfile
-      path: challenge-test/Dockerfile
+    image: nginx:alpine
     flags:
-      - name: flag
-        env: FLAG
+    - name: flag
+      env: FLAG
     ports:
-      - name: socat
-        type: netcat
-        expose: true
-        containerPort: 1337
+    - name: socat
+      type: http
+      expose: true
+      containerPort: 80

@@ -1,32 +1,37 @@
-name: misc-blockchain
-fullName: Blockchain
-description: |
-  A vulnerable smart contract has been deployed on a local testnet.
-  Analyze the Solidity source code to find the reentrancy vulnerability
-  and drain the contract's funds to trigger the flag release mechanism.
-authors:
+apiVersion: operator.ctf.rs/v1alpha1
+kind: Challenge
+metadata:
+  name: misc-blockchain
+spec:
+  fullName: Blockchain
+  description: 'A vulnerable smart contract has been deployed on a local testnet.
+
+    Analyze the Solidity source code to find the reentrancy vulnerability
+
+    and drain the contract''s funds to trigger the flag release mechanism.
+
+    '
+  authors:
   - CTF Team
-categories:
+  categories:
   - misc
   - crypto
-difficulty: hard
-tags:
+  difficulty: hard
+  tags:
   - blockchain
   - solidity
   - smart-contract
-flags:
+  flags:
   - name: flag
     body: fake_flag_value
-containers:
+  containers:
   - name: test
-    image:
-      type: dockerfile
-      path: challenge-test/Dockerfile
+    image: nginx:alpine
     flags:
-      - name: flag
-        env: FLAG
+    - name: flag
+      env: FLAG
     ports:
-      - name: socat
-        type: netcat
-        expose: true
-        containerPort: 1337
+    - name: socat
+      type: http
+      expose: true
+      containerPort: 80

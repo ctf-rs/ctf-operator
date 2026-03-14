@@ -1,31 +1,37 @@
-name: crypto-lattice
-fullName: Lattice Based Crypto
-description: |
-  A post-quantum cryptographic scheme based on the Learning With Errors problem
-  has been implemented with insufficient noise. Use lattice reduction techniques
-  such as LLL or BKZ to break the encryption and recover the flag.
-authors:
+apiVersion: operator.ctf.rs/v1alpha1
+kind: Challenge
+metadata:
+  name: crypto-lattice
+spec:
+  fullName: Lattice Based Crypto
+  description: 'A post-quantum cryptographic scheme based on the Learning With Errors
+    problem
+
+    has been implemented with insufficient noise. Use lattice reduction techniques
+
+    such as LLL or BKZ to break the encryption and recover the flag.
+
+    '
+  authors:
   - CTF Team
-categories:
+  categories:
   - crypto
-difficulty: insane
-tags:
+  difficulty: insane
+  tags:
   - lattice
   - lwe
   - post-quantum
-flags:
+  flags:
   - name: flag
     body: fake_flag_value
-containers:
+  containers:
   - name: test
-    image:
-      type: dockerfile
-      path: challenge-test/Dockerfile
+    image: nginx:alpine
     flags:
-      - name: flag
-        env: FLAG
+    - name: flag
+      env: FLAG
     ports:
-      - name: socat
-        type: netcat
-        expose: true
-        containerPort: 1337
+    - name: socat
+      type: http
+      expose: true
+      containerPort: 80
