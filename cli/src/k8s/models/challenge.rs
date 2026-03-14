@@ -32,6 +32,8 @@ pub struct ChallengeSpec {
     pub instance_duration_seconds: Option<u32>,
     pub categories: HashSet<crate::models::ChallengeCategory>,
     #[serde(default)]
+    pub difficulty: Option<crate::models::ChallengeDifficulty>,
+    #[serde(default)]
     pub tags: HashSet<String>,
     #[serde(default)]
     pub authors: HashSet<String>,

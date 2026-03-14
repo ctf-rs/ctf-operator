@@ -18,7 +18,7 @@ pub fn ChallengeCard(data: ChallengeCardData) -> impl IntoView {
         .description
         .clone()
         .unwrap_or_else(|| "No description".to_string());
-    let ctf_name = ch.ctf_name.clone();
+    let difficulty = ch.difficulty;
     let files: Vec<(String, String)> = ch
         .files
         .iter()
@@ -26,12 +26,20 @@ pub fn ChallengeCard(data: ChallengeCardData) -> impl IntoView {
         .map(|(i, f)| (file_route(&ch.name, i), display_file_name(f)))
         .collect();
 
+    let diff_badge = difficulty.map(|d| {
+        let css_class = format!("difficulty-badge diff-{}", d.css_class());
+        let label = d.label();
+        view! { <span class={css_class}>{label}</span> }
+    });
+
     view! {
         <article class={tile_class}>
-            <h2>{full_name}</h2>
+            <div class="tile-header">
+                <h2>{full_name}</h2>
+                {diff_badge}
+            </div>
             {data.solved.then(|| view! { <p class="solved-badge">"Solved"</p> })}
             <p class="muted">{description}</p>
-            <div class="meta">"CTF: " {ctf_name}</div>
             <h3>"Files"</h3>
             <ul>
                 {files.into_iter().map(|(href, label)| {

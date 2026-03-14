@@ -28,6 +28,9 @@ pub struct Challenge {
     pub categories: HashSet<ChallengeCategory>,
     #[serde(default)]
     #[garde(skip)]
+    pub difficulty: Option<ChallengeDifficulty>,
+    #[serde(default)]
+    #[garde(skip)]
     pub tags: HashSet<String>,
     #[serde(default)]
     #[garde(skip)]
@@ -44,7 +47,7 @@ pub struct Challenge {
     pub containers: Vec<ChallengeContainer>,
 }
 
-#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
 pub enum ChallengeCategory {
     #[serde(alias = "reverse")]
@@ -59,6 +62,79 @@ pub enum ChallengeCategory {
     Hw,
     Osint,
     Misc,
+}
+
+impl ChallengeCategory {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Web => "Web",
+            Self::Pwn => "Pwn",
+            Self::Crypto => "Crypto",
+            Self::Rev => "Reverse Engineering",
+            Self::Foren => "Forensics",
+            Self::Misc => "Misc",
+            Self::Hw => "Hardware",
+            Self::Osint => "OSINT",
+        }
+    }
+
+    /// Canonical display order for categories.
+    pub fn sort_key(self) -> u8 {
+        match self {
+            Self::Web => 0,
+            Self::Pwn => 1,
+            Self::Crypto => 2,
+            Self::Rev => 3,
+            Self::Foren => 4,
+            Self::Misc => 5,
+            Self::Hw => 6,
+            Self::Osint => 7,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "lowercase")]
+pub enum ChallengeDifficulty {
+    #[serde(alias = "very_easy", alias = "very-easy")]
+    Veryeasy,
+    Easy,
+    Mid,
+    Hard,
+    Insane,
+}
+
+impl ChallengeDifficulty {
+    /// Returns a sort key (lower = easier).
+    pub fn sort_key(self) -> u8 {
+        match self {
+            Self::Veryeasy => 0,
+            Self::Easy => 1,
+            Self::Mid => 2,
+            Self::Hard => 3,
+            Self::Insane => 4,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Veryeasy => "Very Easy",
+            Self::Easy => "Easy",
+            Self::Mid => "Mid",
+            Self::Hard => "Hard",
+            Self::Insane => "Insane",
+        }
+    }
+
+    pub fn css_class(self) -> &'static str {
+        match self {
+            Self::Veryeasy => "veryeasy",
+            Self::Easy => "easy",
+            Self::Mid => "mid",
+            Self::Hard => "hard",
+            Self::Insane => "insane",
+        }
+    }
 }
 
 #[derive(

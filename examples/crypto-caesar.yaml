@@ -1,0 +1,31 @@
+name: crypto-caesar
+fullName: Caesar Cipher
+description: |
+  The ancient Romans knew a thing or two about secret messages.
+  A flag has been encrypted using a simple substitution cipher.
+  Crack the Caesar cipher to recover the original plaintext flag.
+authors:
+  - CTF Team
+categories:
+  - crypto
+difficulty: veryeasy
+tags:
+  - classical
+  - substitution
+  - beginner
+flags:
+  - name: flag
+    body: fake_flag_value
+containers:
+  - name: test
+    image:
+      type: dockerfile
+      path: challenge-test/Dockerfile
+    flags:
+      - name: flag
+        env: FLAG
+    ports:
+      - name: socat
+        type: netcat
+        expose: true
+        containerPort: 1337

@@ -3,7 +3,7 @@ use leptos::prelude::*;
 use crate::helpers::challenge_route;
 
 use super::{
-    ChallengeCardData, ChallengePageData,
+    ChallengePageData, CategorySection,
     components::{ChallengeCard, InstanceControls},
     display_file_name, file_route, format_countdown,
     layout::PageShell,
@@ -35,7 +35,7 @@ pub fn LoginPage(ctf_title: String) -> impl IntoView {
 pub fn IndexPage(
     ctf_title: String,
     user_label: String,
-    cards: Vec<ChallengeCardData>,
+    sections: Vec<CategorySection>,
 ) -> impl IntoView {
     view! {
         <PageShell title=ctf_title.clone()>
@@ -48,9 +48,17 @@ pub fn IndexPage(
                     <button class="btn secondary" type="submit">"Logout"</button>
                 </form>
             </header>
-            <div class="grid">
-                {cards.into_iter().map(|card| view! { <ChallengeCard data=card/> }).collect_view()}
-            </div>
+            {sections.into_iter().map(|section| {
+                let label = section.label.clone();
+                view! {
+                    <section class="category-section">
+                        <h2 class="category-heading">{label}</h2>
+                        <div class="grid">
+                            {section.cards.into_iter().map(|card| view! { <ChallengeCard data=card/> }).collect_view()}
+                        </div>
+                    </section>
+                }
+            }).collect_view()}
         </PageShell>
     }
 }

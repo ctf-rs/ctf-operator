@@ -1,0 +1,31 @@
+name: pwn-rop
+fullName: Return Oriented Programming
+description: |
+  NX is enabled and you can no longer execute shellcode on the stack.
+  Build a ROP chain using gadgets found in the binary to call system("/bin/sh")
+  and read the flag from the filesystem.
+authors:
+  - CTF Team
+categories:
+  - pwn
+difficulty: easy
+tags:
+  - rop
+  - gadgets
+  - nx
+flags:
+  - name: flag
+    body: fake_flag_value
+containers:
+  - name: test
+    image:
+      type: dockerfile
+      path: challenge-test/Dockerfile
+    flags:
+      - name: flag
+        env: FLAG
+    ports:
+      - name: socat
+        type: netcat
+        expose: true
+        containerPort: 1337

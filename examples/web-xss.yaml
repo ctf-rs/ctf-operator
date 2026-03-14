@@ -1,0 +1,31 @@
+name: web-xss
+fullName: XSS Playground
+description: |
+  A social media platform has a vulnerability in its comment section.
+  Craft a payload to exploit the cross-site scripting flaw and
+  steal the admin's session cookie to retrieve the flag.
+authors:
+  - CTF Team
+categories:
+  - web
+difficulty: mid
+tags:
+  - xss
+  - javascript
+  - cookies
+flags:
+  - name: flag
+    body: fake_flag_value
+containers:
+  - name: test
+    image:
+      type: dockerfile
+      path: challenge-test/Dockerfile
+    flags:
+      - name: flag
+        env: FLAG
+    ports:
+      - name: socat
+        type: netcat
+        expose: true
+        containerPort: 1337

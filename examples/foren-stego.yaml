@@ -1,0 +1,31 @@
+name: foren-stego
+fullName: Steganography
+description: |
+  An innocent-looking image was posted on a forum by a known threat actor.
+  The flag has been hidden within the image using advanced steganographic
+  techniques. Analyze the pixel data and metadata to extract the hidden message.
+authors:
+  - CTF Team
+categories:
+  - foren
+difficulty: hard
+tags:
+  - steganography
+  - image-analysis
+  - hidden-data
+flags:
+  - name: flag
+    body: fake_flag_value
+containers:
+  - name: test
+    image:
+      type: dockerfile
+      path: challenge-test/Dockerfile
+    flags:
+      - name: flag
+        env: FLAG
+    ports:
+      - name: socat
+        type: netcat
+        expose: true
+        containerPort: 1337

@@ -1,0 +1,32 @@
+name: pwn-format
+fullName: Format String Exploits
+description: |
+  The program uses printf with user-controlled format strings.
+  Leverage format string vulnerabilities to leak stack data and
+  overwrite the GOT entry to hijack control flow and capture the flag.
+authors:
+  - CTF Team
+categories:
+  - pwn
+  - rev
+difficulty: mid
+tags:
+  - format-string
+  - got-overwrite
+  - printf
+flags:
+  - name: flag
+    body: fake_flag_value
+containers:
+  - name: test
+    image:
+      type: dockerfile
+      path: challenge-test/Dockerfile
+    flags:
+      - name: flag
+        env: FLAG
+    ports:
+      - name: socat
+        type: netcat
+        expose: true
+        containerPort: 1337

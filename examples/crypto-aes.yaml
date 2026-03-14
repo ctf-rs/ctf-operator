@@ -1,0 +1,31 @@
+name: crypto-aes
+fullName: AES Challenge
+description: |
+  An encryption oracle allows you to encrypt arbitrary plaintexts using AES-CBC.
+  The initialization vector is reused across sessions. Exploit this weakness
+  to perform a chosen-plaintext attack and recover the secret flag.
+authors:
+  - CTF Team
+categories:
+  - crypto
+difficulty: mid
+tags:
+  - aes
+  - cbc
+  - chosen-plaintext
+flags:
+  - name: flag
+    body: fake_flag_value
+containers:
+  - name: test
+    image:
+      type: dockerfile
+      path: challenge-test/Dockerfile
+    flags:
+      - name: flag
+        env: FLAG
+    ports:
+      - name: socat
+        type: netcat
+        expose: true
+        containerPort: 1337

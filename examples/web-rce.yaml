@@ -1,0 +1,31 @@
+name: web-rce
+fullName: Remote Code Execution
+description: |
+  A file upload service seems to have robust validation, but appearances
+  can be deceiving. Chain multiple vulnerabilities together to achieve
+  remote code execution on the server and read the flag from the filesystem.
+authors:
+  - CTF Team
+categories:
+  - web
+difficulty: insane
+tags:
+  - rce
+  - file-upload
+  - exploitation
+flags:
+  - name: flag
+    body: fake_flag_value
+containers:
+  - name: test
+    image:
+      type: dockerfile
+      path: challenge-test/Dockerfile
+    flags:
+      - name: flag
+        env: FLAG
+    ports:
+      - name: socat
+        type: netcat
+        expose: true
+        containerPort: 1337

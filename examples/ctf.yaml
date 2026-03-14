@@ -24,3 +24,33 @@ storage:
 challenges:
   - challenge-test.yaml
   - challenge-test2.yaml
+  - web-hello.yaml
+  - web-sqli.yaml
+  - web-xss.yaml
+  - web-ssrf.yaml
+  - web-rce.yaml
+  - pwn-overflow.yaml
+  - pwn-rop.yaml
+  - pwn-format.yaml
+  - pwn-heap.yaml
+  - pwn-kernel.yaml
+  - crypto-caesar.yaml
+  - crypto-rsa.yaml
+  - crypto-aes.yaml
+  - crypto-ecc.yaml
+  - crypto-lattice.yaml
+  - rev-strings.yaml
+  - rev-xor.yaml
+  - rev-packed.yaml
+  - rev-obfuscated.yaml
+  - rev-vm.yaml
+  - foren-pcap.yaml
+  - foren-disk.yaml
+  - foren-memory.yaml
+  - foren-stego.yaml
+  - foren-malware.yaml
+  - misc-sanity.yaml
+  - misc-trivia.yaml
+  - misc-jail.yaml
+  - misc-blockchain.yaml
+  - misc-quantum.yaml

@@ -1,0 +1,32 @@
+name: web-sqli
+fullName: SQL Injection 101
+description: |
+  A classic login form stands between you and the flag.
+  The developer forgot to sanitize user inputs.
+  Use SQL injection techniques to bypass authentication and retrieve the flag.
+authors:
+  - CTF Team
+categories:
+  - web
+  - foren
+difficulty: easy
+tags:
+  - sql
+  - injection
+  - authentication
+flags:
+  - name: flag
+    body: fake_flag_value
+containers:
+  - name: test
+    image:
+      type: dockerfile
+      path: challenge-test/Dockerfile
+    flags:
+      - name: flag
+        env: FLAG
+    ports:
+      - name: socat
+        type: netcat
+        expose: true
+        containerPort: 1337

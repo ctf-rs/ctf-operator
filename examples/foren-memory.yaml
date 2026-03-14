@@ -1,0 +1,31 @@
+name: foren-memory
+fullName: Memory Forensics
+description: |
+  A memory dump was taken from a running system suspected of being compromised.
+  Use Volatility or similar tools to analyze running processes, extract artifacts,
+  and locate the flag that was loaded into memory by the attacker's payload.
+authors:
+  - CTF Team
+categories:
+  - foren
+difficulty: mid
+tags:
+  - memory-dump
+  - volatility
+  - process-analysis
+flags:
+  - name: flag
+    body: fake_flag_value
+containers:
+  - name: test
+    image:
+      type: dockerfile
+      path: challenge-test/Dockerfile
+    flags:
+      - name: flag
+        env: FLAG
+    ports:
+      - name: socat
+        type: netcat
+        expose: true
+        containerPort: 1337

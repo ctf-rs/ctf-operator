@@ -1,0 +1,31 @@
+name: pwn-heap
+fullName: Heap Exploitation
+description: |
+  A note-taking application allocates and frees heap chunks carelessly.
+  Exploit a use-after-free vulnerability combined with tcache poisoning
+  to gain arbitrary write and overwrite a function pointer to get the flag.
+authors:
+  - CTF Team
+categories:
+  - pwn
+difficulty: hard
+tags:
+  - heap
+  - use-after-free
+  - tcache
+flags:
+  - name: flag
+    body: fake_flag_value
+containers:
+  - name: test
+    image:
+      type: dockerfile
+      path: challenge-test/Dockerfile
+    flags:
+      - name: flag
+        env: FLAG
+    ports:
+      - name: socat
+        type: netcat
+        expose: true
+        containerPort: 1337

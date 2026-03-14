@@ -1,0 +1,31 @@
+name: misc-trivia
+fullName: CTF Trivia
+description: |
+  Test your cybersecurity knowledge with a series of trivia questions.
+  Answer all questions correctly to prove your expertise
+  and the service will reward you with the flag.
+authors:
+  - CTF Team
+categories:
+  - misc
+difficulty: easy
+tags:
+  - trivia
+  - knowledge
+  - quiz
+flags:
+  - name: flag
+    body: fake_flag_value
+containers:
+  - name: test
+    image:
+      type: dockerfile
+      path: challenge-test/Dockerfile
+    flags:
+      - name: flag
+        env: FLAG
+    ports:
+      - name: socat
+        type: netcat
+        expose: true
+        containerPort: 1337

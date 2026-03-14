@@ -1,0 +1,31 @@
+name: rev-obfuscated
+fullName: Obfuscated Code
+description: |
+  A heavily obfuscated JavaScript application validates user input
+  against a hidden flag. Control flow flattening and string encryption
+  make static analysis difficult. Deobfuscate the code to find the flag.
+authors:
+  - CTF Team
+categories:
+  - rev
+difficulty: hard
+tags:
+  - obfuscation
+  - javascript
+  - deobfuscation
+flags:
+  - name: flag
+    body: fake_flag_value
+containers:
+  - name: test
+    image:
+      type: dockerfile
+      path: challenge-test/Dockerfile
+    flags:
+      - name: flag
+        env: FLAG
+    ports:
+      - name: socat
+        type: netcat
+        expose: true
+        containerPort: 1337

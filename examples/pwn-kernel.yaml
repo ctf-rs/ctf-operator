@@ -1,0 +1,31 @@
+name: pwn-kernel
+fullName: Kernel Pwn
+description: |
+  A custom kernel module contains a vulnerability in its ioctl handler.
+  Exploit the race condition to escalate privileges from an unprivileged
+  user to root and read the flag stored in /root/flag.txt.
+authors:
+  - CTF Team
+categories:
+  - pwn
+difficulty: insane
+tags:
+  - kernel
+  - privilege-escalation
+  - race-condition
+flags:
+  - name: flag
+    body: fake_flag_value
+containers:
+  - name: test
+    image:
+      type: dockerfile
+      path: challenge-test/Dockerfile
+    flags:
+      - name: flag
+        env: FLAG
+    ports:
+      - name: socat
+        type: netcat
+        expose: true
+        containerPort: 1337

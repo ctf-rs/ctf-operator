@@ -5,6 +5,7 @@ mod scripts;
 
 pub use pages::{ChallengeDetailPage, IndexPage, LoginPage};
 
+use ctf_cli::ChallengeCategory;
 use leptos::prelude::*;
 
 use crate::db::ChallengeView;
@@ -16,6 +17,12 @@ use crate::db::ChallengeView;
 pub struct ChallengeCardData {
     pub challenge: ChallengeView,
     pub solved: bool,
+}
+
+pub struct CategorySection {
+    pub category: ChallengeCategory,
+    pub label: String,
+    pub cards: Vec<ChallengeCardData>,
 }
 
 pub struct SubmissionFeedback {

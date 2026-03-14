@@ -138,6 +138,16 @@ spec:
                 description:
                   nullable: true
                   type: string
+                difficulty:
+                  enum:
+                    - veryeasy
+                    - easy
+                    - mid
+                    - hard
+                    - insane
+                    - null
+                  nullable: true
+                  type: string
                 files:
                   items:
                     oneOf:

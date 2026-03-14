@@ -1,0 +1,31 @@
+name: web-hello
+fullName: Hello Web
+description: |
+  Welcome to the world of web exploitation!
+  This beginner-friendly challenge will introduce you to basic web concepts.
+  Can you find the hidden flag on this simple webpage?
+authors:
+  - CTF Team
+categories:
+  - web
+difficulty: veryeasy
+tags:
+  - http
+  - html
+  - beginner
+flags:
+  - name: flag
+    body: fake_flag_value
+containers:
+  - name: test
+    image:
+      type: dockerfile
+      path: challenge-test/Dockerfile
+    flags:
+      - name: flag
+        env: FLAG
+    ports:
+      - name: socat
+        type: netcat
+        expose: true
+        containerPort: 1337

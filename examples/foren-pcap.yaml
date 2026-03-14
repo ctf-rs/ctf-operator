@@ -1,0 +1,31 @@
+name: foren-pcap
+fullName: Packet Capture Analysis
+description: |
+  We captured network traffic from a suspicious host on our network.
+  Analyze the PCAP file to find credentials being transmitted in
+  cleartext and use them to recover the flag.
+authors:
+  - CTF Team
+categories:
+  - foren
+difficulty: veryeasy
+tags:
+  - pcap
+  - wireshark
+  - network
+flags:
+  - name: flag
+    body: fake_flag_value
+containers:
+  - name: test
+    image:
+      type: dockerfile
+      path: challenge-test/Dockerfile
+    flags:
+      - name: flag
+        env: FLAG
+    ports:
+      - name: socat
+        type: netcat
+        expose: true
+        containerPort: 1337

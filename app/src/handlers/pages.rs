@@ -5,7 +5,7 @@ use axum::{
     response::{Html, IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::cookie::CookieJar;
-use ctf_cli::k8s::Instance;
+use ctf_cli::{ChallengeCategory, k8s::Instance};
 use kube::Api;
 use serde::Deserialize;
 use tracing::warn;
@@ -74,14 +74,44 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         .map(|entry| format!("{}::{}", entry.ctf_name, entry.challenge_name))
         .collect::<HashSet<_>>();
 
-    let cards: Vec<views::ChallengeCardData> = challenges
+    // Build category → cards map. Challenges with multiple categories appear in all of them.
+    let mut category_map: std::collections::BTreeMap<ChallengeCategory, Vec<views::ChallengeCardData>> =
+        std::collections::BTreeMap::new();
+
+    for challenge in challenges {
+        let solved =
+            solved_keys.contains(&format!("{}::{}", challenge.ctf_name, challenge.name));
+        let cats: Vec<ChallengeCategory> = if challenge.categories.is_empty() {
+            vec![ChallengeCategory::Misc]
+        } else {
+            challenge.categories.clone()
+        };
+        for cat in cats {
+            category_map
+                .entry(cat)
+                .or_default()
+                .push(views::ChallengeCardData {
+                    challenge: challenge.clone(),
+                    solved,
+                });
+        }
+    }
+
+    // Sort cards within each category by difficulty (veryeasy → insane)
+    for cards in category_map.values_mut() {
+        cards.sort_by_key(|card| card.challenge.difficulty.map(|d| d.sort_key()).unwrap_or(u8::MAX));
+    }
+
+    // Build sorted category sections
+    let mut sections: Vec<views::CategorySection> = category_map
         .into_iter()
-        .map(|challenge| {
-            let solved =
-                solved_keys.contains(&format!("{}::{}", challenge.ctf_name, challenge.name));
-            views::ChallengeCardData { challenge, solved }
+        .map(|(cat, cards)| views::CategorySection {
+            label: cat.label().to_string(),
+            category: cat,
+            cards,
         })
         .collect();
+    sections.sort_by_key(|s| s.category.sort_key());
 
     let user_label = user
         .name
@@ -92,7 +122,7 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
     let ctf_title = ctf_name.clone();
     let html = views::render_to_html(move || {
         leptos::prelude::view! {
-            <views::IndexPage ctf_title=ctf_title user_label=user_label cards=cards/>
+            <views::IndexPage ctf_title=ctf_title user_label=user_label sections=sections/>
         }
     });
 

@@ -1,0 +1,31 @@
+name: web-ssrf
+fullName: Server Side Request Forgery
+description: |
+  An internal service is protected behind a firewall, but the web application
+  has a URL fetching feature that can be abused. Exploit the SSRF vulnerability
+  to access the internal metadata endpoint and exfiltrate the flag.
+authors:
+  - CTF Team
+categories:
+  - web
+difficulty: hard
+tags:
+  - ssrf
+  - cloud
+  - networking
+flags:
+  - name: flag
+    body: fake_flag_value
+containers:
+  - name: test
+    image:
+      type: dockerfile
+      path: challenge-test/Dockerfile
+    flags:
+      - name: flag
+        env: FLAG
+    ports:
+      - name: socat
+        type: netcat
+        expose: true
+        containerPort: 1337

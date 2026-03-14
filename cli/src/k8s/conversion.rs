@@ -64,6 +64,7 @@ pub fn challenge_from_core(
             description: challenge.description.clone(),
             instance_duration_seconds: challenge.instance_duration_seconds,
             categories: challenge.categories.clone(),
+            difficulty: challenge.difficulty,
             tags: challenge.tags.clone(),
             authors: challenge.authors.clone(),
             conditions: Default::default(),

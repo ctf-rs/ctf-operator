@@ -171,6 +171,10 @@ async fn flush_namespace(
             .map(|flag| flag.name.clone())
             .collect::<Vec<_>>();
 
+        let categories: Vec<_> = challenge.spec.categories.iter().copied().collect();
+
+        let difficulty = challenge.spec.difficulty;
+
         rows.push(ChallengeView {
             namespace: namespace.to_string(),
             name: challenge.name_any(),
@@ -178,6 +182,8 @@ async fn flush_namespace(
             ctf_public: ctf.spec.public,
             full_name: challenge.spec.full_name.clone(),
             description: challenge.spec.description.clone(),
+            categories,
+            difficulty,
             files,
             flags,
         });

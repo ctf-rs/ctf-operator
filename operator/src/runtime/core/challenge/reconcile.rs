@@ -47,6 +47,7 @@ fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
         full_name: resource.spec.full_name.clone(),
         description: resource.spec.description.clone(),
         categories: resource.spec.categories.clone(),
+        difficulty: resource.spec.difficulty,
         tags: resource.spec.tags.clone(),
         authors: resource.spec.authors.clone(),
         instance_duration_seconds: resource.spec.instance_duration_seconds,
