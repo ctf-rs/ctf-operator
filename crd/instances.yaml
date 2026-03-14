@@ -13,6 +13,9 @@ spec:
   scope: Namespaced
   versions:
     - additionalPrinterColumns:
+        - jsonPath: .status.phase
+          name: Phase
+          type: string
         - jsonPath: .status.timeLeft
           name: TimeLeft
           type: string
@@ -122,6 +125,22 @@ spec:
                     package offers.
                   format: date-time
                   nullable: true
+                  type: string
+                message:
+                  description: Human-readable message about the current state (especially for errors)
+                  nullable: true
+                  type: string
+                phase:
+                  default: Initializing
+                  description: Current phase of the instance lifecycle
+                  enum:
+                    - Initializing
+                    - Creating
+                    - Validating
+                    - Waiting
+                    - Ready
+                    - Error
+                    - Terminating
                   type: string
                 timeLeft:
                   nullable: true

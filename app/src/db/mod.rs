@@ -9,7 +9,8 @@ pub use challenges::{
     replace_challenges_for_namespace,
 };
 pub use flags::{
-    add_flag_submission, is_challenge_solved_for_user, list_solved_challenges_for_user,
+    add_flag_submission, count_solved_flags_for_user, get_partial_solve_counts_for_user,
+    get_solved_flags_for_user, is_challenge_solved_for_user, list_solved_challenges_for_user,
     mark_challenge_solved,
 };
 pub use instances::{clear_instance_for_user, get_instance_for_user, set_instance};

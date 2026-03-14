@@ -11,7 +11,7 @@ use crate::{
     },
     util::Reconciler,
 };
-use ctf_cli::k8s::{Challenge, ConditionStatus, Ctf, Flag, FlagSpec, Instance, InstanceStatus};
+use ctf_cli::k8s::{Challenge, ConditionStatus, Ctf, Flag, FlagSpec, Instance, InstancePhase, InstanceStatus};
 use ctf_cli::k8s::{PortClaim, PortClaimSpec, ReservationRef, ReservationSet, ReservationSetSpec};
 use jiff::Timestamp;
 use k8s_openapi::{
@@ -237,6 +237,13 @@ async fn reconcile_apply(
     let all_ready = all_conditions_true_except(&status, "Ready");
     set_resource_condition(&mut status, "Ready", all_ready, "Reconciled", "NotReady");
 
+    // Determine phase based on observed state
+    status.phase = determine_phase(&observed, all_ready);
+    // Clear message on success, keep it on error
+    if status.phase != InstancePhase::Error {
+        status.message = None;
+    }
+
     patch_status_if_needed(instance.as_ref(), &state, status).await?;
 
     if all_ready {
@@ -286,6 +293,21 @@ fn set_not_ready(status: &mut InstanceStatus, typ: &str, reason: &str, message: 
     status
         .conditions
         .set("Ready", ConditionStatus::False, "NotReady", "");
+    // Set phase and message for user-facing display
+    status.phase = InstancePhase::Error;
+    status.message = Some(sanitize_error_message(message));
+}
+
+/// Sanitizes error messages to avoid exposing sensitive information
+fn sanitize_error_message(msg: &str) -> String {
+    // Keep it generic but helpful
+    if msg.contains("not found") || msg.contains("Missing") {
+        "Required resource not found. Please try again.".to_string()
+    } else if msg.contains("not ready") {
+        "Waiting for dependencies to become available.".to_string()
+    } else {
+        "Instance setup encountered an issue. Please wait or try again.".to_string()
+    }
 }
 
 fn set_resource_condition(
@@ -304,6 +326,34 @@ fn set_resource_condition(
             .conditions
             .set(typ, ConditionStatus::False, not_ready_reason, "");
     }
+}
+
+/// Determines the instance phase based on observed resource states
+fn determine_phase(observed: &ObservedInstanceResources, all_ready: bool) -> InstancePhase {
+    if all_ready {
+        return InstancePhase::Ready;
+    }
+
+    // Determine progression through lifecycle phases
+    if !observed.reservation_ready {
+        return InstancePhase::Initializing;
+    }
+
+    if !observed.flags_ready || !observed.port_claims_ready {
+        return InstancePhase::Creating;
+    }
+
+    // Resources created, checking deployment
+    if !observed.service_ready {
+        return InstancePhase::Validating;
+    }
+
+    if !observed.deployments_ready {
+        return InstancePhase::Waiting;
+    }
+
+    // Something else not ready
+    InstancePhase::Waiting
 }
 
 fn all_conditions_true_except(status: &InstanceStatus, skip: &str) -> bool {
@@ -982,6 +1032,7 @@ mod tests {
             CtfSpec {
                 full_name: "Sample CTF".to_string(),
                 description: None,
+                public: false,
                 instance_duration_seconds: 15 * 60,
                 conditions: Default::default(),
                 challenges: vec!["chall-1".to_string()],
@@ -1020,6 +1071,7 @@ mod tests {
             ChallengeSpec {
                 full_name: "Challenge".to_string(),
                 description: None,
+                difficulty: None,
                 instance_duration_seconds: None,
                 categories: HashSet::new(),
                 tags: HashSet::new(),
@@ -1031,6 +1083,7 @@ mod tests {
                     prefix: None,
                     format: None,
                     random: None,
+                    label: None,
                     options: Default::default(),
                 }],
                 containers: vec![ctf_cli::k8s::ChallengeContainer {

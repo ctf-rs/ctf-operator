@@ -14,7 +14,8 @@ use crate::{
     db,
     helpers::{current_user, has_ctf_access},
     k8s::helpers::{
-        instance_ready_from_resource, instance_time_left_seconds, is_instance_owned_by_user,
+        instance_phase_description, instance_ready_from_resource, instance_time_left_seconds,
+        is_instance_owned_by_user,
     },
     state::AppState,
     views,
@@ -74,6 +75,11 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         .map(|entry| format!("{}::{}", entry.ctf_name, entry.challenge_name))
         .collect::<HashSet<_>>();
 
+    // Get partial solve counts to detect challenges with some flags submitted
+    let partial_solve_counts = db::get_partial_solve_counts_for_user(&state.db, user.id)
+        .await
+        .unwrap_or_default();
+
     // Build category → cards map. Challenges with multiple categories appear in all of them.
     let mut category_map: std::collections::BTreeMap<ChallengeCategory, Vec<views::ChallengeCardData>> =
         std::collections::BTreeMap::new();
@@ -81,6 +87,13 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
     for challenge in challenges {
         let solved =
             solved_keys.contains(&format!("{}::{}", challenge.ctf_name, challenge.name));
+        // Partial solve: some flags submitted but not fully solved
+        let partial_solve = !solved
+            && partial_solve_counts
+                .get(&(challenge.ctf_name.clone(), challenge.name.clone()))
+                .copied()
+                .unwrap_or(0)
+                > 0;
         let cats: Vec<ChallengeCategory> = if challenge.categories.is_empty() {
             vec![ChallengeCategory::Misc]
         } else {
@@ -93,6 +106,7 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
                 .push(views::ChallengeCardData {
                     challenge: challenge.clone(),
                     solved,
+                    partial_solve,
                 });
         }
     }
@@ -158,6 +172,15 @@ pub async fn challenge_page(
         return (axum::http::StatusCode::FORBIDDEN, "forbidden").into_response();
     }
 
+    // Mark which flags are already solved by this user
+    let solved_flags = db::get_solved_flags_for_user(&state.db, user.id, &challenge_name, ctf_name)
+        .await
+        .unwrap_or_default();
+    let mut challenge = challenge;
+    for flag in &mut challenge.flags {
+        flag.solved = solved_flags.contains(&flag.name);
+    }
+
     let solved = db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, ctf_name)
         .await
         .unwrap_or(false);
@@ -170,6 +193,7 @@ pub async fn challenge_page(
     let mut ready = false;
     let mut time_left_seconds: Option<u64> = None;
     let mut can_extend = false;
+    let mut instance_phase_desc: Option<String> = None;
 
     if let Some(existing) = &instance {
         let api: Api<Instance> = Api::namespaced(state.kube.clone(), &existing.namespace);
@@ -181,6 +205,7 @@ pub async fn challenge_page(
                     && time_left_seconds
                         .map(|seconds| seconds <= 300 && seconds > 0)
                         .unwrap_or(false);
+                instance_phase_desc = Some(instance_phase_description(&instance_obj));
             }
             Ok(_) => {
                 instance = None;
@@ -219,6 +244,7 @@ pub async fn challenge_page(
         extend_feedback,
         instance_name,
         instance_base_domain,
+        instance_phase_desc,
     };
 
     let html = views::render_to_html(move || {

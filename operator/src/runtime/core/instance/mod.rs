@@ -128,6 +128,7 @@ mod tests {
             CtfSpec {
                 full_name: "CTF".to_string(),
                 description: None,
+                public: false,
                 instance_duration_seconds: 15 * 60,
                 conditions: Default::default(),
                 challenges: vec!["chall-a".to_string()],
@@ -156,6 +157,7 @@ mod tests {
             ChallengeSpec {
                 full_name: "Challenge".to_string(),
                 description: None,
+                difficulty: None,
                 instance_duration_seconds: None,
                 categories: HashSet::new(),
                 tags: HashSet::new(),

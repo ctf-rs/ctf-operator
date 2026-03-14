@@ -165,6 +165,7 @@ async fn flush_namespace(
             .map(|flag| FlagView {
                 name: flag.name.clone(),
                 label: flag.label.clone(),
+                solved: false, // Will be populated from DB later
             })
             .collect::<Vec<_>>();
 

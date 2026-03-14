@@ -92,6 +92,7 @@ mod tests {
             CtfSpec {
                 full_name: "Sample CTF".to_string(),
                 description: Some("desc".to_string()),
+                public: false,
                 instance_duration_seconds: 15 * 60,
                 conditions: Default::default(),
                 challenges: vec!["chall-1".to_string()],

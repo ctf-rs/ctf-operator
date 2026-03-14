@@ -99,22 +99,24 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
         .collect();
 
     let status_text = if data.solved {
-        "Challenge solved! Submissions are disabled.".to_string()
+        "Solved".to_string()
     } else if !data.has_instance {
-        "No active instance. Spawn one to start.".to_string()
+        "No instance".to_string()
     } else if !data.ready {
         if data.time_left_seconds == Some(0) {
-            "Instance expired. Spawn a new one.".to_string()
+            "Expired".to_string()
+        } else if let Some(ref phase_desc) = data.instance_phase_desc {
+            phase_desc.clone()
         } else {
-            "Instance starting... This page updates automatically.".to_string()
+            "Starting...".to_string()
         }
     } else {
-        "Instance is ready!".to_string()
+        "Ready".to_string()
     };
 
     let timer_text = data
         .time_left_seconds
-        .map(|s| format!("Time left: {}", format_countdown(s)))
+        .map(|s| format_countdown(s))
         .unwrap_or_default();
 
     let extend_display = if data.can_extend {
@@ -182,12 +184,14 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                 </div>
 
                 <div class="instance-panel">
-                    <div class="instance-status-bar">
+                    <div class="instance-header">
                         <h2>"Instance"</h2>
-                        <p id="instance-status" class={if data.ready { "status ready" } else { "status" }}>{status_text}</p>
-                        <p id="instance-timer" class="timer">{timer_text}</p>
-                        {extend_fb.map(|msg| view! { <p class="feedback">{msg}</p> })}
+                        <div class="instance-meta">
+                            <span id="instance-status" class={if data.ready { "status-badge ready" } else { "status-badge" }}>{status_text}</span>
+                            <span id="instance-timer" class="timer-badge">{timer_text}</span>
+                        </div>
                     </div>
+                    {extend_fb.map(|msg| view! { <p class="feedback">{msg}</p> })}
 
                     {(!data.solved).then(move || {
                         view! {

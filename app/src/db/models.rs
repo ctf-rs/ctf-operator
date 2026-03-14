@@ -17,6 +17,8 @@ pub struct User {
 pub struct FlagView {
     pub name: String,
     pub label: Option<String>,
+    #[serde(default)]
+    pub solved: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

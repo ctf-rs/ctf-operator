@@ -6,12 +6,14 @@ a { color: #93c5fd; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
 .tile { background: #2a2f38; border: 1px solid #3a404a; border-radius: 8px; padding: 1rem; }
 .tile.solved { border-color: #16a34a; background: #1f2f26; }
+.tile.partial { border-color: #d97706; background: #2a2820; }
 .tile h2 { margin: 0 0 .5rem 0; font-size: 1.1rem; }
 .tile h3 { margin: .9rem 0 .4rem 0; font-size: 1rem; }
 .tile-header { display: flex; justify-content: space-between; align-items: flex-start; gap: .5rem; }
 .meta { font-size: .85rem; color: #9ca3af; margin: .5rem 0; }
 .solved-badge { display: inline-block; margin: 0 0 .6rem 0; padding: .2rem .5rem; border: 1px solid #16a34a; border-radius: 999px; color: #86efac; font-size: .8rem; }
 .solved-badge.large { font-size: .9rem; padding: .3rem .8rem; }
+.partial-badge { display: inline-block; margin: 0 0 .6rem 0; padding: .2rem .5rem; border: 1px solid #d97706; border-radius: 999px; color: #fcd34d; font-size: .8rem; }
 .btn { background: #374151; border: 1px solid #4b5563; color: #e5e7eb; border-radius: 6px; padding: .5rem 1rem; cursor: pointer; text-decoration: none; display: inline-block; font-size: .9rem; }
 .btn:hover { background: #4b5563; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -59,14 +61,15 @@ a { color: #93c5fd; }
 .instance-panel { background: #232830; border-radius: 8px; padding: 1.2rem; margin-top: 1rem; }
 .instance-panel h2 { font-size: 1rem; margin: 0 0 .6rem 0; color: #93c5fd; }
 .instance-panel h3 { font-size: .95rem; margin: 1rem 0 .5rem 0; color: #d1d5db; }
-.instance-status-bar { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
-.instance-status-bar h2 { margin: 0; }
-.status { padding: .5rem .8rem; background: #374151; border-radius: 6px; }
-.status.ready { background: #065f46; color: #a7f3d0; }
-.timer { font-size: .9rem; color: #fde68a; }
+.instance-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.instance-header h2 { margin: 0; }
+.instance-meta { display: flex; align-items: center; gap: .6rem; }
+.status-badge { padding: .3rem .6rem; background: #374151; border-radius: 4px; font-size: .85rem; }
+.status-badge.ready { background: #065f46; color: #a7f3d0; }
+.timer-badge { font-size: .85rem; color: #fde68a; background: #374151; padding: .3rem .6rem; border-radius: 4px; }
 .controls-row { display: flex; gap: .5rem; margin-bottom: 1rem; flex-wrap: wrap; }
-.flags-section { border-top: 1px solid #3a404a; padding-top: 1rem; display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }
-.flags-section h3 { width: 100%; margin: 0 0 .5rem 0; }
+.flags-section { border-top: 1px solid #3a404a; padding-top: 1rem; display: grid; grid-template-columns: max-content 1fr max-content; gap: .6rem 1rem; align-items: center; }
+.flags-section h3 { margin: 0 0 .5rem 0; grid-column: 1 / -1; }
 .files-list { display: flex; flex-wrap: wrap; gap: .5rem; }
 .file-link { display: inline-flex; align-items: center; gap: .3rem; background: #374151; padding: .4rem .8rem; border-radius: 6px; text-decoration: none; font-size: .9rem; }
 .file-link:hover { background: #4b5563; }
@@ -76,8 +79,16 @@ a { color: #93c5fd; }
 .feedback.bad { background: #7f1d1d; color: #fca5a5; }
 
 /* Flag form labels */
-.flag-form { margin-bottom: 0; min-width: 280px; flex: 1; max-width: 400px; }
-.flag-label { display: block; font-weight: 500; margin-bottom: .3rem; color: #93c5fd; font-size: .9rem; }
+.flag-form { display: contents; }
+.flag-form.disabled .flag-label,
+.flag-form.disabled input[type="text"],
+.flag-form.disabled .btn { opacity: 0.6; }
+.flag-form.solved input[type="text"] { background: #065f46; border-color: #10b981; color: #a7f3d0; }
+.flag-form.solved .flag-label { color: #10b981; }
+.flag-label { font-weight: 500; color: #93c5fd; font-size: .9rem; text-align: right; white-space: nowrap; }
+.flag-form input[type="text"] { width: 100%; min-width: 0; box-sizing: border-box; }
+.flag-form .btn { }
+.flags-section .feedback { grid-column: 1 / -1; margin: 0; }
 
 /* Connection details */
 .connection-section { margin-top: 1rem; border-top: 1px solid #3a404a; padding-top: 1rem; }

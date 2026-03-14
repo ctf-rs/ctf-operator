@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ctf_cli::k8s::{Challenge, Ctf, Instance};
+use ctf_cli::k8s::{Challenge, Ctf, Instance, InstancePhase};
 use kube::Api;
 
 use crate::{
@@ -14,18 +14,34 @@ pub fn instance_ready_from_resource(instance: &Instance) -> bool {
     let Some(status) = instance.status.as_ref() else {
         return false;
     };
+    status.phase == InstancePhase::Ready
+}
 
-    let Ok(status_json) = serde_json::to_value(status) else {
-        return false;
-    };
-    let Some(conditions) = status_json.get("conditions").and_then(|c| c.as_array()) else {
-        return false;
-    };
+/// Get the current phase of the instance.
+pub fn instance_phase_from_resource(instance: &Instance) -> InstancePhase {
+    instance
+        .status
+        .as_ref()
+        .map(|s| s.phase)
+        .unwrap_or(InstancePhase::Initializing)
+}
 
-    conditions.iter().any(|cond| {
-        cond.get("type").and_then(|v| v.as_str()) == Some("Ready")
-            && cond.get("status").and_then(|v| v.as_str()) == Some("True")
-    })
+/// Get the phase description (human-readable) from an instance.
+pub fn instance_phase_description(instance: &Instance) -> String {
+    let phase = instance_phase_from_resource(instance);
+    let base_desc = phase.description().to_string();
+
+    // If there's a custom message (e.g., for errors), append it
+    if let Some(msg) = instance
+        .status
+        .as_ref()
+        .and_then(|s| s.message.as_ref())
+    {
+        if !msg.is_empty() {
+            return format!("{} {}", base_desc, msg);
+        }
+    }
+    base_desc
 }
 
 /// Seconds remaining before the instance expires, based on the

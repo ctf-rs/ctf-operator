@@ -13,6 +13,10 @@
     "./target/debug/ctf-operator": true,
     "cargo run": true,
     "pkill": true,
-    "set": true
+    "set": true,
+    "/^set -a && source app/\\.env && set \\+a && cargo leptos watch 2>&1$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
   }
 }

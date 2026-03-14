@@ -14,6 +14,8 @@ pub fn ChallengeCard(data: ChallengeCardData) -> impl IntoView {
     let ch = &data.challenge;
     let tile_class = if data.solved {
         "tile card solved"
+    } else if data.partial_solve {
+        "tile card partial"
     } else {
         "tile card"
     };
@@ -31,6 +33,14 @@ pub fn ChallengeCard(data: ChallengeCardData) -> impl IntoView {
         view! { <span class={css_class}>{label}</span> }
     });
 
+    let status_badge = if data.solved {
+        Some(view! { <p class="solved-badge">"Solved"</p> }.into_any())
+    } else if data.partial_solve {
+        Some(view! { <p class="partial-badge">"In Progress"</p> }.into_any())
+    } else {
+        None
+    };
+
     view! {
         <article class={tile_class}>
             <div class="card-content">
@@ -38,7 +48,7 @@ pub fn ChallengeCard(data: ChallengeCardData) -> impl IntoView {
                     <h2>{full_name}</h2>
                     {diff_badge}
                 </div>
-                {data.solved.then(|| view! { <p class="solved-badge">"Solved"</p> })}
+                {status_badge}
                 <p class="muted desc">{description}</p>
             </div>
             <a class="btn" href={route}>"Open challenge"</a>
@@ -161,12 +171,14 @@ pub fn InstanceControls(
                     None
                 };
                 let display_label = flag.label.clone().unwrap_or_else(|| flag.name.clone());
+                let flag_solved = flag.solved;
                 view! {
                     <FlagForm
                         action=submit_action.clone()
                         flag_name=flag.name.clone()
                         flag_label=display_label
-                        disabled=flags_disabled
+                        disabled=flags_disabled || flag_solved
+                        solved=flag_solved
                         feedback=feedback
                     />
                 }
@@ -186,10 +198,17 @@ fn FlagForm(
     flag_name: String,
     flag_label: String,
     disabled: bool,
+    solved: bool,
     feedback: Option<(String, String)>,
 ) -> impl IntoView {
-    let placeholder = format!("{flag_label} flag");
-    let form_class = if disabled {
+    let placeholder = if solved {
+        format!("✓ {flag_label} solved")
+    } else {
+        format!("{flag_label} flag")
+    };
+    let form_class = if solved {
+        "flag-form solved"
+    } else if disabled {
         "flag-form disabled"
     } else {
         "flag-form"

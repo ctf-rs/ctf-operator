@@ -127,6 +127,7 @@ mod tests {
             ChallengeSpec {
                 full_name: "Challenge One".to_string(),
                 description: Some("desc".to_string()),
+                difficulty: None,
                 instance_duration_seconds: None,
                 categories: HashSet::new(),
                 tags: HashSet::new(),
@@ -138,6 +139,7 @@ mod tests {
                     prefix: None,
                     format: None,
                     random: None,
+                    label: None,
                     options: Default::default(),
                 }],
                 containers: vec![ChallengeContainer {
@@ -185,6 +187,7 @@ mod tests {
             prefix: None,
             format: None,
             random: None,
+            label: None,
             options: Default::default(),
         });
 

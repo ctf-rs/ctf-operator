@@ -17,6 +17,7 @@ use crate::db::ChallengeView;
 pub struct ChallengeCardData {
     pub challenge: ChallengeView,
     pub solved: bool,
+    pub partial_solve: bool, // Some flags submitted but not all
 }
 
 pub struct CategorySection {
@@ -44,6 +45,7 @@ pub struct ChallengePageData {
     pub extend_feedback: Option<String>,
     pub instance_name: Option<String>,
     pub instance_base_domain: Option<String>,
+    pub instance_phase_desc: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
