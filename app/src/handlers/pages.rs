@@ -143,6 +143,13 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         } else {
             challenge.categories.clone()
         };
+
+        // Get points from scoreboard
+        let points = {
+            let scoreboard = state.scoreboard.read().await;
+            scoreboard.get_challenge_points(&challenge.ctf_name, &challenge.name)
+        };
+
         for cat in cats {
             category_map
                 .entry(cat)
@@ -155,6 +162,7 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
                     total_flags,
                     time_left_seconds,
                     has_instance,
+                    points,
                 });
         }
     }
@@ -345,6 +353,12 @@ pub async fn challenge_page(
         .clone()
         .unwrap_or(request_hostname);
 
+    // Get points from scoreboard
+    let points = {
+        let scoreboard = state.scoreboard.read().await;
+        scoreboard.get_challenge_points(&ctf_name, &challenge_name)
+    };
+
     let page_data = views::ChallengePageData {
         challenge,
         ctf_title: ctf_name.clone(),
@@ -360,10 +374,51 @@ pub async fn challenge_page(
         instance_name,
         instance_base_domain,
         instance_phase_desc,
+        points,
     };
 
     let html = views::render_to_html(move || {
         leptos::prelude::view! { <views::ChallengeDetailPage data=page_data/> }
+    });
+
+    Html(html).into_response()
+}
+
+// ---------------------------------------------------------------------------
+// Scoreboard
+// ---------------------------------------------------------------------------
+
+pub async fn scoreboard(State(state): State<Arc<AppState>>, jar: CookieJar) -> Response {
+    let user = match current_user(&state, &jar).await {
+        Ok(user) => user,
+        Err(err) => {
+            warn!(error = %err, "failed to read current user");
+            None
+        }
+    };
+
+    let ctf_name = state.config.ctf_name.clone();
+
+    let Some(user) = user else {
+        return Redirect::to("/login").into_response();
+    };
+
+    let user_label = user.name.clone().or(user.email.clone()).unwrap_or_else(|| user.sub.clone());
+
+    // Get leaderboard from scoreboard cache
+    let leaderboard = {
+        let scoreboard = state.scoreboard.read().await;
+        scoreboard.get_leaderboard(&ctf_name)
+    };
+
+    let page_data = views::ScoreboardPageData {
+        ctf_title: ctf_name,
+        user_label,
+        leaderboard,
+    };
+
+    let html = views::render_to_html(move || {
+        leptos::prelude::view! { <views::ScoreboardPage data=page_data/> }
     });
 
     Html(html).into_response()

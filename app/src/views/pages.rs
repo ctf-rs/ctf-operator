@@ -3,7 +3,7 @@ use leptos::prelude::*;
 use crate::helpers::challenge_route;
 
 use super::{
-    CategorySection, ChallengePageData,
+    CategorySection, ChallengePageData, ScoreboardPageData,
     components::{ChallengeCard, InstanceControls},
     display_file_name, file_route, format_countdown,
     layout::PageShell,
@@ -45,9 +45,12 @@ pub fn IndexPage(
                     <h1>{ctf_title}</h1>
                     <p class="muted">"Logged in as " {user_label}</p>
                 </div>
-                <form method="post" action="/logout">
-                    <button class="btn secondary" type="submit">"Logout"</button>
-                </form>
+                <div class="nav-buttons">
+                    <a class="btn secondary" href="/scoreboard">"Scoreboard"</a>
+                    <form method="post" action="/logout" style="display:inline-block;">
+                        <button class="btn secondary" type="submit">"Logout"</button>
+                    </form>
+                </div>
             </header>
             {sections.into_iter().map(|section| {
                 let label = section.label.clone();
@@ -144,15 +147,20 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
         view! { <span class={css_class}>{label}</span> }
     });
 
+    // Points display
+    let points = data.points;
+    let points_text = format!("{}pts", points);
+
     view! {
         <PageShell title=data.ctf_title.clone()>
             <header class="topbar">
-                <div>
-                    <a class="btn secondary" href="/">"← Back to challenges"</a>
+                <div class="nav-buttons">
+                    <a class="btn secondary" href="/">"← Challenges"</a>
+                    <a class="btn secondary" href="/scoreboard">"Scoreboard"</a>
                 </div>
-                <div>
+                <div class="nav-buttons">
                     <span class="muted">{data.user_label.clone()}</span>
-                    <form method="post" action="/logout" style="display:inline-block;margin-left:.5rem;">
+                    <form method="post" action="/logout" style="display:inline-block;">
                         <button class="btn secondary small" type="submit">"Logout"</button>
                     </form>
                 </div>
@@ -163,6 +171,7 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                     <div class="title-row">
                         <h1>{full_name}</h1>
                         {diff_badge}
+                        <span class="points-badge large">{points_text}</span>
                     </div>
                     {data.solved.then(|| view! { <span class="solved-badge large">"✓ Solved"</span> })}
                 </div>
@@ -244,6 +253,70 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                 </div>
             </div>
             <script>{instance_script}</script>
+        </PageShell>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Scoreboard page
+// ---------------------------------------------------------------------------
+
+#[component]
+pub fn ScoreboardPage(data: ScoreboardPageData) -> impl IntoView {
+    view! {
+        <PageShell title=format!("{} - Scoreboard", data.ctf_title)>
+            <header class="topbar">
+                <div class="nav-buttons">
+                    <a class="btn secondary" href="/">"← Challenges"</a>
+                </div>
+                <div class="nav-buttons">
+                    <span class="muted">{data.user_label.clone()}</span>
+                    <form method="post" action="/logout" style="display:inline-block;">
+                        <button class="btn secondary small" type="submit">"Logout"</button>
+                    </form>
+                </div>
+            </header>
+
+            <div class="scoreboard-container">
+                <h1>"Scoreboard"</h1>
+                {if data.leaderboard.is_empty() {
+                    view! {
+                        <p class="muted" style="text-align:center;margin-top:2rem;">"No solves yet. Be the first!"</p>
+                    }.into_any()
+                } else {
+                    view! {
+                        <table class="scoreboard-table">
+                            <thead>
+                                <tr>
+                                    <th class="rank">"#"</th>
+                                    <th class="username">"Player"</th>
+                                    <th class="points">"Points"</th>
+                                    <th class="solves">"Solves"</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {data.leaderboard.into_iter().enumerate().map(|(i, entry)| {
+                                    let rank = i + 1;
+                                    let rank_class = match rank {
+                                        1 => "rank gold",
+                                        2 => "rank silver",
+                                        3 => "rank bronze",
+                                        _ => "rank",
+                                    };
+                                    view! {
+                                        <tr>
+                                            <td class={rank_class}>{rank}</td>
+                                            <td class="username">{entry.username}</td>
+                                            <td class="points">{entry.total_points}</td>
+                                            <td class="solves">{entry.solves}</td>
+                                        </tr>
+                                    }
+                                }).collect_view()}
+                            </tbody>
+                        </table>
+                    }.into_any()
+                }}
+            </div>
         </PageShell>
     }
 }

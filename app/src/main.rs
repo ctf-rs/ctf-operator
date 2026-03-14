@@ -1,7 +1,7 @@
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    use app::{config, db, handlers, k8s, oauth, state::AppState};
+    use app::{config, db, handlers, k8s, oauth, scoreboard, state::AppState};
     use std::{collections::HashMap, sync::Arc};
     use tokio::sync::RwLock;
 
@@ -27,9 +27,11 @@ async fn main() -> anyhow::Result<()> {
         oidc_client,
         pending_oauth: Arc::new(RwLock::new(HashMap::new())),
         instance_cache: Arc::new(RwLock::new(HashMap::new())),
+        scoreboard: Arc::new(RwLock::new(scoreboard::Scoreboard::default())),
     });
 
     let _workers = k8s::sync::spawn_sync_worker(Arc::clone(&state), Arc::clone(&config));
+    let _scoreboard_worker = scoreboard::spawn_scoreboard_worker(Arc::clone(&state));
 
     let app = handlers::router(state);
 

@@ -5,7 +5,7 @@ use kube::Client;
 use sqlx::PgPool;
 use tokio::sync::RwLock;
 
-use crate::{config::AppConfig, oauth};
+use crate::{config::AppConfig, oauth, scoreboard::Scoreboard};
 
 /// Key for instance cache: (namespace, instance_name)
 pub type InstanceKey = (String, String);
@@ -19,4 +19,6 @@ pub struct AppState {
     pub pending_oauth: Arc<RwLock<HashMap<String, oauth::PendingAuth>>>,
     /// Cache of Instance resources from k8s watcher
     pub instance_cache: Arc<RwLock<HashMap<InstanceKey, Instance>>>,
+    /// Scoreboard cache (points, leaderboard)
+    pub scoreboard: Arc<RwLock<Scoreboard>>,
 }

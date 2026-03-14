@@ -23,6 +23,10 @@ pub struct Flag {
     #[serde(default)]
     #[garde(dive)]
     pub options: FlagMatchOptions,
+    /// Scoring configuration for dynamic points
+    #[serde(default)]
+    #[garde(dive)]
+    pub scoring: FlagScoring,
 }
 
 #[derive(Debug, Default, Clone, Copy, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]
@@ -68,6 +72,57 @@ pub struct FlagMatchOptions {
     #[serde(rename = "ignoreRandom", default)]
     #[garde(skip)]
     pub ignore_random: bool,
+}
+
+/// Controls dynamic scoring for a flag based on solve count.
+#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]
+pub struct FlagScoring {
+    /// Base points when no one has solved (default: 500)
+    #[serde(rename = "basePoints", default = "default_base_points")]
+    #[garde(range(min = 1, max = 10000))]
+    pub base_points: u32,
+    /// Minimum points floor (default: 100)
+    #[serde(rename = "minPoints", default = "default_min_points")]
+    #[garde(range(min = 0, max = 10000))]
+    pub min_points: u32,
+    /// Decay factor - higher = slower decay (default: 15)
+    #[serde(default = "default_decay")]
+    #[garde(range(min = 1, max = 100))]
+    pub decay: u32,
+}
+
+impl Default for FlagScoring {
+    fn default() -> Self {
+        Self {
+            base_points: default_base_points(),
+            min_points: default_min_points(),
+            decay: default_decay(),
+        }
+    }
+}
+
+impl FlagScoring {
+    /// Calculate points for this flag given the number of solves.
+    /// Uses formula: max(min_points, base_points / (1 + (solves / decay)))
+    pub fn calculate_points(&self, solves: u32) -> u32 {
+        if solves == 0 {
+            return self.base_points;
+        }
+        let points = (self.base_points as f64) / (1.0 + (solves as f64 / self.decay as f64));
+        points.round().max(self.min_points as f64) as u32
+    }
+}
+
+fn default_base_points() -> u32 {
+    500
+}
+
+fn default_min_points() -> u32 {
+    50
+}
+
+fn default_decay() -> u32 {
+    6
 }
 
 fn validate_unique_chars(value: &str, _: &()) -> garde::Result {

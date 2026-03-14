@@ -51,10 +51,12 @@ a { color: #93c5fd; }
 .tile.card .card-content { flex: 1; }
 .tile.card > .btn { margin-top: auto; text-align: center; }
 
-/* Challenge card top row (timer + flag progress) */
+/* Challenge card top row (timer + flag progress + points) */
 .flag-progress { font-size: .75rem; padding: .1rem .4rem; background: #374151; border-radius: 4px; color: #9ca3af; font-weight: normal; flex-shrink: 0; }
 .flag-progress.partial { background: #713f12; color: #fde68a; }
 .flag-progress.completed { background: #065f46; color: #a7f3d0; }
+.points-badge { font-size: .75rem; padding: .1rem .5rem; background: #3730a3; border-radius: 4px; color: #c7d2fe; font-weight: 600; flex-shrink: 0; }
+.points-badge.large { font-size: .9rem; padding: .2rem .6rem; }
 .card-timer { display: inline-block; font-size: .75rem; padding: .2rem .6rem; background: rgba(37, 99, 235, 0.2); border: 1px solid #3b82f6; border-radius: 999px; color: #93c5fd; flex-shrink: 0; }
 .card-timer.running { background: rgba(99, 102, 241, 0.2); border-color: #6366f1; color: #a5b4fc; }
 .card-meta-row { display: flex; align-items: center; gap: .5rem; margin-bottom: .5rem; flex-wrap: wrap; }
@@ -112,3 +114,22 @@ a { color: #93c5fd; }
 .connection-item { background: #1e2329; padding: .6rem .8rem; border-radius: 6px; margin-bottom: .5rem; font-family: monospace; font-size: .9rem; }
 .connection-item .label { color: #9ca3af; font-size: .8rem; margin-bottom: .2rem; font-family: inherit; }
 .connection-item code { color: #a7f3d0; user-select: all; }
+
+/* Navigation buttons */
+.nav-buttons { display: flex; align-items: center; gap: .5rem; }
+
+/* Scoreboard */
+.scoreboard-container { max-width: 800px; margin: 0 auto; }
+.scoreboard-container h1 { margin: 0 0 1.5rem 0; font-size: 1.8rem; text-align: center; }
+.scoreboard-table { width: 100%; border-collapse: collapse; background: #2a2f38; border-radius: 8px; overflow: hidden; }
+.scoreboard-table thead { background: #232830; }
+.scoreboard-table th { padding: 1rem; text-align: left; font-weight: 600; color: #93c5fd; border-bottom: 2px solid #3a404a; }
+.scoreboard-table td { padding: .8rem 1rem; border-bottom: 1px solid #3a404a; }
+.scoreboard-table tbody tr:hover { background: #323842; }
+.scoreboard-table .rank { width: 60px; text-align: center; font-weight: 700; }
+.scoreboard-table .rank.gold { color: #fbbf24; }
+.scoreboard-table .rank.silver { color: #d1d5db; }
+.scoreboard-table .rank.bronze { color: #d97706; }
+.scoreboard-table .username { font-weight: 500; }
+.scoreboard-table .points { font-weight: 600; color: #a7f3d0; }
+.scoreboard-table .solves { color: #9ca3af; }

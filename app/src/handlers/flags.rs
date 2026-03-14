@@ -153,6 +153,7 @@ pub async fn submit_flag(
                 body: flag_obj.spec.body,
                 random: flag_obj.spec.random,
                 options: flag_obj.spec.options,
+                scoring: flag_obj.spec.scoring,
             };
             core_flag.verify(submitted_flag)
         }

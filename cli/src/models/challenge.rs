@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     validate_relative_existing_file, Ctf, Flag, FlagFormat, FlagMatchOptions, FlagRandomRules,
-    ValidationError, ValidationResult,
+    FlagScoring, ValidationError, ValidationResult,
 };
 
 #[derive(
@@ -165,6 +165,10 @@ pub struct ChallengeFlag {
     #[serde(default)]
     #[garde(dive)]
     pub options: FlagMatchOptions,
+    /// Scoring configuration for dynamic points
+    #[serde(default)]
+    #[garde(dive)]
+    pub scoring: FlagScoring,
 }
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]
@@ -244,6 +248,7 @@ impl ChallengeFlag {
             body,
             random,
             options,
+            scoring: self.scoring.clone(),
         }
     }
 }

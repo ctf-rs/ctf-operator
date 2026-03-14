@@ -25,6 +25,7 @@ aws-sdk-s3 = { workspace = true, optional = true }
 axum = { workspace = true, features = ["macros", "form"], optional = true }
 axum-extra = { workspace = true, features = ["cookie"], optional = true }
 base64 = { workspace = true, optional = true }
+chrono = { version = "0.4", features = ["serde"], optional = true }
 ctf-cli = { path = "../cli", optional = true }
 http = { workspace = true, optional = true }
 k8s-openapi = { workspace = true, optional = true }
@@ -32,7 +33,7 @@ kube = { workspace = true, features = ["client", "runtime"], optional = true }
 rand = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 rustls = { workspace = true, features = ["ring", "std"], optional = true }
-sqlx = { workspace = true, features = ["postgres", "runtime-tokio-rustls", "json"], optional = true }
+sqlx = { workspace = true, features = ["postgres", "runtime-tokio-rustls", "json", "chrono"], optional = true }
 tokio = { workspace = true, features = ["full"], optional = true }
 tokio-stream = { workspace = true, optional = true }
 tower-http = { version = "0.6", features = ["fs"], optional = true }
@@ -51,6 +52,7 @@ ssr = [
     "dep:axum",
     "dep:axum-extra",
     "dep:base64",
+    "dep:chrono",
     "dep:ctf-cli",
     "dep:http",
     "dep:k8s-openapi",

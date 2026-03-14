@@ -18,6 +18,7 @@ use crate::state::AppState;
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/", get(pages::index))
+        .route("/scoreboard", get(pages::scoreboard))
         .route("/healthz", get(auth::healthz))
         .route("/login", get(auth::login))
         .route("/oauth/callback", get(auth::oauth_callback))

@@ -19,6 +19,25 @@ pub struct FlagView {
     pub label: Option<String>,
     #[serde(default)]
     pub solved: bool,
+    /// Base points when no one has solved (default: 500)
+    #[serde(default = "default_base_points")]
+    pub base_points: u32,
+    /// Minimum points floor (default: 50)
+    #[serde(default = "default_min_points")]
+    pub min_points: u32,
+    /// Decay factor (default: 6)
+    #[serde(default = "default_decay")]
+    pub decay: u32,
+}
+
+fn default_base_points() -> u32 {
+    500
+}
+fn default_min_points() -> u32 {
+    50
+}
+fn default_decay() -> u32 {
+    6
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

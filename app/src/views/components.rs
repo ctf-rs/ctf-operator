@@ -51,6 +51,10 @@ pub fn ChallengeCard(data: ChallengeCardData) -> impl IntoView {
         "flag-progress"
     };
 
+    // Points badge
+    let points = data.points;
+    let points_display = format!("{}pts", points);
+
     // Instance timer (only show if has instance and time remaining)
     let timer_badge = if data.has_instance {
         if let Some(secs) = data.time_left_seconds {
@@ -69,6 +73,7 @@ pub fn ChallengeCard(data: ChallengeCardData) -> impl IntoView {
                     <span class="tile-title">{full_name}</span>
                     {diff_badge}
                     {timer_badge}
+                    <span class="points-badge">{points_display}</span>
                     <span class={flag_progress_class}>{flag_progress}</span>
                 </div>
                 {status_badge}

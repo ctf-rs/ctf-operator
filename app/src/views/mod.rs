@@ -3,12 +3,13 @@ mod layout;
 mod pages;
 mod scripts;
 
-pub use pages::{ChallengeDetailPage, IndexPage, LoginPage};
+pub use pages::{ChallengeDetailPage, IndexPage, LoginPage, ScoreboardPage};
 
 use ctf_cli::ChallengeCategory;
 use leptos::prelude::*;
 
 use crate::db::ChallengeView;
+use crate::scoreboard::UserScore;
 
 // ---------------------------------------------------------------------------
 // Data types shared between views and handlers
@@ -22,6 +23,8 @@ pub struct ChallengeCardData {
     pub total_flags: usize,
     pub time_left_seconds: Option<u64>,
     pub has_instance: bool,
+    /// Total points this challenge is worth (sum of flag points)
+    pub points: u32,
 }
 
 pub struct CategorySection {
@@ -51,6 +54,14 @@ pub struct ChallengePageData {
     pub instance_name: Option<String>,
     pub instance_base_domain: String,
     pub instance_phase_desc: Option<String>,
+    /// Total points this challenge is worth (sum of flag points)
+    pub points: u32,
+}
+
+pub struct ScoreboardPageData {
+    pub ctf_title: String,
+    pub user_label: String,
+    pub leaderboard: Vec<UserScore>,
 }
 
 // ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Conditions;
 
-#[derive(CustomResource, Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+#[derive(CustomResource, Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[kube(
 	group = "operator.ctf.rs",
 	version = "v1alpha1",
@@ -36,6 +36,8 @@ pub struct FlagSpec {
     #[serde(default)]
     pub options: crate::models::FlagMatchOptions,
     #[serde(default)]
+    pub scoring: crate::models::FlagScoring,
+    #[serde(default)]
     pub conditions: Conditions,
 }
 
@@ -50,4 +52,5 @@ pub struct FlagStatus {
 pub type FlagFormat = crate::models::FlagFormat;
 pub type FlagRandomRules = crate::models::FlagRandomRules;
 pub type FlagMatchOptions = crate::models::FlagMatchOptions;
+pub type FlagScoring = crate::models::FlagScoring;
 pub type ChallengeFlag = crate::models::ChallengeFlag;

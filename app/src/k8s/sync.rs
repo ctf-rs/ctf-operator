@@ -133,7 +133,7 @@ async fn run_namespace_sync(state: Arc<AppState>, namespace: String, ctf_name: S
                         Ok(watcher::Event::Delete(instance)) => {
                             let key = (namespace.clone(), instance.name_any());
                             state.instance_cache.write().await.remove(&key);
-                            
+
                             // Clean up DB record for this instance
                             // Extract user_id from annotation if present
                             if let Some(user_id_str) = instance
@@ -142,7 +142,7 @@ async fn run_namespace_sync(state: Arc<AppState>, namespace: String, ctf_name: S
                                 .as_ref()
                                 .and_then(|a| a.get("app.ctf.rs/user-id"))
                             {
-                                if let Ok(user_id) = user_id_str.parse::<i32>() {
+                                if let Ok(user_id) = user_id_str.parse::<i64>() {
                                     let challenge_name = &instance.spec.challenge;
                                     if let Err(err) = db::clear_instance_for_user(
                                         &state.db,
@@ -233,6 +233,9 @@ async fn flush_namespace(
                 name: flag.name.clone(),
                 label: flag.label.clone(),
                 solved: false, // Will be populated from DB later
+                base_points: flag.scoring.base_points,
+                min_points: flag.scoring.min_points,
+                decay: flag.scoring.decay,
             })
             .collect::<Vec<_>>();
 
@@ -271,6 +274,7 @@ async fn flush_namespace(
             files,
             flags,
             exposed_ports,
+            flag_hint: String::new(), // TODO: add to CRD
         });
     }
 

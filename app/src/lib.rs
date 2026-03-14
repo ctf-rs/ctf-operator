@@ -13,6 +13,8 @@ pub mod oauth;
 #[cfg(feature = "ssr")]
 pub mod s3;
 #[cfg(feature = "ssr")]
+pub mod scoreboard;
+#[cfg(feature = "ssr")]
 pub mod state;
 #[cfg(feature = "ssr")]
 pub mod views;
