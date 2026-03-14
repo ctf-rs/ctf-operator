@@ -1,9 +1,9 @@
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    use app::{config, db, handlers, k8s, oauth, state::AppState};
     use std::{collections::HashMap, sync::Arc};
     use tokio::sync::RwLock;
-    use app::{config, db, handlers, k8s, oauth, state::AppState};
 
     let _ = rustls::crypto::ring::default_provider().install_default();
 
@@ -26,6 +26,7 @@ async fn main() -> anyhow::Result<()> {
         kube,
         oidc_client,
         pending_oauth: Arc::new(RwLock::new(HashMap::new())),
+        instance_cache: Arc::new(RwLock::new(HashMap::new())),
     });
 
     let _workers = k8s::sync::spawn_sync_worker(Arc::clone(&state), Arc::clone(&config));

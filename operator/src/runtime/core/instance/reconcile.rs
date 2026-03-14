@@ -11,7 +11,9 @@ use crate::{
     },
     util::Reconciler,
 };
-use ctf_cli::k8s::{Challenge, ConditionStatus, Ctf, Flag, FlagSpec, Instance, InstancePhase, InstanceStatus};
+use ctf_cli::k8s::{
+    Challenge, ConditionStatus, Ctf, Flag, FlagSpec, Instance, InstancePhase, InstanceStatus,
+};
 use ctf_cli::k8s::{PortClaim, PortClaimSpec, ReservationRef, ReservationSet, ReservationSetSpec};
 use jiff::Timestamp;
 use k8s_openapi::{
@@ -25,13 +27,10 @@ use k8s_openapi::{
 };
 use kube::{
     api::{DeleteParams, ObjectMeta, Patch, PatchParams},
-    runtime::{
-        controller::Action,
-        finalizer::{finalizer, Event},
-        reflector::ObjectRef,
-    },
+    runtime::{controller::Action, reflector::ObjectRef},
     Api, ResourceExt,
 };
+use serde_json::json;
 
 pub struct InstanceReconciler;
 
@@ -48,14 +47,33 @@ impl Reconciler for InstanceReconciler {
         }
 
         let api: Api<Instance> = Api::namespaced(state.client.clone(), &namespace);
-        finalizer(&api, FINALIZER_NAME, obj, |event| async {
-            match event {
-                Event::Apply(instance) => reconcile_apply(instance, state.clone()).await,
-                Event::Cleanup(instance) => reconcile_cleanup(instance, state.clone()).await,
-            }
-        })
-        .await
-        .map_err(|err| CtfError::FinalizerError(Box::new(err)))
+        let name = obj.name_any();
+
+        // Check if being deleted
+        if obj.metadata.deletion_timestamp.is_some() {
+            // Cleanup phase - wait for resources to be deleted before removing finalizer
+            return reconcile_cleanup(obj, state, &api).await;
+        }
+
+        // Not being deleted - ensure finalizer is present and do normal reconciliation
+        let finalizers = obj.metadata.finalizers.as_ref();
+        let has_finalizer = finalizers
+            .map(|f| f.contains(&FINALIZER_NAME.to_string()))
+            .unwrap_or(false);
+
+        if !has_finalizer {
+            // Add our finalizer
+            let patch = json!({
+                "metadata": {
+                    "finalizers": [FINALIZER_NAME]
+                }
+            });
+            api.patch(&name, &PatchParams::default(), &Patch::Merge(&patch))
+                .await?;
+            return Ok(Action::requeue(Duration::from_millis(100)));
+        }
+
+        reconcile_apply(obj, state).await
     }
 }
 
@@ -111,7 +129,7 @@ async fn reconcile_apply(
 
     let duration_seconds = resolve_instance_duration_seconds(ctf.as_ref(), challenge.as_ref());
     let now_unix = now_unix_seconds();
-    
+
     // Only check expiry if instance was already ready (has expires_at annotation)
     let existing_expires_at = get_existing_expires_at(instance.as_ref());
     if let Some(expires_at) = existing_expires_at {
@@ -267,18 +285,70 @@ async fn reconcile_apply(
 async fn reconcile_cleanup(
     instance: Arc<Instance>,
     state: Arc<CtfState>,
+    api: &Api<Instance>,
 ) -> Result<Action, CtfError> {
     let target_namespace = target_namespace_for_instance(instance.as_ref(), &state)?;
+    let ns_api: Api<Namespace> = Api::all(state.client.clone());
+    let name = instance.name_any();
 
-    if let Err(err) = Api::<Namespace>::all(state.client.clone())
-        .delete(&target_namespace, &DeleteParams::default())
-        .await
-    {
-        match err {
-            kube::Error::Api(ae) if ae.code == 404 => {}
-            other => return Err(other.into()),
-        }
+    // Update status to Terminating phase
+    let mut status = instance.status.clone().unwrap_or_default();
+    if status.phase != InstancePhase::Terminating {
+        status.phase = InstancePhase::Terminating;
+        status.message = Some("Cleaning up resources...".to_string());
+        patch_status_if_needed(instance.as_ref(), &state, status).await?;
     }
+
+    // Check if namespace still exists
+    match ns_api.get(&target_namespace).await {
+        Ok(_ns) => {
+            // Namespace still exists, try to delete it (or it's already terminating)
+            if let Err(err) = ns_api
+                .delete(&target_namespace, &DeleteParams::default())
+                .await
+            {
+                match err {
+                    kube::Error::Api(ae) if ae.code == 404 => {
+                        // Already gone - fall through to remove finalizer
+                    }
+                    kube::Error::Api(ae) if ae.code == 409 => {
+                        // Conflict - namespace is already being deleted, wait for it
+                        return Ok(Action::requeue(Duration::from_secs(2)));
+                    }
+                    other => return Err(other.into()),
+                }
+            } else {
+                // Delete initiated, wait for namespace to be fully removed
+                return Ok(Action::requeue(Duration::from_secs(2)));
+            }
+        }
+        Err(kube::Error::Api(ae)) if ae.code == 404 => {
+            // Namespace is gone - proceed to remove finalizer
+        }
+        Err(err) => return Err(err.into()),
+    }
+
+    // Namespace is fully deleted, now remove our finalizer
+    let finalizers = instance
+        .metadata
+        .finalizers
+        .as_ref()
+        .map(|f| {
+            f.iter()
+                .filter(|fin| *fin != FINALIZER_NAME)
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    let patch = if finalizers.is_empty() {
+        json!({ "metadata": { "finalizers": null } })
+    } else {
+        json!({ "metadata": { "finalizers": finalizers } })
+    };
+
+    api.patch(&name, &PatchParams::default(), &Patch::Merge(&patch))
+        .await?;
 
     Ok(Action::await_change())
 }
@@ -409,10 +479,14 @@ fn now_unix_seconds() -> u64 {
         .unwrap_or(0)
 }
 
-fn unix_seconds_to_time(seconds: u64) -> Option<k8s_openapi::apimachinery::pkg::apis::meta::v1::Time> {
+fn unix_seconds_to_time(
+    seconds: u64,
+) -> Option<k8s_openapi::apimachinery::pkg::apis::meta::v1::Time> {
     let seconds = i64::try_from(seconds).ok()?;
     let timestamp = Timestamp::from_second(seconds).ok()?;
-    Some(k8s_openapi::apimachinery::pkg::apis::meta::v1::Time(timestamp))
+    Some(k8s_openapi::apimachinery::pkg::apis::meta::v1::Time(
+        timestamp,
+    ))
 }
 
 fn humanize_duration(seconds: u64) -> String {
@@ -722,7 +796,8 @@ async fn ensure_flags(
                 .clone()
                 .or(ctf.spec.flag.random.clone()),
             options: ctf_cli::models::FlagMatchOptions {
-                ignore_case: challenge_flag.options.ignore_case || ctf.spec.flag.options.ignore_case,
+                ignore_case: challenge_flag.options.ignore_case
+                    || ctf.spec.flag.options.ignore_case,
                 ignore_random: challenge_flag.options.ignore_random
                     || ctf.spec.flag.options.ignore_random,
             },

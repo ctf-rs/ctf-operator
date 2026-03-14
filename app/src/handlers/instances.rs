@@ -388,8 +388,13 @@ pub async fn instance_state(
         .into_response();
     };
 
-    let api: Api<Instance> = Api::namespaced(state.kube.clone(), &instance.namespace);
-    let Ok(instance_obj) = api.get(&instance.instance_name).await else {
+    // Look up instance from cache instead of direct API call
+    let cache_key = (instance.namespace.clone(), instance.instance_name.clone());
+    let cache = state.instance_cache.read().await;
+    let Some(instance_obj) = cache.get(&cache_key).cloned() else {
+        drop(cache); // Release lock before DB operation
+        // Instance not in cache (deleted) - watcher will clean DB, but fallback here
+        let _ = db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name).await;
         return Json(InstanceStateResponse {
             has_instance: false,
             ready: false,
@@ -401,8 +406,11 @@ pub async fn instance_state(
         })
         .into_response();
     };
+    drop(cache); // Release lock
 
     if !is_instance_owned_by_user(&instance_obj, &user) {
+        // Instance not owned by user - clean up stale DB record
+        let _ = db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name).await;
         return Json(InstanceStateResponse {
             has_instance: false,
             ready: false,
@@ -478,7 +486,7 @@ pub async fn stop_instance(
         }
     }
 
-    // Delete the instance from cluster
+    // Delete the instance from cluster (initiates termination)
     if let Err(err) = api
         .delete(&instance.instance_name, &kube::api::DeleteParams::default())
         .await
@@ -487,8 +495,9 @@ pub async fn stop_instance(
         return redirect_with("bad", "failed to stop instance").into_response();
     }
 
-    // Clear from database
-    let _ = db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name).await;
+    // Don't clear DB record here - keep it so UI shows "Stopping..." phase
+    // The record will be cleaned up when the instance is fully gone from k8s
+    // (detected by pages handler or instance_state handler)
 
-    redirect_with("ok", "instance stopped").into_response()
+    redirect_with("ok", "instance stopping").into_response()
 }

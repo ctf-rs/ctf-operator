@@ -1,28 +1,16 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use ctf_cli::k8s::{Challenge, ChallengeFileRef, Ctf};
-use ctf_cli::FlagFormat;
+use ctf_cli::k8s::{Challenge, ChallengeFileRef, Ctf, Instance};
 use kube::{Api, ResourceExt, runtime::watcher};
 use tokio::{sync::RwLock, task::JoinHandle};
 use tokio_stream::StreamExt;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::{
     config::AppConfig,
     db::{self, ChallengeView, FlagView, PortView},
     state::AppState,
 };
-
-/// Render a flag format hint like "SCC{...}" for placeholder text
-fn render_flag_hint(prefix: &str, format: FlagFormat) -> String {
-    match format {
-        FlagFormat::Curly => format!("{prefix}{{...}}"),
-        FlagFormat::Round => format!("{prefix}(...)"),
-        FlagFormat::Square => format!("{prefix}[...]"),
-        FlagFormat::Angle => format!("{prefix}<...>"),
-        FlagFormat::Underscore => format!("{prefix}_..."),
-    }
-}
 
 #[derive(Default)]
 struct NamespaceCache {
@@ -125,8 +113,75 @@ async fn run_namespace_sync(state: Arc<AppState>, namespace: String, ctf_name: S
         })
     };
 
-    info!(namespace = %namespace, "started ctf/challenge watchers");
-    let _ = tokio::join!(ctf_task, challenge_task);
+    // Instance watcher - maintains cache and cleans DB on deletion
+    let instance_task = {
+        let state = Arc::clone(&state);
+        let namespace = namespace.clone();
+        let ctf_name = ctf_name.clone();
+        tokio::spawn(async move {
+            let api: Api<Instance> = Api::namespaced(state.kube.clone(), &namespace);
+            loop {
+                let stream = watcher::watcher(api.clone(), watcher::Config::default());
+                tokio::pin!(stream);
+                while let Some(event) = stream.next().await {
+                    match event {
+                        Ok(watcher::Event::Apply(instance))
+                        | Ok(watcher::Event::InitApply(instance)) => {
+                            let key = (namespace.clone(), instance.name_any());
+                            state.instance_cache.write().await.insert(key, instance);
+                        }
+                        Ok(watcher::Event::Delete(instance)) => {
+                            let key = (namespace.clone(), instance.name_any());
+                            state.instance_cache.write().await.remove(&key);
+                            
+                            // Clean up DB record for this instance
+                            // Extract user_id from annotation if present
+                            if let Some(user_id_str) = instance
+                                .metadata
+                                .annotations
+                                .as_ref()
+                                .and_then(|a| a.get("app.ctf.rs/user-id"))
+                            {
+                                if let Ok(user_id) = user_id_str.parse::<i32>() {
+                                    let challenge_name = &instance.spec.challenge;
+                                    if let Err(err) = db::clear_instance_for_user(
+                                        &state.db,
+                                        user_id,
+                                        challenge_name,
+                                        &ctf_name,
+                                    )
+                                    .await
+                                    {
+                                        warn!(
+                                            instance = %instance.name_any(),
+                                            user_id = %user_id,
+                                            error = %err,
+                                            "failed to clean DB on instance delete"
+                                        );
+                                    } else {
+                                        info!(
+                                            instance = %instance.name_any(),
+                                            user_id = %user_id,
+                                            "cleaned DB record on instance deletion"
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        Ok(watcher::Event::InitDone | watcher::Event::Init) => {}
+                        Err(err) => {
+                            error!(namespace = %namespace, error = %err, "instance watcher error");
+                            tokio::time::sleep(Duration::from_secs(2)).await;
+                            break;
+                        }
+                    }
+                }
+            }
+        })
+    };
+
+    info!(namespace = %namespace, "started ctf/challenge/instance watchers");
+    let _ = tokio::join!(ctf_task, challenge_task, instance_task);
 }
 
 async fn flush_namespace(
@@ -204,8 +259,6 @@ async fn flush_namespace(
 
         let difficulty = challenge.spec.difficulty;
 
-        let flag_hint = render_flag_hint(&ctf.spec.flag.prefix, ctf.spec.flag.format);
-
         rows.push(ChallengeView {
             namespace: namespace.to_string(),
             name: challenge.name_any(),
@@ -218,7 +271,6 @@ async fn flush_namespace(
             files,
             flags,
             exposed_ports,
-            flag_hint,
         });
     }
 
