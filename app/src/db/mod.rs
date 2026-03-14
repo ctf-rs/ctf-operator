@@ -92,6 +92,12 @@ pub async fn migrate(db: &PgPool) -> Result<()> {
     .await?;
 
     sqlx::query(
+        "ALTER TABLE app_challenges ADD COLUMN IF NOT EXISTS flag_hint TEXT NOT NULL DEFAULT ''",
+    )
+    .execute(db)
+    .await?;
+
+    sqlx::query(
         r#"CREATE TABLE IF NOT EXISTS app_instances (
             user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
             challenge_namespace TEXT NOT NULL,

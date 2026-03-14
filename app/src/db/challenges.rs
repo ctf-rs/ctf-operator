@@ -16,8 +16,8 @@ pub async fn replace_challenges_for_namespace(
     for row in rows {
         sqlx::query(
             r#"INSERT INTO app_challenges(
-                namespace, name, ctf_name, ctf_public, full_name, description, categories_json, difficulty, files_json, flags_json, exposed_ports_json
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                namespace, name, ctf_name, ctf_public, full_name, description, categories_json, difficulty, files_json, flags_json, exposed_ports_json, flag_hint
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             ON CONFLICT(namespace, name, ctf_name) DO UPDATE
               SET ctf_public = EXCLUDED.ctf_public,
                   full_name = EXCLUDED.full_name,
@@ -27,6 +27,7 @@ pub async fn replace_challenges_for_namespace(
                   files_json = EXCLUDED.files_json,
                   flags_json = EXCLUDED.flags_json,
                   exposed_ports_json = EXCLUDED.exposed_ports_json,
+                  flag_hint = EXCLUDED.flag_hint,
                   updated_at = now()"#,
         )
         .bind(&row.namespace)
@@ -40,6 +41,7 @@ pub async fn replace_challenges_for_namespace(
         .bind(sqlx::types::Json(&row.files))
         .bind(sqlx::types::Json(&row.flags))
         .bind(sqlx::types::Json(&row.exposed_ports))
+        .bind(&row.flag_hint)
         .execute(db)
         .await?;
     }
@@ -49,7 +51,7 @@ pub async fn replace_challenges_for_namespace(
 
 pub async fn list_challenges_for_ctf(db: &PgPool, ctf_name: &str) -> Result<Vec<ChallengeView>> {
     let rows = sqlx::query_as::<_, ChallengeRow>(
-        r#"SELECT namespace, name, ctf_name, ctf_public, full_name, description, categories_json, difficulty, files_json, flags_json, exposed_ports_json
+        r#"SELECT namespace, name, ctf_name, ctf_public, full_name, description, categories_json, difficulty, files_json, flags_json, exposed_ports_json, flag_hint
            FROM app_challenges
            WHERE ctf_name = $1
            ORDER BY full_name ASC"#,
@@ -67,7 +69,7 @@ pub async fn get_challenge(
     challenge_name: &str,
 ) -> Result<Option<ChallengeView>> {
     let row = sqlx::query_as::<_, ChallengeRow>(
-        r#"SELECT namespace, name, ctf_name, ctf_public, full_name, description, categories_json, difficulty, files_json, flags_json, exposed_ports_json
+        r#"SELECT namespace, name, ctf_name, ctf_public, full_name, description, categories_json, difficulty, files_json, flags_json, exposed_ports_json, flag_hint
            FROM app_challenges
            WHERE ctf_name = $1 AND name = $2
            ORDER BY updated_at DESC

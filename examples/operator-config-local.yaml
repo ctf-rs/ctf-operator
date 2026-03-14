@@ -5,6 +5,6 @@ instance:
   deployment:
     replicas: 1
     imagePullPolicy: Never
+    useHostPort: true
   service:
-    type: NodePort
-    nodePortMode: Auto
+    type: ClusterIP

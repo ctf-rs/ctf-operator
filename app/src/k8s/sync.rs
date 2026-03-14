@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use ctf_cli::k8s::{Challenge, ChallengeFileRef, Ctf};
+use ctf_cli::FlagFormat;
 use kube::{Api, ResourceExt, runtime::watcher};
 use tokio::{sync::RwLock, task::JoinHandle};
 use tokio_stream::StreamExt;
@@ -11,6 +12,17 @@ use crate::{
     db::{self, ChallengeView, FlagView, PortView},
     state::AppState,
 };
+
+/// Render a flag format hint like "SCC{...}" for placeholder text
+fn render_flag_hint(prefix: &str, format: FlagFormat) -> String {
+    match format {
+        FlagFormat::Curly => format!("{prefix}{{...}}"),
+        FlagFormat::Round => format!("{prefix}(...)"),
+        FlagFormat::Square => format!("{prefix}[...]"),
+        FlagFormat::Angle => format!("{prefix}<...>"),
+        FlagFormat::Underscore => format!("{prefix}_..."),
+    }
+}
 
 #[derive(Default)]
 struct NamespaceCache {
@@ -183,6 +195,7 @@ async fn flush_namespace(
                         name: p.name.clone(),
                         port: p.container_port,
                         port_type: format!("{:?}", p.port_type).to_lowercase(),
+                        allocated_port: None, // Will be populated from PortClaim when viewing instance
                     })
             })
             .collect();
@@ -190,6 +203,8 @@ async fn flush_namespace(
         let categories: Vec<_> = challenge.spec.categories.iter().copied().collect();
 
         let difficulty = challenge.spec.difficulty;
+
+        let flag_hint = render_flag_hint(&ctf.spec.flag.prefix, ctf.spec.flag.format);
 
         rows.push(ChallengeView {
             namespace: namespace.to_string(),
@@ -203,6 +218,7 @@ async fn flush_namespace(
             files,
             flags,
             exposed_ports,
+            flag_hint,
         });
     }
 

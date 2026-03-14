@@ -76,7 +76,8 @@ pub fn InstanceControls(
     submit_fb_message: Option<String>,
     exposed_ports: Vec<PortView>,
     instance_name: Option<String>,
-    instance_base_domain: Option<String>,
+    instance_base_domain: String,
+    flag_hint: String,
 ) -> impl IntoView {
     let extend_form = view! {
         <form id="extend-form" method="post" action={extend_action.clone()} style={format!("display:{extend_display}")}>
@@ -107,48 +108,47 @@ pub fn InstanceControls(
 
     // Generate connection details when instance is ready
     let connection_details = if ready && !exposed_ports.is_empty() {
-        let base_domain = instance_base_domain.unwrap_or_else(|| "ctf.local".to_string());
-        let inst_name = instance_name.unwrap_or_else(|| "instance".to_string());
-        let host = format!("{inst_name}.{base_domain}");
+        let base_domain = &instance_base_domain;
         
         let connections: Vec<_> = exposed_ports
             .into_iter()
             .map(|port| {
+                // Use allocated_port if available, otherwise fall back to container port
+                let actual_port = port.allocated_port.unwrap_or(port.port);
                 let conn_str = match port.port_type.as_str() {
-                    "http" => format!("http://{host}:{}", port.port),
-                    "https" => format!("https://{host}:{}", port.port),
-                    "netcat" => format!("nc {host} {}", port.port),
-                    "stty" => format!("stty raw -echo; nc {host} {}; stty sane", port.port),
-                    "ssh" => format!("ssh user@{host} -p {}", port.port),
-                    _ => format!("{host}:{}", port.port),
+                    "http" => format!("http://{base_domain}:{actual_port}"),
+                    "https" => format!("https://{base_domain}:{actual_port}"),
+                    "netcat" => format!("nc {base_domain} {actual_port}"),
+                    "stty" => format!("stty raw -echo; nc {base_domain} {actual_port}; stty sane"),
+                    "ssh" => format!("ssh user@{base_domain} -p {actual_port}"),
+                    _ => format!("{base_domain}:{actual_port}"),
                 };
                 let is_link = matches!(port.port_type.as_str(), "http" | "https");
-                (port.name, port.port_type, conn_str, is_link)
+                (conn_str, is_link)
             })
             .collect();
 
         view! {
             <div class="connection-section">
                 <h3>"Connection Details"</h3>
-                {connections.into_iter().map(|(name, port_type, conn_str, is_link)| {
-                    let label = format!("{} ({})", name, port_type);
-                    let conn_display = conn_str.clone();
-                    if is_link {
-                        view! {
-                            <div class="connection-item">
-                                <div class="label">{label}</div>
-                                <a href={conn_str} target="_blank"><code>{conn_display}</code></a>
-                            </div>
-                        }.into_any()
-                    } else {
-                        view! {
-                            <div class="connection-item">
-                                <div class="label">{label}</div>
-                                <code>{conn_str}</code>
-                            </div>
-                        }.into_any()
-                    }
-                }).collect_view()}
+                <div class="connection-list">
+                    {connections.into_iter().map(|(conn_str, is_link)| {
+                        let conn_display = conn_str.clone();
+                        if is_link {
+                            view! {
+                                <div class="connection-item">
+                                    <a href={conn_str} target="_blank"><code>{conn_display}</code></a>
+                                </div>
+                            }.into_any()
+                        } else {
+                            view! {
+                                <div class="connection-item">
+                                    <code>{conn_str}</code>
+                                </div>
+                            }.into_any()
+                        }
+                    }).collect_view()}
+                </div>
             </div>
         }
         .into_any()
@@ -180,6 +180,7 @@ pub fn InstanceControls(
                         disabled=flags_disabled || flag_solved
                         solved=flag_solved
                         feedback=feedback
+                        flag_hint=flag_hint.clone()
                     />
                 }
             }).collect_view()}
@@ -200,11 +201,12 @@ fn FlagForm(
     disabled: bool,
     solved: bool,
     feedback: Option<(String, String)>,
+    flag_hint: String,
 ) -> impl IntoView {
     let placeholder = if solved {
         format!("✓ {flag_label} solved")
     } else {
-        format!("{flag_label} flag")
+        flag_hint.clone()
     };
     let form_class = if solved {
         "flag-form solved"

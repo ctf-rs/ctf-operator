@@ -44,7 +44,7 @@ pub struct ChallengePageData {
     pub submit_feedback: Option<SubmissionFeedback>,
     pub extend_feedback: Option<String>,
     pub instance_name: Option<String>,
-    pub instance_base_domain: Option<String>,
+    pub instance_base_domain: String,
     pub instance_phase_desc: Option<String>,
 }
 

@@ -85,7 +85,7 @@ a { color: #93c5fd; }
 .flag-form.disabled .btn { opacity: 0.6; }
 .flag-form.solved input[type="text"] { background: #065f46; border-color: #10b981; color: #a7f3d0; }
 .flag-form.solved .flag-label { color: #10b981; }
-.flag-label { font-weight: 500; color: #93c5fd; font-size: .9rem; text-align: right; white-space: nowrap; }
+.flag-label { font-weight: 500; color: #93c5fd; font-size: .9rem; text-align: right; justify-self: end; white-space: nowrap; }
 .flag-form input[type="text"] { width: 100%; min-width: 0; box-sizing: border-box; }
 .flag-form .btn { }
 .flags-section .feedback { grid-column: 1 / -1; margin: 0; }

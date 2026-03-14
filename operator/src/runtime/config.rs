@@ -34,6 +34,8 @@ pub struct InstanceDeploymentConfig {
     pub replicas: i32,
     #[serde(default, rename = "imagePullPolicy")]
     pub image_pull_policy: Option<String>,
+    #[serde(default, rename = "useHostPort")]
+    pub use_host_port: bool,
 }
 
 impl Default for InstanceDeploymentConfig {
@@ -41,6 +43,7 @@ impl Default for InstanceDeploymentConfig {
         Self {
             replicas: default_instance_replicas(),
             image_pull_policy: None,
+            use_host_port: false,
         }
     }
 }
@@ -49,15 +52,12 @@ impl Default for InstanceDeploymentConfig {
 pub struct InstanceServiceConfig {
     #[serde(default, rename = "type")]
     pub type_: InstanceServiceType,
-    #[serde(default, rename = "nodePortMode")]
-    pub node_port_mode: InstanceServiceNodePortMode,
 }
 
 impl Default for InstanceServiceConfig {
     fn default() -> Self {
         Self {
             type_: InstanceServiceType::ClusterIp,
-            node_port_mode: InstanceServiceNodePortMode::Auto,
         }
     }
 }
@@ -67,8 +67,6 @@ pub enum InstanceServiceType {
     #[serde(rename = "ClusterIP")]
     #[default]
     ClusterIp,
-    #[serde(rename = "NodePort")]
-    NodePort,
     #[serde(rename = "LoadBalancer")]
     LoadBalancer,
 }
@@ -77,27 +75,8 @@ impl InstanceServiceType {
     pub fn as_k8s_str(&self) -> &'static str {
         match self {
             Self::ClusterIp => "ClusterIP",
-            Self::NodePort => "NodePort",
             Self::LoadBalancer => "LoadBalancer",
         }
-    }
-
-    pub fn is_node_port(&self) -> bool {
-        matches!(self, Self::NodePort)
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Default)]
-pub enum InstanceServiceNodePortMode {
-    #[default]
-    Auto,
-    #[serde(rename = "Allocated")]
-    Allocated,
-}
-
-impl InstanceServiceNodePortMode {
-    pub fn is_allocated(&self) -> bool {
-        matches!(self, Self::Allocated)
     }
 }
 

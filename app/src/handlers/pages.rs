@@ -5,7 +5,7 @@ use axum::{
     response::{Html, IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::cookie::CookieJar;
-use ctf_cli::{ChallengeCategory, k8s::Instance};
+use ctf_cli::{ChallengeCategory, k8s::{Instance, PortClaim}};
 use kube::Api;
 use serde::Deserialize;
 use tracing::warn;
@@ -150,6 +150,7 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
 pub async fn challenge_page(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,
+    headers: axum::http::HeaderMap,
     Path(challenge_name): Path<String>,
     Query(query): Query<ChallengePageQuery>,
 ) -> Response {
@@ -157,6 +158,14 @@ pub async fn challenge_page(
         Ok(Some(user)) => user,
         _ => return Redirect::to("/").into_response(),
     };
+
+    // Extract hostname (without port) from Host header for connection details
+    let request_hostname = headers
+        .get(axum::http::header::HOST)
+        .and_then(|h| h.to_str().ok())
+        .map(|h| h.split(':').next().unwrap_or(h))
+        .unwrap_or("localhost")
+        .to_string();
 
     let ctf_name = &state.config.ctf_name;
 
@@ -206,6 +215,31 @@ pub async fn challenge_page(
                         .map(|seconds| seconds <= 300 && seconds > 0)
                         .unwrap_or(false);
                 instance_phase_desc = Some(instance_phase_description(&instance_obj));
+
+                // Fetch allocated ports from PortClaims when instance is ready
+                if ready {
+                    if let Some(uid) = &instance_obj.metadata.uid {
+                        let target_ns = format!("{}{}", state.config.instance_namespace_prefix, uid);
+                        let port_api: Api<PortClaim> = Api::namespaced(state.kube.clone(), &target_ns);
+                        if let Ok(port_claims) = port_api.list(&Default::default()).await {
+                            for claim in port_claims.items {
+                                if let Some(port_status) = claim.status {
+                                    if let Some(allocated) = port_status.port {
+                                        let claim_name = claim.metadata.name.unwrap_or_default();
+                                        // PortClaim name format: {instance_name}-{port_name}
+                                        if let Some(port_name) = claim_name.strip_prefix(&format!("{}-", existing.instance_name)) {
+                                            for port in &mut challenge.exposed_ports {
+                                                if port.name == port_name {
+                                                    port.allocated_port = Some(allocated);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             Ok(_) => {
                 instance = None;
@@ -229,7 +263,9 @@ pub async fn challenge_page(
         views::parse_extend_feedback(query.extend.as_deref(), query.message.as_deref());
 
     let instance_name = instance.as_ref().map(|i| i.instance_name.clone());
-    let instance_base_domain = state.config.instance_base_domain.clone();
+    // Use config override if set, otherwise use the hostname from the request
+    let instance_base_domain = state.config.instance_base_domain.clone()
+        .unwrap_or(request_hostname);
 
     let page_data = views::ChallengePageData {
         challenge,

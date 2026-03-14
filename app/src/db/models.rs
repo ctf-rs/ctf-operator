@@ -26,6 +26,9 @@ pub struct PortView {
     pub name: String,
     pub port: u16,
     pub port_type: String,
+    /// Allocated external port from PortClaim (if available)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allocated_port: Option<u16>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,6 +44,8 @@ pub struct ChallengeView {
     pub files: Vec<String>,
     pub flags: Vec<FlagView>,
     pub exposed_ports: Vec<PortView>,
+    /// Flag format hint like "SCC{...}" for placeholder
+    pub flag_hint: String,
 }
 
 #[derive(Debug, Clone)]
@@ -79,6 +84,7 @@ pub(super) struct ChallengeRow {
     pub(super) files_json: sqlx::types::Json<Vec<String>>,
     pub(super) flags_json: sqlx::types::Json<Vec<FlagView>>,
     pub(super) exposed_ports_json: sqlx::types::Json<Vec<PortView>>,
+    pub(super) flag_hint: String,
 }
 
 #[derive(Debug, FromRow)]
@@ -115,5 +121,6 @@ pub(super) fn challenge_from_row(row: ChallengeRow) -> ChallengeView {
         files: row.files_json.0,
         flags: row.flags_json.0,
         exposed_ports: row.exposed_ports_json.0,
+        flag_hint: row.flag_hint,
     }
 }

@@ -31,7 +31,7 @@ spec:
       body: forensic_part_completed
   containers:
     - name: webapp
-      image: registry.ctf.rs/playground/web-foren-combo:test
+      image: nginx:alpine
       flags:
         - name: web-flag
           env: WEB_FLAG
@@ -41,4 +41,4 @@ spec:
         - name: http
           type: http
           expose: true
-          containerPort: 8080
+          containerPort: 80

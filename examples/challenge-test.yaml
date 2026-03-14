@@ -1,33 +1,30 @@
-name: challenge-test
-fullName: Challenge Test
-description: |
-  This is Test
-  Challenge
-authors:
-  - John Doe
-  - Jane Doe
-categories:
-  - misc
-  - rev
-difficulty: veryeasy
-tags:
-  - tag1
-  - tag2
-files:
-  - challenge-test/file.txt
-flags:
-  - name: flag
-    body: fake_flag
-containers:
-  - name: test
-    image:
-      type: dockerfile
-      path: challenge-test/Dockerfile
-    flags:
-      - name: flag
-        env: FLAG
-    ports:
-      - name: socat
-        type: netcat
-        expose: true
-        containerPort: 1337
+apiVersion: operator.ctf.rs/v1alpha1
+kind: Challenge
+metadata:
+  name: challenge-test
+spec:
+  fullName: Challenge Test
+  description: |
+    This is Test Challenge - socat exposing bash shell
+  authors:
+    - John Doe
+  categories:
+    - misc
+  difficulty: veryeasy
+  tags:
+    - socat
+    - bash
+  flags:
+    - name: flag
+      body: fake_flag
+  containers:
+    - name: test
+      image: localhost/challenge-test:latest
+      flags:
+        - name: flag
+          env: FLAG
+      ports:
+        - name: socat
+          type: netcat
+          expose: true
+          containerPort: 1337

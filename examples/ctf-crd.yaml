@@ -1,0 +1,20 @@
+apiVersion: operator.ctf.rs/v1alpha1
+kind: Ctf
+metadata:
+  name: playground
+spec:
+  fullName: Playground
+  public: true
+  flag:
+    prefix: SCC
+    format: curly
+    random:
+      len: 8
+    options:
+      ignoreRandom: true
+  network:
+    ports:
+      start: 12000
+      end: 13000
+  challenges:
+    - web-foren-combo

@@ -111,30 +111,25 @@ async fn reconcile_apply(
 
     let duration_seconds = resolve_instance_duration_seconds(ctf.as_ref(), challenge.as_ref());
     let now_unix = now_unix_seconds();
-    let expires_at = resolve_instance_expires_at(instance.as_ref(), duration_seconds, now_unix);
-    status.expires_at = unix_seconds_to_time(expires_at);
-    status.time_left = Some(humanize_duration(expires_at.saturating_sub(now_unix)));
-    if now_unix >= expires_at {
-        let api: Api<Instance> = Api::namespaced(state.client.clone(), &namespace);
-        match api
-            .delete(&instance.name_any(), &DeleteParams::default())
-            .await
-        {
-            Ok(_) => {}
-            Err(kube::Error::Api(ae)) if ae.code == 404 => {}
-            Err(err) => return Err(err.into()),
+    
+    // Only check expiry if instance was already ready (has expires_at annotation)
+    let existing_expires_at = get_existing_expires_at(instance.as_ref());
+    if let Some(expires_at) = existing_expires_at {
+        status.expires_at = unix_seconds_to_time(expires_at);
+        status.time_left = Some(humanize_duration(expires_at.saturating_sub(now_unix)));
+        if now_unix >= expires_at {
+            let api: Api<Instance> = Api::namespaced(state.client.clone(), &namespace);
+            match api
+                .delete(&instance.name_any(), &DeleteParams::default())
+                .await
+            {
+                Ok(_) => {}
+                Err(kube::Error::Api(ae)) if ae.code == 404 => {}
+                Err(err) => return Err(err.into()),
+            }
+            return Ok(Action::await_change());
         }
-        return Ok(Action::await_change());
     }
-
-    ensure_instance_expiry_annotations(
-        instance.as_ref(),
-        &namespace,
-        duration_seconds,
-        expires_at,
-        &state,
-    )
-    .await?;
 
     ensure_target_namespace(instance.as_ref(), &target_namespace, &state).await?;
 
@@ -171,6 +166,7 @@ async fn reconcile_apply(
             instance.as_ref(),
             challenge.as_ref(),
             &observed.flag_values,
+            &observed.allocated_ports,
             &target_namespace,
             &state,
         )
@@ -242,6 +238,21 @@ async fn reconcile_apply(
     // Clear message on success, keep it on error
     if status.phase != InstancePhase::Error {
         status.message = None;
+    }
+
+    // Start timer only when instance becomes ready for the first time
+    if all_ready && existing_expires_at.is_none() {
+        let expires_at = now_unix.saturating_add(duration_seconds);
+        status.expires_at = unix_seconds_to_time(expires_at);
+        status.time_left = Some(humanize_duration(duration_seconds));
+        ensure_instance_expiry_annotations(
+            instance.as_ref(),
+            &namespace,
+            duration_seconds,
+            expires_at,
+            &state,
+        )
+        .await?;
     }
 
     patch_status_if_needed(instance.as_ref(), &state, status).await?;
@@ -418,18 +429,15 @@ fn humanize_duration(seconds: u64) -> String {
     }
 }
 
-fn resolve_instance_expires_at(instance: &Instance, duration_seconds: u64, now_unix: u64) -> u64 {
-    if let Some(value) = instance
+/// Get the existing expires_at timestamp from instance annotations.
+/// Returns None if instance hasn't been marked ready yet (timer not started).
+fn get_existing_expires_at(instance: &Instance) -> Option<u64> {
+    instance
         .metadata
         .annotations
         .as_ref()
         .and_then(|annotations| annotations.get("app.ctf.rs/expires-at"))
         .and_then(|value| value.parse::<u64>().ok())
-    {
-        return value;
-    }
-
-    now_unix.saturating_add(duration_seconds)
 }
 
 async fn ensure_instance_expiry_annotations(
@@ -742,12 +750,14 @@ async fn ensure_deployment(
     instance: &Instance,
     challenge: &Challenge,
     flag_values: &BTreeMap<String, String>,
+    allocated_ports: &BTreeMap<String, u16>,
     target_namespace: &str,
     state: &CtfState,
 ) -> Result<(), CtfError> {
     let namespace = target_namespace.to_owned();
     let name = instance.name_any();
     let deployment_config = &state.config.runtime_config.instance.deployment;
+    let use_host_port = deployment_config.use_host_port;
 
     let mut labels = base_labels(instance);
     labels.insert("app.kubernetes.io/name".to_string(), name.clone());
@@ -783,10 +793,18 @@ async fn ensure_deployment(
                     container
                         .ports
                         .iter()
-                        .map(|port| k8s_openapi::api::core::v1::ContainerPort {
-                            name: Some(port.name.clone()),
-                            container_port: i32::from(port.container_port),
-                            ..Default::default()
+                        .map(|port| {
+                            let host_port = if use_host_port && port.expose {
+                                allocated_ports.get(&port.name).map(|p| i32::from(*p))
+                            } else {
+                                None
+                            };
+                            k8s_openapi::api::core::v1::ContainerPort {
+                                name: Some(port.name.clone()),
+                                container_port: i32::from(port.container_port),
+                                host_port,
+                                ..Default::default()
+                            }
                         })
                         .collect(),
                 )
@@ -839,8 +857,6 @@ async fn ensure_service(
     let namespace = target_namespace.to_owned();
     let name = instance.name_any();
     let service_config = &state.config.runtime_config.instance.service;
-    let use_allocated_node_ports =
-        service_config.type_.is_node_port() && service_config.node_port_mode.is_allocated();
 
     let mut labels = base_labels(instance);
     labels.insert("app.kubernetes.io/name".to_string(), name.clone());
@@ -862,7 +878,6 @@ async fn ensure_service(
                 name: Some(port.name.clone()),
                 port: i32::from(*exposed_port),
                 target_port: Some(IntOrString::Int(i32::from(port.container_port))),
-                node_port: use_allocated_node_ports.then_some(i32::from(*exposed_port)),
                 protocol: Some("TCP".to_string()),
                 ..Default::default()
             });

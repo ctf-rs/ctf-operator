@@ -90,6 +90,7 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
     let flags = ch.flags.clone();
     let difficulty = ch.difficulty;
     let exposed_ports = ch.exposed_ports.clone();
+    let flag_hint = ch.flag_hint.clone();
 
     let files: Vec<(String, String)> = ch
         .files
@@ -114,6 +115,8 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
         "Ready".to_string()
     };
 
+    // Only show timer when instance is ready and has time left
+    let show_timer = data.ready && data.time_left_seconds.is_some();
     let timer_text = data
         .time_left_seconds
         .map(|s| format_countdown(s))
@@ -188,7 +191,7 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                         <h2>"Instance"</h2>
                         <div class="instance-meta">
                             <span id="instance-status" class={if data.ready { "status-badge ready" } else { "status-badge" }}>{status_text}</span>
-                            <span id="instance-timer" class="timer-badge">{timer_text}</span>
+                            {show_timer.then(|| view! { <span id="instance-timer" class="timer-badge">{timer_text}</span> })}
                         </div>
                     </div>
                     {extend_fb.map(|msg| view! { <p class="feedback">{msg}</p> })}
@@ -210,6 +213,7 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                                 exposed_ports=exposed_ports.clone()
                                 instance_name=data.instance_name.clone()
                                 instance_base_domain=data.instance_base_domain.clone()
+                                flag_hint=flag_hint.clone()
                             />
                         }
                     })}

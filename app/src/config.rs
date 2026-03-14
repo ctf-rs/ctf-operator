@@ -18,6 +18,8 @@ pub struct AppConfig {
     pub challenge_files_s3_session_token: Option<String>,
     /// Base domain for instance connections (e.g., "ctf.local").
     pub instance_base_domain: Option<String>,
+    /// Prefix for instance namespaces (default: "ctf-inst-").
+    pub instance_namespace_prefix: String,
 }
 
 #[derive(Clone, Debug)]
@@ -92,6 +94,8 @@ impl AppConfig {
             .ok()
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty());
+        let instance_namespace_prefix =
+            std::env::var("INSTANCE_NAMESPACE_PREFIX").unwrap_or_else(|_| "ctf-inst-".to_string());
 
         Ok(Self {
             bind_addr,
@@ -115,6 +119,7 @@ impl AppConfig {
             challenge_files_s3_secret_access_key,
             challenge_files_s3_session_token,
             instance_base_domain,
+            instance_namespace_prefix,
         })
     }
 }
