@@ -3,11 +3,7 @@ use std::sync::Arc;
 use ctf_cli::k8s::{Challenge, Ctf, Instance, InstancePhase};
 use kube::Api;
 
-use crate::{
-    db::User,
-    helpers::now_unix_seconds,
-    state::AppState,
-};
+use crate::{db::User, helpers::now_unix_seconds, state::AppState};
 
 /// Check whether an Instance resource has a `Ready=True` condition.
 pub fn instance_ready_from_resource(instance: &Instance) -> bool {
@@ -15,6 +11,11 @@ pub fn instance_ready_from_resource(instance: &Instance) -> bool {
         return false;
     };
     status.phase == InstancePhase::Ready
+}
+
+/// Check whether an Instance is being deleted (has deletion_timestamp set).
+pub fn is_instance_deleting(instance: &Instance) -> bool {
+    instance.metadata.deletion_timestamp.is_some()
 }
 
 /// Get the current phase of the instance.
@@ -32,11 +33,7 @@ pub fn instance_phase_description(instance: &Instance) -> String {
     let base_desc = phase.description().to_string();
 
     // If there's a custom message (e.g., for errors), append it
-    if let Some(msg) = instance
-        .status
-        .as_ref()
-        .and_then(|s| s.message.as_ref())
-    {
+    if let Some(msg) = instance.status.as_ref().and_then(|s| s.message.as_ref()) {
         if !msg.is_empty() {
             return format!("{} {}", base_desc, msg);
         }

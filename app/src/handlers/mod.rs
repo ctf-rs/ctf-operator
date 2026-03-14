@@ -40,6 +40,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             post(instances::extend_instance),
         )
         .route(
+            "/challenge/{challenge_name}/stop",
+            post(instances::stop_instance),
+        )
+        .route(
             "/file/{challenge_name}/{file_idx}",
             get(files::download_file),
         )

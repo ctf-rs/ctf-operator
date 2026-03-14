@@ -45,6 +45,7 @@ pub struct ChallengePageData {
     pub time_left_seconds: Option<u64>,
     pub can_extend: bool,
     pub solved: bool,
+    pub deleting: bool,
     pub submit_feedback: Option<SubmissionFeedback>,
     pub extend_feedback: Option<String>,
     pub instance_name: Option<String>,
@@ -57,11 +58,7 @@ pub struct ChallengePageData {
 // ---------------------------------------------------------------------------
 
 pub(crate) fn file_route(challenge_name: &str, file_idx: usize) -> String {
-    format!(
-        "/file/{}/{}",
-        urlencoding::encode(challenge_name),
-        file_idx
-    )
+    format!("/file/{}/{}", urlencoding::encode(challenge_name), file_idx)
 }
 
 pub(crate) fn display_file_name(file_url: &str) -> String {

@@ -81,6 +81,7 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
     let base = challenge_route(&ch.name);
     let spawn_action = format!("{base}spawn");
     let extend_action = format!("{base}extend");
+    let stop_action = format!("{base}stop");
     let submit_action = format!("{base}submit");
 
     let full_name = ch.full_name.clone();
@@ -191,12 +192,32 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                 <div class="instance-panel">
                     <div class="instance-header">
                         <h2>"Instance"</h2>
+                        <div class="instance-actions" id="instance-controls">
+                            {(!data.solved && !data.deleting && (!data.has_instance || data.time_left_seconds == Some(0))).then(|| view! {
+                                <form method="post" action={spawn_action.clone()} id="spawn-form">
+                                    <button class="btn primary small" type="submit" id="spawn-btn">"Spawn"</button>
+                                </form>
+                            })}
+                            {(!data.solved && data.has_instance && !data.deleting).then(|| view! {
+                                <form method="post" action={stop_action.clone()} id="stop-form">
+                                    <button class="btn danger small" type="submit" id="stop-btn">"Stop"</button>
+                                </form>
+                            })}
+                            {(!data.solved && data.has_instance && !data.deleting).then(|| {
+                                let extend_style = if data.can_extend { "" } else { "display:none" };
+                                view! {
+                                    <form method="post" action={extend_action.clone()} id="extend-form" style={extend_style}>
+                                        <button class="btn extend small" type="submit" id="extend-btn">"Extend"</button>
+                                    </form>
+                                }
+                            })}
+                        </div>
+                        {extend_fb.map(|msg| view! { <span class="feedback-inline">{msg}</span> })}
                         <div class="instance-meta">
-                            <span id="instance-status" class={if data.ready { "status-badge ready" } else { "status-badge" }}>{status_text}</span>
+                            <span id="instance-status" class={if data.ready { "status-badge ready" } else if data.deleting { "status-badge deleting" } else { "status-badge" }}>{status_text}</span>
                             {show_timer.then(|| view! { <span id="instance-timer" class="timer-badge">{timer_text}</span> })}
                         </div>
                     </div>
-                    {extend_fb.map(|msg| view! { <p class="feedback">{msg}</p> })}
 
                     {(!data.solved).then(move || {
                         view! {
@@ -206,6 +227,7 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                                 can_extend=data.can_extend
                                 spawn_action=spawn_action.clone()
                                 extend_action=extend_action.clone()
+                                stop_action=stop_action.clone()
                                 submit_action=submit_action.clone()
                                 extend_display=extend_display.to_string()
                                 flags=flags.clone()

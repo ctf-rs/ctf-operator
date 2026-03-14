@@ -15,7 +15,7 @@ use crate::{
     helpers::{current_user, has_ctf_access},
     k8s::helpers::{
         instance_phase_description, instance_ready_from_resource, instance_time_left_seconds,
-        is_instance_owned_by_user,
+        is_instance_deleting, is_instance_owned_by_user,
     },
     state::AppState,
     views,
@@ -245,6 +245,7 @@ pub async fn challenge_page(
     let mut ready = false;
     let mut time_left_seconds: Option<u64> = None;
     let mut can_extend = false;
+    let mut deleting = false;
     let mut instance_phase_desc: Option<String> = None;
 
     if let Some(existing) = &instance {
@@ -253,11 +254,17 @@ pub async fn challenge_page(
             Ok(instance_obj) if is_instance_owned_by_user(&instance_obj, &user) => {
                 ready = instance_ready_from_resource(&instance_obj);
                 time_left_seconds = instance_time_left_seconds(&instance_obj);
+                deleting = is_instance_deleting(&instance_obj);
                 can_extend = ready
+                    && !deleting
                     && time_left_seconds
                         .map(|seconds| seconds <= 300 && seconds > 0)
                         .unwrap_or(false);
-                instance_phase_desc = Some(instance_phase_description(&instance_obj));
+                instance_phase_desc = Some(if deleting {
+                    "Deleting...".to_string()
+                } else {
+                    instance_phase_description(&instance_obj)
+                });
 
                 // Fetch allocated ports from PortClaims when instance is ready
                 if ready {
@@ -287,7 +294,10 @@ pub async fn challenge_page(
             Ok(_) => {
                 instance = None;
             }
-            Err(_) => {}
+            Err(_) => {
+                // K8s instance not found or error - clear stale DB reference
+                instance = None;
+            }
         }
     }
 
@@ -319,6 +329,7 @@ pub async fn challenge_page(
         time_left_seconds,
         can_extend,
         solved,
+        deleting,
         submit_feedback,
         extend_feedback,
         instance_name,

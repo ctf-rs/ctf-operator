@@ -22,8 +22,8 @@ use crate::{
     db,
     helpers::{challenge_route, current_user, has_ctf_access, now_unix_seconds, sanitize_k8s_name},
     k8s::helpers::{
-        instance_ready_from_resource, instance_time_left_seconds, is_instance_owned_by_user,
-        resolve_instance_duration_seconds,
+        instance_ready_from_resource, instance_time_left_seconds, is_instance_deleting,
+        is_instance_owned_by_user, resolve_instance_duration_seconds,
     },
     state::AppState,
 };
@@ -38,6 +38,7 @@ pub struct InstanceStateResponse {
     ready: bool,
     can_extend: bool,
     solved: bool,
+    deleting: bool,
     time_left_seconds: Option<u64>,
     instance_name: Option<String>,
 }
@@ -85,15 +86,27 @@ pub async fn spawn_instance(
 
     // ---- Guard: one instance per user per challenge -------------------
     // If the user already has a tracked instance, check whether it still
-    // exists in the cluster.  If it does, redirect back – no double-spawn.
+    // exists in the cluster.  If it does and is not expired, redirect back.
+    // If expired, delete it and allow re-spawn.
     if let Ok(Some(existing)) =
         db::get_instance_for_user(&state.db, user.id, &challenge_name, ctf_name).await
     {
         let api: Api<Instance> = Api::namespaced(state.kube.clone(), &existing.namespace);
         match api.get_opt(&existing.instance_name).await {
-            Ok(Some(_)) => {
-                // Instance still alive → redirect back, no new instance.
-                return Redirect::to(&challenge_route(&challenge_name)).into_response();
+            Ok(Some(instance_obj)) => {
+                // Check if instance is expired
+                let time_left = instance_time_left_seconds(&instance_obj);
+                if time_left == Some(0) {
+                    // Instance expired → delete it and allow re-spawn
+                    let _ = api
+                        .delete(&existing.instance_name, &kube::api::DeleteParams::default())
+                        .await;
+                    let _ = db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
+                        .await;
+                } else {
+                    // Instance still alive and not expired → redirect back.
+                    return Redirect::to(&challenge_route(&challenge_name)).into_response();
+                }
             }
             _ => {
                 // Instance gone from cluster → clean up DB row so we can
@@ -329,6 +342,7 @@ pub async fn instance_state(
                 ready: false,
                 can_extend: false,
                 solved: false,
+                deleting: false,
                 time_left_seconds: None,
                 instance_name: None,
             }),
@@ -350,6 +364,7 @@ pub async fn instance_state(
             ready: false,
             can_extend: false,
             solved: true,
+            deleting: false,
             time_left_seconds: None,
             instance_name: None,
         })
@@ -366,6 +381,7 @@ pub async fn instance_state(
             ready: false,
             can_extend: false,
             solved: false,
+            deleting: false,
             time_left_seconds: None,
             instance_name: None,
         })
@@ -379,6 +395,7 @@ pub async fn instance_state(
             ready: false,
             can_extend: false,
             solved: false,
+            deleting: false,
             time_left_seconds: None,
             instance_name: None,
         })
@@ -391,6 +408,7 @@ pub async fn instance_state(
             ready: false,
             can_extend: false,
             solved: false,
+            deleting: false,
             time_left_seconds: None,
             instance_name: None,
         })
@@ -399,7 +417,9 @@ pub async fn instance_state(
 
     let ready = instance_ready_from_resource(&instance_obj);
     let time_left_seconds = instance_time_left_seconds(&instance_obj);
+    let deleting = is_instance_deleting(&instance_obj);
     let can_extend = ready
+        && !deleting
         && time_left_seconds
             .map(|seconds| seconds <= 300 && seconds > 0)
             .unwrap_or(false);
@@ -409,8 +429,66 @@ pub async fn instance_state(
         ready,
         can_extend,
         solved: false,
+        deleting,
         time_left_seconds,
         instance_name: Some(instance.instance_name),
     })
     .into_response()
+}
+
+// ---------------------------------------------------------------------------
+// Stop (delete) instance
+// ---------------------------------------------------------------------------
+
+pub async fn stop_instance(
+    State(state): State<Arc<AppState>>,
+    jar: CookieJar,
+    Path(challenge_name): Path<String>,
+) -> Response {
+    let user = match current_user(&state, &jar).await {
+        Ok(Some(user)) => user,
+        _ => return Redirect::to("/").into_response(),
+    };
+
+    let ctf_name = &state.config.ctf_name;
+
+    let redirect_with = |kind: &str, message: &str| {
+        Redirect::to(&format!(
+            "{}?stop={}&message={}",
+            challenge_route(&challenge_name),
+            kind,
+            urlencoding::encode(message)
+        ))
+    };
+
+    let Some(instance) = db::get_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
+        .await
+        .ok()
+        .flatten()
+    else {
+        return redirect_with("bad", "no instance to stop").into_response();
+    };
+
+    let api: Api<Instance> = Api::namespaced(state.kube.clone(), &instance.namespace);
+
+    // Verify ownership before deleting
+    if let Ok(instance_obj) = api.get(&instance.instance_name).await {
+        if !is_instance_owned_by_user(&instance_obj, &user) {
+            return redirect_with("bad", "instance belongs to a different user").into_response();
+        }
+    }
+
+    // Delete the instance from cluster
+    if let Err(err) = api
+        .delete(&instance.instance_name, &kube::api::DeleteParams::default())
+        .await
+    {
+        warn!(error = %err, "failed to stop instance");
+        return redirect_with("bad", "failed to stop instance").into_response();
+    }
+
+    // Clear from database
+    let _ = db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name).await;
+
+    redirect_with("ok", "instance stopped").into_response()
 }

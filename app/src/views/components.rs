@@ -80,7 +80,7 @@ pub fn ChallengeCard(data: ChallengeCardData) -> impl IntoView {
 }
 
 // ---------------------------------------------------------------------------
-// Instance controls (spawn / extend / flag forms)
+// Instance controls (connections & flag forms)
 // ---------------------------------------------------------------------------
 
 #[allow(unused_variables)]
@@ -91,6 +91,7 @@ pub fn InstanceControls(
     can_extend: bool,
     spawn_action: String,
     extend_action: String,
+    stop_action: String,
     submit_action: String,
     extend_display: String,
     flags: Vec<FlagView>,
@@ -102,30 +103,6 @@ pub fn InstanceControls(
     instance_base_domain: String,
     flag_hint: String,
 ) -> impl IntoView {
-    let extend_form = view! {
-        <form id="extend-form" method="post" action={extend_action.clone()} style={format!("display:{extend_display}")}>
-            <button class="btn secondary" type="submit">"Extend"</button>
-        </form>
-    };
-
-    let spawn_btn = if !has_instance {
-        view! {
-            <form method="post" action={spawn_action.clone()}>
-                <button class="btn primary" type="submit">"Spawn Instance"</button>
-            </form>
-        }
-        .into_any()
-    } else if !ready {
-        view! {
-            <form method="post" action={spawn_action.clone()}>
-                <button class="btn" type="submit">"Spawn again"</button>
-            </form>
-        }
-        .into_any()
-    } else {
-        view! { <div></div> }.into_any()
-    };
-
     let flags_disabled = !ready;
     let flags_for_forms = flags.clone();
 
@@ -180,10 +157,6 @@ pub fn InstanceControls(
     };
 
     view! {
-        <div class="controls-row">
-            {spawn_btn}
-            {extend_form}
-        </div>
         {connection_details}
         <div class="flags-section">
             <h3>"Submit Flags"</h3>
