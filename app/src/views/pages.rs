@@ -7,7 +7,7 @@ use super::{
     components::{ChallengeCard, InstanceControls},
     display_file_name, file_route, format_countdown,
     layout::PageShell,
-    scripts::instance_live_script,
+    scripts::{index_timer_script, instance_live_script},
 };
 
 // ---------------------------------------------------------------------------
@@ -37,6 +37,7 @@ pub fn IndexPage(
     user_label: String,
     sections: Vec<CategorySection>,
 ) -> impl IntoView {
+    let timer_script = index_timer_script();
     view! {
         <PageShell title=ctf_title.clone()>
             <header class="topbar">
@@ -59,6 +60,7 @@ pub fn IndexPage(
                     </section>
                 }
             }).collect_view()}
+            <script>{timer_script}</script>
         </PageShell>
     }
 }

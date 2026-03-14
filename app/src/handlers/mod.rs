@@ -10,6 +10,7 @@ use axum::{
     Router,
     routing::{get, post},
 };
+use tower_http::services::ServeDir;
 
 use crate::state::AppState;
 
@@ -21,10 +22,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/login", get(auth::login))
         .route("/oauth/callback", get(auth::oauth_callback))
         .route("/logout", post(auth::logout))
-        .route(
-            "/challenge/{challenge_name}/",
-            get(pages::challenge_page),
-        )
+        .route("/challenge/{challenge_name}/", get(pages::challenge_page))
         .route(
             "/challenge/{challenge_name}/instance-state",
             get(instances::instance_state),
@@ -45,5 +43,6 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/file/{challenge_name}/{file_idx}",
             get(files::download_file),
         )
+        .nest_service("/pkg", ServeDir::new("target/site/pkg"))
         .with_state(state)
 }
