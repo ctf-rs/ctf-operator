@@ -14,11 +14,16 @@ pub struct Model {
     pub accepted: bool,
     #[sea_orm(default_value = false)]
     pub cheated: bool,
-    pub cheated_from_user_id: Option<i64>,
-    pub cheated_flag_gen_id: Option<i64>,
+    pub cheated_instance_flag_id: Option<i64>,
     pub ip_address: Option<String>,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
     pub created_at: DateTimeWithTimeZone,
+
+    // Relations
+    #[sea_orm(belongs_to, from = "user_id", to = "id")]
+    pub user: HasOne<super::users::Entity>,
+    #[sea_orm(belongs_to, from = "cheated_instance_flag_id", to = "id")]
+    pub cheated_instance_flag: Option<super::instance_flags::Entity>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

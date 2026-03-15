@@ -16,6 +16,16 @@ pub struct Model {
     // Relations
     #[sea_orm(has_many)]
     pub sessions: HasMany<super::sessions::Entity>,
+    #[sea_orm(has_many)]
+    pub flag_submissions: HasMany<super::flag_submissions::Entity>,
+    #[sea_orm(has_many)]
+    pub solved_challenges: HasMany<super::solved_challenges::Entity>,
+    #[sea_orm(has_many)]
+    pub instance_actions: HasMany<super::instance_actions::Entity>,
+    #[sea_orm(has_many)]
+    pub downloads: HasMany<super::downloads::Entity>,
+    #[sea_orm(has_many)]
+    pub instance_flags: HasMany<super::instance_flags::Entity>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

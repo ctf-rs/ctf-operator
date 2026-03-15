@@ -32,17 +32,17 @@ pub async fn log_flag_generation(
 }
 
 /// Check if a submitted flag was generated for a different user (cheat detection)
-/// Returns (flag_gen_id, cheated_from_user_id) if the flag belongs to another user
+/// Returns the instance_flag id if the flag belongs to another user
 pub async fn check_flag_cheated(
     db: &DatabaseConnection,
     submitted_flag: &str,
     ctf_name: &str,
     submitting_user_id: i64,
-) -> Result<Option<(i64, i64)>> {
+) -> Result<Option<i64>> {
     let result = db
         .query_one_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
-            r#"SELECT id, user_id
+            r#"SELECT id
                FROM instance_flags
                WHERE generated_flag = $1
                  AND ctf_name = $2
@@ -58,10 +58,7 @@ pub async fn check_flag_cheated(
 
     if let Some(row) = result {
         let flag_gen_id: i64 = row.try_get_by_index(0)?;
-        let user_id: Option<i64> = row.try_get_by_index(1)?;
-        if let Some(owner_user_id) = user_id {
-            return Ok(Some((flag_gen_id, owner_user_id)));
-        }
+        return Ok(Some(flag_gen_id));
     }
 
     Ok(None)

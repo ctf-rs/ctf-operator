@@ -13,6 +13,10 @@ pub struct Model {
     pub ip_address: Option<String>,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
     pub created_at: DateTimeWithTimeZone,
+
+    // Relations
+    #[sea_orm(belongs_to, from = "user_id", to = "id")]
+    pub user: HasOne<super::users::Entity>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

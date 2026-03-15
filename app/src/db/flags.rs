@@ -16,8 +16,7 @@ pub async fn add_flag_submission(
     submitted_flag: &str,
     accepted: bool,
     cheated: bool,
-    cheated_from_user_id: Option<i64>,
-    cheated_flag_gen_id: Option<i64>,
+    cheated_instance_flag_id: Option<i64>,
     ip_address: Option<&str>,
 ) -> Result<()> {
     let model = flag_submissions::ActiveModel {
@@ -28,8 +27,7 @@ pub async fn add_flag_submission(
         submitted_flag: Set(submitted_flag.to_owned()),
         accepted: Set(accepted),
         cheated: Set(cheated),
-        cheated_from_user_id: Set(cheated_from_user_id),
-        cheated_flag_gen_id: Set(cheated_flag_gen_id),
+        cheated_instance_flag_id: Set(cheated_instance_flag_id),
         ip_address: Set(ip_address.map(ToOwned::to_owned)),
         ..Default::default()
     };

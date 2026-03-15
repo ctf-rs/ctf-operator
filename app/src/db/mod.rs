@@ -78,8 +78,7 @@ pub async fn migrate(db: &DatabaseConnection) -> Result<()> {
             submitted_flag TEXT NOT NULL,
             accepted BOOLEAN NOT NULL,
             cheated BOOLEAN NOT NULL DEFAULT false,
-            cheated_from_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
-            cheated_flag_gen_id BIGINT REFERENCES instance_flags(id) ON DELETE SET NULL,
+            cheated_instance_flag_id BIGINT REFERENCES instance_flags(id) ON DELETE SET NULL,
             ip_address TEXT,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )"#,
@@ -125,6 +124,14 @@ pub async fn migrate(db: &DatabaseConnection) -> Result<()> {
         )"#,
     )
     .await?;
+
+    // Migrations
+    db.execute_unprepared(
+        "ALTER TABLE flag_submissions DROP COLUMN IF EXISTS cheated_from_user_id",
+    )
+    .await?;
+    db.execute_unprepared("ALTER TABLE flag_submissions DROP COLUMN IF EXISTS cheated_flag_gen_id")
+        .await?;
 
     Ok(())
 }

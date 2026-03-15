@@ -20,6 +20,7 @@
     },
     "timeout": true,
     "cargo clippy": true,
-    "cargo clean": true
+    "cargo clean": true,
+    "cargo expand": true
   }
 }

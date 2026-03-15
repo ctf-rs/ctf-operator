@@ -202,26 +202,25 @@ async fn persist_flag_with_audit(
     ip_address: Option<&str>,
 ) {
     // Check for cheating: if flag is not accepted, check if it was generated for another user
-    let (cheated, cheated_from_user_id, cheated_flag_gen_id) = if !accepted {
+    let (cheated, cheated_instance_flag_id) = if !accepted {
         match db::check_flag_cheated(&state.db, submitted_flag, ctf_name, user_id).await {
-            Ok(Some((flag_gen_id, from_user_id))) => {
+            Ok(Some(instance_flag_id)) => {
                 warn!(
                     user_id = user_id,
-                    cheated_from_user_id = from_user_id,
-                    flag_gen_id = flag_gen_id,
+                    cheated_instance_flag_id = instance_flag_id,
                     submitted_flag = submitted_flag,
                     "CHEAT DETECTED: user submitted flag belonging to another user"
                 );
-                (true, Some(from_user_id), Some(flag_gen_id))
+                (true, Some(instance_flag_id))
             }
-            Ok(None) => (false, None, None),
+            Ok(None) => (false, None),
             Err(err) => {
                 warn!(error = %err, "failed to check for cheated flag");
-                (false, None, None)
+                (false, None)
             }
         }
     } else {
-        (false, None, None)
+        (false, None)
     };
 
     if let Err(err) = db::add_flag_submission(
@@ -233,8 +232,7 @@ async fn persist_flag_with_audit(
         submitted_flag,
         accepted,
         cheated,
-        cheated_from_user_id,
-        cheated_flag_gen_id,
+        cheated_instance_flag_id,
         ip_address,
     )
     .await
