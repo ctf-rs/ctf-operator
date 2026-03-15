@@ -1,16 +1,11 @@
 use std::{
     net::SocketAddr,
-    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use axum::http::HeaderMap;
-use axum_extra::extract::cookie::CookieJar;
 
-use crate::{
-    db::{self, ChallengeView, User},
-    state::AppState,
-};
+use crate::db::{ChallengeView, User};
 
 /// Build the canonical URL for a challenge page.
 pub fn challenge_route(challenge_name: &str) -> String {
@@ -65,15 +60,6 @@ pub fn has_ctf_access(user: &User, challenge: &ChallengeView) -> bool {
             .iter()
             .any(|required| role.eq_ignore_ascii_case(required))
     })
-}
-
-/// Resolve the currently-logged-in user from the session cookie, if any.
-pub async fn current_user(state: &Arc<AppState>, jar: &CookieJar) -> anyhow::Result<Option<User>> {
-    let Some(session_cookie) = jar.get(&state.config.session_cookie_name) else {
-        return Ok(None);
-    };
-
-    db::get_user_by_session(&state.db, session_cookie.value()).await
 }
 
 /// Extract client IP address based on configuration.

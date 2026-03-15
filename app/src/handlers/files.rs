@@ -3,16 +3,16 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 use aws_credential_types::{Credentials, provider::SharedCredentialsProvider};
 use aws_sdk_s3::{Client as S3Client, config::Region, presigning::PresigningConfig};
 use axum::{
+    Extension,
     extract::{ConnectInfo, Path, State},
     http::HeaderMap,
     response::{IntoResponse, Redirect, Response},
 };
-use axum_extra::extract::cookie::CookieJar;
 use tracing::warn;
 
 use crate::{
     db,
-    helpers::{current_user, extract_client_ip, has_ctf_access},
+    helpers::{extract_client_ip, has_ctf_access},
     k8s::challenges,
     s3::parse_s3_bucket_key,
     state::AppState,
@@ -20,16 +20,11 @@ use crate::{
 
 pub async fn download_file(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    Extension(user): Extension<db::User>,
     headers: HeaderMap,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Path((challenge_name, file_idx)): Path<(String, usize)>,
 ) -> Response {
-    let user = match current_user(&state, &jar).await {
-        Ok(Some(user)) => user,
-        _ => return Redirect::to("/").into_response(),
-    };
-
     let ctf_name = &state.config.ctf_name;
     let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(addr));
 

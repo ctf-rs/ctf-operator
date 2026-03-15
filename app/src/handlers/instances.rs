@@ -6,25 +6,25 @@ use std::{
 };
 
 use axum::{
-    Json,
+    Extension, Json,
     extract::{ConnectInfo, Path, State},
     http::HeaderMap,
-    response::{IntoResponse, Redirect, Response},
+    response::{IntoResponse, Response},
 };
-use axum_extra::extract::cookie::CookieJar;
+// Note: Extension + State + Path are still used by the manual `instance_state` handler.
 use ctf_cli::k8s::{Instance, InstanceSpec};
 use kube::{
     Api, ResourceExt,
     api::{Patch, PatchParams},
 };
-use serde::Serialize;
+use leptos::prelude::*;
+use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 use crate::{
     db,
     helpers::{
-        challenge_route, current_user, extract_client_ip, has_ctf_access, now_unix_seconds,
-        sanitize_k8s_name,
+        challenge_route, extract_client_ip, has_ctf_access, now_unix_seconds, sanitize_k8s_name,
     },
     k8s::{
         challenges,
@@ -41,7 +41,7 @@ use crate::{
 // Response types
 // ---------------------------------------------------------------------------
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct InstanceStateResponse {
     has_instance: bool,
     ready: bool,
@@ -53,54 +53,48 @@ pub struct InstanceStateResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Spawn instance
+// Spawn instance (server function)
 // ---------------------------------------------------------------------------
 
-pub async fn spawn_instance(
-    State(state): State<Arc<AppState>>,
-    jar: CookieJar,
-    headers: HeaderMap,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    Path(challenge_name): Path<String>,
-) -> Response {
-    let user = match current_user(&state, &jar).await {
-        Ok(Some(user)) => user,
-        _ => return Redirect::to("/").into_response(),
+#[server(endpoint = "spawn_instance")]
+pub async fn spawn_instance(challenge_name: String) -> Result<(), ServerFnError> {
+    let state = expect_context::<Arc<AppState>>();
+    let Some(user) = use_context::<db::User>() else {
+        leptos_axum::redirect("/login");
+        return Ok(());
     };
 
+    let headers: HeaderMap = leptos_axum::extract().await
+        .map_err(|e| ServerFnError::new(format!("headers: {e}")))?;
+    let connect_info: ConnectInfo<SocketAddr> = leptos_axum::extract().await
+        .unwrap_or(ConnectInfo(SocketAddr::from(([0, 0, 0, 0], 0))));
+
     let ctf_name = &state.config.ctf_name;
-    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(addr));
+    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(connect_info.0));
 
     if db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, ctf_name)
         .await
         .unwrap_or(false)
     {
-        return Redirect::to(&format!(
+        leptos_axum::redirect(&format!(
             "{}?message={}",
             challenge_route(&challenge_name),
             urlencoding::encode("challenge already solved")
-        ))
-        .into_response();
+        ));
+        return Ok(());
     }
 
     let Some(challenge_namespace) = challenges::find_challenge_namespace(&state, &challenge_name)
     else {
-        return (
-            axum::http::StatusCode::NOT_FOUND,
-            "challenge not found in watched namespaces",
-        )
-            .into_response();
+        return Err(ServerFnError::new("challenge not found in watched namespaces"));
     };
 
     // ---- Guard: one instance per user per challenge -------------------
-    // If the user already has a tracked instance in the Store, check whether
-    // it is expired.  If expired, delete it and allow re-spawn.
     if let Some(existing) =
         k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name)
     {
         let time_left = instance_time_left_seconds(&existing);
         if time_left == Some(0) {
-            // Instance expired → delete it and allow re-spawn
             let _ = k8s_instances::delete_instance(
                 &state.kube,
                 existing.metadata.namespace.as_deref().unwrap_or_default(),
@@ -108,8 +102,8 @@ pub async fn spawn_instance(
             )
             .await;
         } else {
-            // Instance still alive and not expired → redirect back.
-            return Redirect::to(&challenge_route(&challenge_name)).into_response();
+            leptos_axum::redirect(&challenge_route(&challenge_name));
+            return Ok(());
         }
     }
 
@@ -174,11 +168,7 @@ pub async fn spawn_instance(
         .await
     {
         warn!(error = %err, "failed to spawn instance");
-        return (
-            axum::http::StatusCode::BAD_GATEWAY,
-            "failed to create instance",
-        )
-            .into_response();
+        return Err(ServerFnError::new("failed to create instance"));
     }
 
     // Audit log: instance spawned
@@ -196,57 +186,57 @@ pub async fn spawn_instance(
         warn!(error = %err, "failed to log instance spawn audit");
     }
 
-    Redirect::to(&challenge_route(&challenge_name)).into_response()
+    leptos_axum::redirect(&challenge_route(&challenge_name));
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
-// Extend instance
+// Extend instance (server function)
 // ---------------------------------------------------------------------------
 
-pub async fn extend_instance(
-    State(state): State<Arc<AppState>>,
-    jar: CookieJar,
-    headers: HeaderMap,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    Path(challenge_name): Path<String>,
-) -> Response {
-    let user = match current_user(&state, &jar).await {
-        Ok(Some(user)) => user,
-        _ => return Redirect::to("/").into_response(),
+#[server(endpoint = "extend_instance")]
+pub async fn extend_instance(challenge_name: String) -> Result<(), ServerFnError> {
+    let state = expect_context::<Arc<AppState>>();
+    let Some(user) = use_context::<db::User>() else {
+        leptos_axum::redirect("/login");
+        return Ok(());
     };
 
+    let headers: HeaderMap = leptos_axum::extract().await
+        .map_err(|e| ServerFnError::new(format!("headers: {e}")))?;
+    let connect_info: ConnectInfo<SocketAddr> = leptos_axum::extract().await
+        .unwrap_or(ConnectInfo(SocketAddr::from(([0, 0, 0, 0], 0))));
+
     let ctf_name = &state.config.ctf_name;
-    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(addr));
+    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(connect_info.0));
+
+    let redirect_with = |extend: &str, message: &str| {
+        leptos_axum::redirect(&format!(
+            "{}?extend={}&message={}",
+            challenge_route(&challenge_name),
+            extend,
+            urlencoding::encode(message)
+        ));
+    };
 
     if db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, ctf_name)
         .await
         .unwrap_or(false)
     {
-        return Redirect::to(&format!(
-            "{}?extend=bad&message={}",
-            challenge_route(&challenge_name),
-            urlencoding::encode("challenge already solved")
-        ))
-        .into_response();
+        redirect_with("bad", "challenge already solved");
+        return Ok(());
     }
-
-    let redirect_with = |extend: &str, message: &str| {
-        Redirect::to(&format!(
-            "{}?extend={}&message={}",
-            challenge_route(&challenge_name),
-            extend,
-            urlencoding::encode(message)
-        ))
-    };
 
     let Some(instance) =
         k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name)
     else {
-        return redirect_with("bad", "spawn an instance first").into_response();
+        redirect_with("bad", "spawn an instance first");
+        return Ok(());
     };
 
     if !is_instance_owned_by_user(&instance, &user) {
-        return redirect_with("bad", "instance belongs to a different user").into_response();
+        redirect_with("bad", "instance belongs to a different user");
+        return Ok(());
     }
 
     let instance_ns = instance.metadata.namespace.clone().unwrap_or_default();
@@ -267,8 +257,8 @@ pub async fn extend_instance(
 
     let time_left_seconds = current_expires_at.saturating_sub(now_unix);
     if time_left_seconds > 300 {
-        return redirect_with("bad", "extension is available only in the last 5 minutes")
-            .into_response();
+        redirect_with("bad", "extension is available only in the last 5 minutes");
+        return Ok(());
     }
 
     let new_expires_at = current_expires_at
@@ -285,7 +275,8 @@ pub async fn extend_instance(
     .await
     {
         warn!(error = %err, "failed to extend instance ttl");
-        return redirect_with("bad", "failed to extend instance").into_response();
+        redirect_with("bad", "failed to extend instance");
+        return Ok(());
     }
 
     // Audit log: instance extended
@@ -303,7 +294,8 @@ pub async fn extend_instance(
         warn!(error = %err, "failed to log instance extend audit");
     }
 
-    redirect_with("ok", "instance duration extended").into_response()
+    redirect_with("ok", "instance duration extended");
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -312,14 +304,9 @@ pub async fn extend_instance(
 
 pub async fn instance_state(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    Extension(user): Extension<db::User>,
     Path(challenge_name): Path<String>,
 ) -> Response {
-    let user = match current_user(&state, &jar).await {
-        Ok(Some(user)) => user,
-        _ => return Redirect::to("/").into_response(),
-    };
-
     let ctf_name = &state.config.ctf_name;
 
     let Some(challenge) = challenges::get_challenge(&state, &challenge_name) else {
@@ -409,42 +396,45 @@ pub async fn instance_state(
 }
 
 // ---------------------------------------------------------------------------
-// Stop (delete) instance
+// Stop (delete) instance (server function)
 // ---------------------------------------------------------------------------
 
-pub async fn stop_instance(
-    State(state): State<Arc<AppState>>,
-    jar: CookieJar,
-    headers: HeaderMap,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    Path(challenge_name): Path<String>,
-) -> Response {
-    let user = match current_user(&state, &jar).await {
-        Ok(Some(user)) => user,
-        _ => return Redirect::to("/").into_response(),
+#[server(endpoint = "stop_instance")]
+pub async fn stop_instance(challenge_name: String) -> Result<(), ServerFnError> {
+    let state = expect_context::<Arc<AppState>>();
+    let Some(user) = use_context::<db::User>() else {
+        leptos_axum::redirect("/login");
+        return Ok(());
     };
 
+    let headers: HeaderMap = leptos_axum::extract().await
+        .map_err(|e| ServerFnError::new(format!("headers: {e}")))?;
+    let connect_info: ConnectInfo<SocketAddr> = leptos_axum::extract().await
+        .unwrap_or(ConnectInfo(SocketAddr::from(([0, 0, 0, 0], 0))));
+
     let ctf_name = &state.config.ctf_name;
-    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(addr));
+    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(connect_info.0));
 
     let redirect_with = |kind: &str, message: &str| {
-        Redirect::to(&format!(
+        leptos_axum::redirect(&format!(
             "{}?stop={}&message={}",
             challenge_route(&challenge_name),
             kind,
             urlencoding::encode(message)
-        ))
+        ));
     };
 
     let Some(instance) =
         k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name)
     else {
-        return redirect_with("bad", "no instance to stop").into_response();
+        redirect_with("bad", "no instance to stop");
+        return Ok(());
     };
 
     // Verify ownership before deleting
     if !is_instance_owned_by_user(&instance, &user) {
-        return redirect_with("bad", "instance belongs to a different user").into_response();
+        redirect_with("bad", "instance belongs to a different user");
+        return Ok(());
     }
 
     let instance_name = instance.name_any();
@@ -455,7 +445,8 @@ pub async fn stop_instance(
         k8s_instances::delete_instance(&state.kube, &instance_ns, &instance_name).await
     {
         warn!(error = %err, "failed to stop instance");
-        return redirect_with("bad", "failed to stop instance").into_response();
+        redirect_with("bad", "failed to stop instance");
+        return Ok(());
     }
 
     // Audit log: instance stopped
@@ -473,5 +464,6 @@ pub async fn stop_instance(
         warn!(error = %err, "failed to log instance stop audit");
     }
 
-    redirect_with("ok", "instance stopping").into_response()
+    redirect_with("ok", "instance stopping");
+    Ok(())
 }

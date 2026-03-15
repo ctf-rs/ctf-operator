@@ -94,9 +94,7 @@ pub fn InstanceControls(
     has_instance: bool,
     ready: bool,
     can_extend: bool,
-    spawn_action: String,
-    extend_action: String,
-    stop_action: String,
+    challenge_name: String,
     submit_action: String,
     extend_display: String,
     flags: Vec<FlagView>,
@@ -176,6 +174,7 @@ pub fn InstanceControls(
                 view! {
                     <FlagForm
                         action=submit_action.clone()
+                        challenge_name=challenge_name.clone()
                         flag_name=flag.name.clone()
                         flag_label=display_label
                         disabled=flags_disabled || flag_solved
@@ -197,6 +196,7 @@ pub fn InstanceControls(
 #[component]
 fn FlagForm(
     action: String,
+    challenge_name: String,
     flag_name: String,
     flag_label: String,
     disabled: bool,
@@ -219,6 +219,7 @@ fn FlagForm(
     view! {
         <form method="post" action={action} class={form_class}>
             <label class="flag-label">{flag_label.clone()}</label>
+            <input type="hidden" name="challenge_name" value={challenge_name}/>
             <input type="hidden" name="flag_name" value={flag_name.clone()}/>
             <input type="text" name="submitted_flag" placeholder={placeholder} required disabled=disabled/>
             <button class="btn" type="submit" disabled=disabled>"Submit"</button>

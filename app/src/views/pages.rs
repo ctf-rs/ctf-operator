@@ -1,7 +1,5 @@
 use leptos::prelude::*;
 
-use crate::helpers::challenge_route;
-
 use super::{
     CategorySection, ChallengePageData, ScoreboardPageData,
     components::{ChallengeCard, InstanceControls},
@@ -81,11 +79,10 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
         "challenge-detail"
     };
 
-    let base = challenge_route(&ch.name);
-    let spawn_action = format!("{base}spawn");
-    let extend_action = format!("{base}extend");
-    let stop_action = format!("{base}stop");
-    let submit_action = format!("{base}submit");
+    let spawn_action = "/api/spawn_instance";
+    let extend_action = "/api/extend_instance";
+    let stop_action = "/api/stop_instance";
+    let submit_action = "/api/submit_flag";
 
     let full_name = ch.full_name.clone();
     let description = ch
@@ -203,19 +200,22 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                         <h2>"Instance"</h2>
                         <div class="instance-actions" id="instance-controls">
                             {(!data.solved && !data.deleting && (!data.has_instance || data.time_left_seconds == Some(0))).then(|| view! {
-                                <form method="post" action={spawn_action.clone()} id="spawn-form">
+                                <form method="post" action={spawn_action} id="spawn-form">
+                                    <input type="hidden" name="challenge_name" value={challenge_name.clone()}/>
                                     <button class="btn primary small" type="submit" id="spawn-btn">"Spawn"</button>
                                 </form>
                             })}
                             {(!data.solved && data.has_instance && !data.deleting).then(|| view! {
-                                <form method="post" action={stop_action.clone()} id="stop-form">
+                                <form method="post" action={stop_action} id="stop-form">
+                                    <input type="hidden" name="challenge_name" value={challenge_name.clone()}/>
                                     <button class="btn danger small" type="submit" id="stop-btn">"Stop"</button>
                                 </form>
                             })}
                             {(!data.solved && data.has_instance && !data.deleting).then(|| {
                                 let extend_style = if data.can_extend { "" } else { "display:none" };
                                 view! {
-                                    <form method="post" action={extend_action.clone()} id="extend-form" style={extend_style}>
+                                    <form method="post" action={extend_action} id="extend-form" style={extend_style}>
+                                        <input type="hidden" name="challenge_name" value={challenge_name.clone()}/>
                                         <button class="btn extend small" type="submit" id="extend-btn">"Extend"</button>
                                     </form>
                                 }
@@ -234,10 +234,8 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                                 has_instance=data.has_instance
                                 ready=data.ready
                                 can_extend=data.can_extend
-                                spawn_action=spawn_action.clone()
-                                extend_action=extend_action.clone()
-                                stop_action=stop_action.clone()
-                                submit_action=submit_action.clone()
+                                challenge_name=challenge_name.clone()
+                                submit_action=submit_action.to_string()
                                 extend_display=extend_display.to_string()
                                 flags=flags.clone()
                                 submit_fb_flag_name=submit_fb_flag_name.clone()

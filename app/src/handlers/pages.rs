@@ -1,8 +1,9 @@
 use std::{collections::HashSet, sync::Arc};
 
 use axum::{
+    Extension,
     extract::{Path, Query, State},
-    response::{Html, IntoResponse, Redirect, Response},
+    response::{Html, IntoResponse, Response},
 };
 use axum_extra::extract::cookie::CookieJar;
 use ctf_cli::ChallengeCategory;
@@ -12,7 +13,7 @@ use tracing::warn;
 
 use crate::{
     db,
-    helpers::{current_user, has_ctf_access},
+    helpers::has_ctf_access,
     k8s::{
         challenges,
         helpers::{
@@ -42,12 +43,16 @@ pub struct ChallengePageQuery {
 // ---------------------------------------------------------------------------
 
 pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Response {
-    let user = match current_user(&state, &jar).await {
-        Ok(user) => user,
-        Err(err) => {
-            warn!(error = %err, "failed to read current user");
-            None
-        }
+    // Resolve user from session cookie (index is public, so user may not exist)
+    let user = match jar.get(&state.config.session_cookie_name) {
+        Some(cookie) => match db::get_user_by_session(&state.db, cookie.value()).await {
+            Ok(user) => user,
+            Err(err) => {
+                warn!(error = %err, "failed to read current user");
+                None
+            }
+        },
+        None => None,
     };
 
     let ctf_name = state.config.ctf_name.clone();
@@ -198,16 +203,11 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
 
 pub async fn challenge_page(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar,
+    Extension(user): Extension<db::User>,
     headers: axum::http::HeaderMap,
     Path(challenge_name): Path<String>,
     Query(query): Query<ChallengePageQuery>,
 ) -> Response {
-    let user = match current_user(&state, &jar).await {
-        Ok(Some(user)) => user,
-        _ => return Redirect::to("/").into_response(),
-    };
-
     // Extract hostname (without port) from Host header for connection details
     let request_hostname = headers
         .get(axum::http::header::HOST)
@@ -348,20 +348,11 @@ pub async fn challenge_page(
 // Scoreboard
 // ---------------------------------------------------------------------------
 
-pub async fn scoreboard(State(state): State<Arc<AppState>>, jar: CookieJar) -> Response {
-    let user = match current_user(&state, &jar).await {
-        Ok(user) => user,
-        Err(err) => {
-            warn!(error = %err, "failed to read current user");
-            None
-        }
-    };
-
+pub async fn scoreboard(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<db::User>,
+) -> Response {
     let ctf_name = state.config.ctf_name.clone();
-
-    let Some(user) = user else {
-        return Redirect::to("/login").into_response();
-    };
 
     let user_label = user
         .name

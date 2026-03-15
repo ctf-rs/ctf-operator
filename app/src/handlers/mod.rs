@@ -1,53 +1,95 @@
 mod auth;
 mod files;
-mod flags;
-mod instances;
+pub mod flags;
+pub mod instances;
 mod pages;
 
 use std::sync::Arc;
 
 use axum::{
-    Router,
+    Extension, Router,
+    body::Body,
+    middleware as axum_mw,
+    response::IntoResponse,
     routing::{get, post},
 };
+use http::Request;
+use leptos::prelude::*;
 use tower_http::services::ServeDir;
 
-use crate::state::AppState;
+use crate::{
+    db,
+    middleware::{extract_session_cookie, require_auth},
+    state::AppState,
+};
+
+/// Axum handler that dispatches Leptos server-function requests.
+///
+/// Resolves the authenticated user (if any) from the session cookie and
+/// provides both `Arc<AppState>` and `db::User` to the Leptos context so
+/// server functions can access them via `expect_context` / `use_context`.
+async fn server_fn_handler(req: Request<Body>) -> impl IntoResponse {
+    let state: Arc<AppState> = req
+        .extensions()
+        .get::<Arc<AppState>>()
+        .expect("AppState extension missing — add Extension(state) layer to the router")
+        .clone();
+
+    // Resolve user from session cookie before dispatching to server fns.
+    // `handle_server_fns_with_context` snapshots request Parts *before* any
+    // `#[middleware]` runs, so extensions added by tower middleware are
+    // invisible to `leptos_axum::extract()`.  We solve this by resolving the
+    // user here and injecting it via `provide_context`.
+    let user = resolve_user(&state, req.headers()).await;
+
+    leptos_axum::handle_server_fns_with_context(
+        move || {
+            provide_context(state.clone());
+            if let Some(ref user) = user {
+                provide_context(user.clone());
+            }
+        },
+        req,
+    )
+    .await
+}
+
+/// Look up the authenticated user from the session cookie (if present).
+async fn resolve_user(state: &AppState, headers: &http::HeaderMap) -> Option<db::User> {
+    let token = extract_session_cookie(headers, &state.config.session_cookie_name)?;
+    db::get_user_by_session(&state.db, &token).await.ok().flatten()
+}
 
 /// Build the application router with all routes wired to their handlers.
 pub fn router(state: Arc<AppState>) -> Router {
-    Router::new()
-        .route("/", get(pages::index))
+    // Protected page routes (auth checked via axum middleware)
+    let protected_pages = Router::new()
         .route("/scoreboard", get(pages::scoreboard))
-        .route("/healthz", get(auth::healthz))
-        .route("/login", get(auth::login))
-        .route("/oauth/callback", get(auth::oauth_callback))
-        .route("/logout", post(auth::logout))
         .route("/challenge/{challenge_name}/", get(pages::challenge_page))
         .route(
             "/challenge/{challenge_name}/instance-state",
             get(instances::instance_state),
         )
         .route(
-            "/challenge/{challenge_name}/spawn",
-            post(instances::spawn_instance),
-        )
-        .route(
-            "/challenge/{challenge_name}/submit",
-            post(flags::submit_flag),
-        )
-        .route(
-            "/challenge/{challenge_name}/extend",
-            post(instances::extend_instance),
-        )
-        .route(
-            "/challenge/{challenge_name}/stop",
-            post(instances::stop_instance),
-        )
-        .route(
             "/file/{challenge_name}/{file_idx}",
             get(files::download_file),
         )
+        .route_layer(axum_mw::from_fn_with_state(state.clone(), require_auth));
+
+    // Public routes (no auth required)
+    let public = Router::new()
+        .route("/", get(pages::index))
+        .route("/healthz", get(auth::healthz))
+        .route("/login", get(auth::login))
+        .route("/oauth/callback", get(auth::oauth_callback))
+        .route("/logout", post(auth::logout));
+
+    Router::new()
+        // Server functions (spawn, extend, stop, submit_flag, …)
+        .route("/api/{*fn_name}", get(server_fn_handler).post(server_fn_handler))
+        .merge(protected_pages)
+        .merge(public)
         .nest_service("/pkg", ServeDir::new("target/site/pkg"))
+        .layer(Extension(state.clone()))
         .with_state(state)
 }

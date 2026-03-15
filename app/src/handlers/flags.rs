@@ -1,20 +1,18 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
-    extract::{ConnectInfo, Form, Path, State},
+    extract::ConnectInfo,
     http::HeaderMap,
-    response::{IntoResponse, Redirect, Response},
 };
-use axum_extra::extract::cookie::CookieJar;
 use ctf_cli::k8s::Flag;
 use ctf_cli::models::Flag as CoreFlag;
 use kube::{ResourceExt, runtime::reflector::ObjectRef};
-use serde::Deserialize;
+use leptos::prelude::*;
 use tracing::warn;
 
 use crate::{
     db,
-    helpers::{challenge_route, current_user, extract_client_ip},
+    helpers::{challenge_route, extract_client_ip},
     k8s::{
         challenges,
         helpers::is_instance_owned_by_user,
@@ -24,59 +22,48 @@ use crate::{
 };
 
 // ---------------------------------------------------------------------------
-// Request types
+// Submit flag (server function)
 // ---------------------------------------------------------------------------
 
-#[derive(Deserialize)]
-pub struct SubmitFlagForm {
+#[server(endpoint = "submit_flag")]
+pub async fn submit_flag(
+    challenge_name: String,
     flag_name: String,
     submitted_flag: String,
-}
-
-// ---------------------------------------------------------------------------
-// Submit flag
-// ---------------------------------------------------------------------------
-
-pub async fn submit_flag(
-    State(state): State<Arc<AppState>>,
-    jar: CookieJar,
-    headers: HeaderMap,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    Path(challenge_name): Path<String>,
-    Form(form): Form<SubmitFlagForm>,
-) -> Response {
-    let user = match current_user(&state, &jar).await {
-        Ok(Some(user)) => user,
-        _ => return Redirect::to("/").into_response(),
+) -> Result<(), ServerFnError> {
+    let state = expect_context::<Arc<AppState>>();
+    let Some(user) = use_context::<db::User>() else {
+        leptos_axum::redirect("/login");
+        return Ok(());
     };
 
+    let headers: HeaderMap = leptos_axum::extract().await
+        .map_err(|e| ServerFnError::new(format!("headers: {e}")))?;
+    let connect_info: ConnectInfo<SocketAddr> = leptos_axum::extract().await
+        .unwrap_or(ConnectInfo(SocketAddr::from(([0, 0, 0, 0], 0))));
+
     let ctf_name = &state.config.ctf_name;
-    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(addr));
+    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(connect_info.0));
+
+    let submitted_flag_trimmed = submitted_flag.trim();
+
+    let redirect_with = |submit: &str, message: &str| {
+        leptos_axum::redirect(&format!(
+            "{}?submit={}&flag={}&message={}",
+            challenge_route(&challenge_name),
+            submit,
+            urlencoding::encode(&flag_name),
+            urlencoding::encode(message)
+        ));
+    };
 
     if db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, ctf_name)
         .await
         .unwrap_or(false)
     {
-        return Redirect::to(&format!(
-            "{}?submit=bad&flag={}&message={}",
-            challenge_route(&challenge_name),
-            urlencoding::encode(&form.flag_name),
-            urlencoding::encode("challenge already solved")
-        ))
-        .into_response();
+        redirect_with("bad", "challenge already solved");
+        return Ok(());
     }
-
-    let submitted_flag = form.submitted_flag.trim();
-
-    let redirect_with = |submit: &str, message: &str| {
-        Redirect::to(&format!(
-            "{}?submit={}&flag={}&message={}",
-            challenge_route(&challenge_name),
-            submit,
-            urlencoding::encode(&form.flag_name),
-            urlencoding::encode(message)
-        ))
-    };
 
     let Some(instance) =
         k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name)
@@ -86,13 +73,14 @@ pub async fn submit_flag(
             user.id,
             &challenge_name,
             ctf_name,
-            &form.flag_name,
-            submitted_flag,
+            &flag_name,
+            submitted_flag_trimmed,
             false,
             client_ip.as_deref(),
         )
         .await;
-        return redirect_with("bad", "spawn an instance first").into_response();
+        redirect_with("bad", "spawn an instance first");
+        return Ok(());
     };
 
     let instance_ns = instance.metadata.namespace.clone().unwrap_or_default();
@@ -104,13 +92,14 @@ pub async fn submit_flag(
             user.id,
             &challenge_name,
             ctf_name,
-            &form.flag_name,
-            submitted_flag,
+            &flag_name,
+            submitted_flag_trimmed,
             false,
             client_ip.as_deref(),
         )
         .await;
-        return redirect_with("bad", "instance belongs to a different user").into_response();
+        redirect_with("bad", "instance belongs to a different user");
+        return Ok(());
     };
 
     let Some(uid) = instance.metadata.uid.clone() else {
@@ -119,18 +108,19 @@ pub async fn submit_flag(
             user.id,
             &challenge_name,
             ctf_name,
-            &form.flag_name,
-            submitted_flag,
+            &flag_name,
+            submitted_flag_trimmed,
             false,
             client_ip.as_deref(),
         )
         .await;
-        return redirect_with("bad", "instance is not ready yet").into_response();
+        redirect_with("bad", "instance is not ready yet");
+        return Ok(());
     };
 
     let runtime_ns = format!("ctf-inst-{uid}");
-    let flag_name = format!("{}-{}", instance_name, form.flag_name);
-    let flag_obj_ref = ObjectRef::<Flag>::new(&flag_name).within(&runtime_ns);
+    let flag_obj_name = format!("{}-{}", instance_name, flag_name);
+    let flag_obj_ref = ObjectRef::<Flag>::new(&flag_obj_name).within(&runtime_ns);
 
     let accepted = match state.flags.get(&flag_obj_ref) {
         Some(flag_obj) => {
@@ -142,7 +132,7 @@ pub async fn submit_flag(
                 options: flag_obj.spec.options.clone(),
                 scoring: flag_obj.spec.scoring.clone(),
             };
-            core_flag.verify(submitted_flag)
+            core_flag.verify(submitted_flag_trimmed)
         }
         None => false,
     };
@@ -152,8 +142,8 @@ pub async fn submit_flag(
         user.id,
         &challenge_name,
         ctf_name,
-        &form.flag_name,
-        submitted_flag,
+        &flag_name,
+        submitted_flag_trimmed,
         accepted,
         client_ip.as_deref(),
     )
@@ -183,14 +173,17 @@ pub async fn submit_flag(
                 warn!(error = %err, "failed to delete solved instance");
             }
 
-            return redirect_with("good", "challenge solved").into_response();
+            redirect_with("good", "challenge solved");
+            return Ok(());
         }
 
         // Flag accepted but more flags remain
-        return redirect_with("good", "flag accepted").into_response();
+        redirect_with("good", "flag accepted");
+        return Ok(());
     }
 
-    redirect_with("bad", "flag is not correct").into_response()
+    redirect_with("bad", "flag is not correct");
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
