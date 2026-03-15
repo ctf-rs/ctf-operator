@@ -8,11 +8,12 @@ use super::super::{ScoreboardPageData, layout::PageShell};
 
 #[component]
 pub fn ScoreboardPage(data: ScoreboardPageData) -> impl IntoView {
+    let ctf_title = data.ctf_title.clone();
     view! {
-        <PageShell title=format!("{} - Scoreboard", data.ctf_title)>
+        <PageShell title=format!("{} - Scoreboard", ctf_title.clone())>
             <header class="topbar">
                 <div class="nav-buttons">
-                    <a class="btn secondary" href="/">"← Challenges"</a>
+                    <a class="ctf-title" href="/">{ctf_title}</a>
                 </div>
                 <div class="nav-buttons">
                     <span class="muted">{data.user_label.clone()}</span>

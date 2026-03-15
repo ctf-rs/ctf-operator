@@ -115,14 +115,15 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
     let points = data.points;
     let points_text = format!("{}pts", points);
 
+    let ctf_title = data.ctf_title.clone();
     view! {
-        <PageShell title=data.ctf_title.clone()>
+        <PageShell title=ctf_title.clone()>
             <header class="topbar">
                 <div class="nav-buttons">
-                    <a class="btn secondary" href="/">"← Challenges"</a>
-                    <a class="btn secondary" href="/scoreboard">"Scoreboard"</a>
+                    <a class="ctf-title" href="/">{ctf_title}</a>
                 </div>
                 <div class="nav-buttons">
+                    <a class="btn secondary" href="/scoreboard">"Scoreboard"</a>
                     <span class="muted">{data.user_label.clone()}</span>
                     <form method="post" action="/logout" style="display:inline-block;">
                         <button class="btn secondary small" type="submit">"Logout"</button>

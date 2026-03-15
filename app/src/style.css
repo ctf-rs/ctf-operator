@@ -2,7 +2,8 @@
 body { font-family: Inter, system-ui, sans-serif; background: #1f232a; color: #e5e7eb; margin: 0; }
 a { color: #93c5fd; }
 .topbar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
-.ctf-title { font-size: 1.5rem; font-weight: 700; color: #e5e7eb; }
+.ctf-title { font-size: 1.5rem; font-weight: 700; color: #e5e7eb; text-decoration: none; }
+.ctf-title:hover { color: #fff; }
 .muted { color: #9ca3af; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
 .tile { background: #2a2f38; border: 1px solid #3a404a; border-radius: 8px; padding: 1rem; }

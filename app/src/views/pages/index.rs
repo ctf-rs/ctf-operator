@@ -19,7 +19,7 @@ pub fn IndexPage(
         <PageShell title=ctf_title.clone()>
             <header class="topbar">
                 <div class="nav-buttons">
-                    <span class="ctf-title">{ctf_title}</span>
+                    <a class="ctf-title" href="/">{ctf_title}</a>
                 </div>
                 <div class="nav-buttons">
                     <a class="btn secondary" href="/scoreboard">"Scoreboard"</a>
