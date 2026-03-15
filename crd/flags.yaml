@@ -109,6 +109,31 @@ spec:
                       default: true
                       type: boolean
                   type: object
+                scoring:
+                  default:
+                    basePoints: 500
+                    minPoints: 100
+                    decay: 15
+                  properties:
+                    basePoints:
+                      default: 500
+                      format: uint32
+                      maximum: 10000.0
+                      minimum: 1.0
+                      type: integer
+                    minPoints:
+                      default: 100
+                      format: uint32
+                      maximum: 10000.0
+                      minimum: 0.0
+                      type: integer
+                    decay:
+                      default: 15
+                      format: uint32
+                      maximum: 100.0
+                      minimum: 1.0
+                      type: integer
+                  type: object
               required:
                 - body
                 - prefix

@@ -36,6 +36,7 @@ axum-extra = { workspace = true, features = ["cookie"], optional = true }
 base64 = { workspace = true, optional = true }
 chrono = { version = "0.4", features = ["serde"], optional = true }
 ctf-cli = { path = "../cli", optional = true }
+futures = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 k8s-openapi = { workspace = true, optional = true }
 kube = { workspace = true, features = ["client", "runtime"], optional = true }
@@ -63,6 +64,7 @@ ssr = [
     "dep:base64",
     "dep:chrono",
     "dep:ctf-cli",
+    "dep:futures",
     "dep:http",
     "dep:k8s-openapi",
     "dep:kube",

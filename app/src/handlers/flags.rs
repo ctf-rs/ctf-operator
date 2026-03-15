@@ -8,14 +8,14 @@ use axum::{
 use axum_extra::extract::cookie::CookieJar;
 use ctf_cli::k8s::{Flag, Instance};
 use ctf_cli::models::Flag as CoreFlag;
-use kube::Api;
+use kube::runtime::reflector::ObjectRef;
 use serde::Deserialize;
 use tracing::warn;
 
 use crate::{
     db,
     helpers::{challenge_route, current_user, extract_client_ip},
-    k8s::helpers::is_instance_owned_by_user,
+    k8s::{helpers::is_instance_owned_by_user, instances::delete_instance},
     state::AppState,
 };
 
@@ -99,8 +99,8 @@ pub async fn submit_flag(
         return redirect_with("bad", "spawn an instance first").into_response();
     };
 
-    let api: Api<Instance> = Api::namespaced(state.kube.clone(), &instance.namespace);
-    let Ok(instance_obj) = api.get(&instance.instance_name).await else {
+    let obj_ref = ObjectRef::<Instance>::new(&instance.instance_name).within(&instance.namespace);
+    let Some(instance_obj) = state.instances.get(&obj_ref) else {
         persist_flag_with_audit(
             &state,
             user.id,
@@ -150,21 +150,21 @@ pub async fn submit_flag(
 
     let runtime_ns = format!("ctf-inst-{uid}");
     let flag_name = format!("{}-{}", instance.instance_name, form.flag_name);
-    let flag_api: Api<Flag> = Api::namespaced(state.kube.clone(), &runtime_ns);
+    let flag_obj_ref = ObjectRef::<Flag>::new(&flag_name).within(&runtime_ns);
 
-    let accepted = match flag_api.get(&flag_name).await {
-        Ok(flag_obj) => {
+    let accepted = match state.flags.get(&flag_obj_ref) {
+        Some(flag_obj) => {
             let core_flag = CoreFlag {
-                prefix: flag_obj.spec.prefix,
-                format: flag_obj.spec.format,
-                body: flag_obj.spec.body,
-                random: flag_obj.spec.random,
-                options: flag_obj.spec.options,
-                scoring: flag_obj.spec.scoring,
+                prefix: flag_obj.spec.prefix.clone(),
+                format: flag_obj.spec.format.clone(),
+                body: flag_obj.spec.body.clone(),
+                random: flag_obj.spec.random.clone(),
+                options: flag_obj.spec.options.clone(),
+                scoring: flag_obj.spec.scoring.clone(),
             };
             core_flag.verify(submitted_flag)
         }
-        Err(_) => false,
+        None => false,
     };
 
     persist_flag_with_audit(
@@ -209,14 +209,10 @@ pub async fn submit_flag(
                 warn!(error = %err, "failed to persist solved challenge state");
             }
 
-            let api: Api<Instance> = Api::namespaced(state.kube.clone(), &instance.namespace);
-            match api
-                .delete(&instance.instance_name, &kube::api::DeleteParams::default())
-                .await
+            if let Err(err) =
+                delete_instance(&state.kube, &instance.namespace, &instance.instance_name).await
             {
-                Ok(_) => {}
-                Err(kube::Error::Api(ae)) if ae.code == 404 => {}
-                Err(err) => warn!(error = %err, "failed to delete solved instance"),
+                warn!(error = %err, "failed to delete solved instance");
             }
 
             if let Err(err) =

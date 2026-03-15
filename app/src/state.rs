@@ -1,24 +1,27 @@
 use std::{collections::HashMap, sync::Arc};
 
-use ctf_cli::k8s::Instance;
-use kube::Client;
+use ctf_cli::k8s::{Flag, Instance};
+use kube::{Client, runtime::reflector::Store};
 use sqlx::PgPool;
 use tokio::sync::RwLock;
 
 use crate::{config::AppConfig, oauth, scoreboard::Scoreboard};
 
-/// Key for instance cache: (namespace, instance_name)
-pub type InstanceKey = (String, String);
-
 #[derive(Clone)]
+#[expect(
+    missing_debug_implementations,
+    reason = "kube Store doesn't impl Debug"
+)]
 pub struct AppState {
     pub config: Arc<AppConfig>,
     pub db: PgPool,
     pub kube: Client,
     pub oidc_client: oauth::OidcClient,
     pub pending_oauth: Arc<RwLock<HashMap<String, oauth::PendingAuth>>>,
-    /// Cache of Instance resources from k8s watcher
-    pub instance_cache: Arc<RwLock<HashMap<InstanceKey, Instance>>>,
+    /// Store of Instance resources from k8s watcher
+    pub instances: Store<Instance>,
+    /// Store of Flag resources from k8s watcher
+    pub flags: Store<Flag>,
     /// Scoreboard cache (points, leaderboard)
     pub scoreboard: Arc<RwLock<Scoreboard>>,
 }

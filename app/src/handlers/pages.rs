@@ -5,20 +5,20 @@ use axum::{
     response::{Html, IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::cookie::CookieJar;
-use ctf_cli::{
-    ChallengeCategory,
-    k8s::{Instance, PortClaim},
-};
-use kube::Api;
+use ctf_cli::{ChallengeCategory, k8s::Instance};
+use kube::runtime::reflector::ObjectRef;
 use serde::Deserialize;
 use tracing::warn;
 
 use crate::{
     db,
     helpers::{current_user, has_ctf_access},
-    k8s::helpers::{
-        instance_phase_description, instance_ready_from_resource, instance_time_left_seconds,
-        is_instance_deleting, is_instance_owned_by_user,
+    k8s::{
+        helpers::{
+            instance_phase_description, instance_ready_from_resource, instance_time_left_seconds,
+            is_instance_deleting, is_instance_owned_by_user,
+        },
+        portclaims::get_allocated_ports_for_instance,
     },
     state::AppState,
     views,
@@ -83,7 +83,7 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         .await
         .unwrap_or_default();
 
-    // Get all instances for this user and fetch their time left from k8s
+    // Get all instances for this user and fetch their time left from cache
     let instances = db::list_instances_for_user(&state.db, user.id)
         .await
         .unwrap_or_default();
@@ -93,16 +93,12 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         std::collections::HashMap::new();
 
     for inst in instances {
-        let api: Api<Instance> = Api::namespaced(state.kube.clone(), &inst.namespace);
-        match api.get(&inst.instance_name).await {
-            Ok(instance_obj) => {
-                let time_left = instance_time_left_seconds(&instance_obj);
-                instance_times.insert((inst.ctf_name, inst.challenge_name), time_left);
-            }
-            Err(_) => {
-                // Instance no longer exists in k8s, mark as no instance
-            }
+        let obj_ref = ObjectRef::<Instance>::new(&inst.instance_name).within(&inst.namespace);
+        if let Some(instance_obj) = state.instances.get(&obj_ref) {
+            let time_left = instance_time_left_seconds(&instance_obj);
+            instance_times.insert((inst.ctf_name, inst.challenge_name), time_left);
         }
+        // If not in cache, instance no longer exists - don't add to map
     }
 
     // Build category → cards map. Challenges with multiple categories appear in all of them.
@@ -267,11 +263,10 @@ pub async fn challenge_page(
     let mut instance_phase_desc: Option<String> = None;
 
     if let Some(existing) = &instance {
-        // Look up instance from cache instead of direct API call
-        let cache_key = (existing.namespace.clone(), existing.instance_name.clone());
-        let cache = state.instance_cache.read().await;
-        let instance_obj = cache.get(&cache_key).cloned();
-        drop(cache); // Release lock early
+        // Look up instance from Store
+        let obj_ref =
+            ObjectRef::<Instance>::new(&existing.instance_name).within(&existing.namespace);
+        let instance_obj = state.instances.get(&obj_ref);
 
         match instance_obj {
             Some(instance_obj) if is_instance_owned_by_user(&instance_obj, &user) => {
@@ -294,23 +289,17 @@ pub async fn challenge_page(
                     if let Some(uid) = &instance_obj.metadata.uid {
                         let target_ns =
                             format!("{}{}", state.config.instance_namespace_prefix, uid);
-                        let port_api: Api<PortClaim> =
-                            Api::namespaced(state.kube.clone(), &target_ns);
-                        if let Ok(port_claims) = port_api.list(&Default::default()).await {
-                            for claim in port_claims.items {
-                                if let Some(port_status) = claim.status {
-                                    if let Some(allocated) = port_status.port {
-                                        let claim_name = claim.metadata.name.unwrap_or_default();
-                                        // PortClaim name format: {instance_name}-{port_name}
-                                        if let Some(port_name) = claim_name
-                                            .strip_prefix(&format!("{}-", existing.instance_name))
-                                        {
-                                            for port in &mut challenge.exposed_ports {
-                                                if port.name == port_name {
-                                                    port.allocated_port = Some(allocated);
-                                                }
-                                            }
-                                        }
+                        if let Ok(allocated_ports) = get_allocated_ports_for_instance(
+                            &state.kube,
+                            &target_ns,
+                            &existing.instance_name,
+                        )
+                        .await
+                        {
+                            for (port_name, allocated) in &allocated_ports {
+                                for port in &mut challenge.exposed_ports {
+                                    if &port.name == port_name {
+                                        port.allocated_port = Some(*allocated);
                                     }
                                 }
                             }
@@ -320,12 +309,14 @@ pub async fn challenge_page(
             }
             Some(_) => {
                 // Instance not owned by user - watcher will clean DB, but fallback here
-                let _ = db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name).await;
+                let _ = db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
+                    .await;
                 instance = None;
             }
             None => {
                 // Instance not in cache (deleted) - watcher will clean DB, but fallback here
-                let _ = db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name).await;
+                let _ = db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
+                    .await;
                 instance = None;
             }
         }
@@ -403,7 +394,11 @@ pub async fn scoreboard(State(state): State<Arc<AppState>>, jar: CookieJar) -> R
         return Redirect::to("/login").into_response();
     };
 
-    let user_label = user.name.clone().or(user.email.clone()).unwrap_or_else(|| user.sub.clone());
+    let user_label = user
+        .name
+        .clone()
+        .or(user.email.clone())
+        .unwrap_or_else(|| user.sub.clone());
 
     // Get leaderboard from scoreboard cache
     let leaderboard = {

@@ -20,17 +20,21 @@ async fn main() -> anyhow::Result<()> {
     let kube = kube::Client::try_default().await?;
     let oidc_client = oauth::build_client(&config.oidc).await?;
 
+    // Create watchers before building state - they provide the Stores
+    let watchers = k8s::sync::AppWatchers::new(&kube, &config.ctf_namespace, &config.ctf_name);
+
     let state = Arc::new(AppState {
         config: Arc::clone(&config),
         db,
         kube,
         oidc_client,
         pending_oauth: Arc::new(RwLock::new(HashMap::new())),
-        instance_cache: Arc::new(RwLock::new(HashMap::new())),
+        instances: watchers.instances.clone(),
+        flags: watchers.flags.clone(),
         scoreboard: Arc::new(RwLock::new(scoreboard::Scoreboard::default())),
     });
 
-    let _workers = k8s::sync::spawn_sync_worker(Arc::clone(&state), Arc::clone(&config));
+    let _workers = k8s::sync::spawn_sync_workers(Arc::clone(&state), Arc::clone(&config), watchers);
     let _scoreboard_worker = scoreboard::spawn_scoreboard_worker(Arc::clone(&state));
 
     let app = handlers::router(state);
