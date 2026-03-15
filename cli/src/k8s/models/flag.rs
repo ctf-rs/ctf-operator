@@ -37,8 +37,6 @@ pub struct FlagSpec {
     pub options: crate::models::FlagMatchOptions,
     #[serde(default)]
     pub scoring: crate::models::FlagScoring,
-    #[serde(default)]
-    pub conditions: Conditions,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema, Default)]

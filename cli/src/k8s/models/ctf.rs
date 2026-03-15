@@ -38,8 +38,6 @@ pub struct CtfSpec {
         rename = "instanceDurationSeconds"
     )]
     pub instance_duration_seconds: u32,
-    #[serde(default)]
-    pub conditions: Conditions,
     pub challenges: Vec<String>,
     pub flag: crate::models::CtfFlag,
     pub network: crate::models::CtfNetwork,

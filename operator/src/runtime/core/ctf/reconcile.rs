@@ -95,7 +95,6 @@ mod tests {
                 description: Some("desc".to_string()),
                 public: false,
                 instance_duration_seconds: 15 * 60,
-                conditions: Default::default(),
                 challenges: vec!["chall-1".to_string()],
                 flag: ctf_cli::models::CtfFlag {
                     prefix: "SCC".to_string(),

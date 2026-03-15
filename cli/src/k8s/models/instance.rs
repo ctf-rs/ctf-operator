@@ -1,3 +1,5 @@
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
 use k8s_openapi::apimachinery;
 use kube::CustomResource;
 use schemars::JsonSchema;
@@ -46,6 +48,13 @@ impl InstancePhase {
     }
 }
 
+/// User who owns the instance.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+pub struct InstanceUser {
+    pub id: i64,
+    pub username: String,
+}
+
 #[derive(CustomResource, Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[kube(
     group = "operator.ctf.rs",
@@ -55,7 +64,6 @@ impl InstancePhase {
     singular = "instance",
     namespaced,
     printcolumn = r#"{"name":"Phase","type":"string","jsonPath":".status.phase"}"#,
-    printcolumn = r#"{"name":"TimeLeft","type":"string","jsonPath":".status.timeLeft"}"#,
     printcolumn = r#"{"name":"ExpiresAt","type":"string","jsonPath":".status.expiresAt"}"#,
     status = "InstanceStatus",
     derive = "PartialEq",
@@ -65,8 +73,16 @@ impl InstancePhase {
 pub struct InstanceSpec {
     pub ctf: String,
     pub challenge: String,
-    #[serde(default)]
-    pub conditions: Conditions,
+    /// The user who spawned this instance.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user: Option<InstanceUser>,
+    /// Requested lifetime in seconds.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "durationSeconds"
+    )]
+    pub duration_seconds: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema, Default)]
@@ -77,10 +93,48 @@ pub struct InstanceStatus {
     /// Human-readable message about the current state (especially for errors)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
-    #[serde(default, rename = "timeLeft")]
-    pub time_left: Option<String>,
     #[serde(default, rename = "expiresAt")]
     pub expires_at: Option<apimachinery::pkg::apis::meta::v1::Time>,
+    /// Timestamp when the instance first became ready (timer started).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "readySince"
+    )]
+    pub ready_since: Option<apimachinery::pkg::apis::meta::v1::Time>,
     #[serde(default)]
     pub conditions: Conditions,
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// Result of checking how much time is left on an instance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstanceTimeLeft {
+    /// Time remaining before expiry.
+    Remaining(Duration),
+    /// The instance has expired.
+    Expired,
+}
+
+impl InstanceStatus {
+    /// Compute the time remaining from `expires_at`, or `Expired` if past due.
+    /// Returns `None` when `expires_at` is not set (timer not started).
+    #[must_use]
+    pub fn time_left(&self) -> Option<InstanceTimeLeft> {
+        let expires_at = self.expires_at.as_ref()?;
+        let expires_unix = u64::try_from(expires_at.0.as_second()).unwrap_or(0);
+        let now_unix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        if now_unix >= expires_unix {
+            Some(InstanceTimeLeft::Expired)
+        } else {
+            Some(InstanceTimeLeft::Remaining(Duration::from_secs(
+                expires_unix - now_unix,
+            )))
+        }
+    }
 }

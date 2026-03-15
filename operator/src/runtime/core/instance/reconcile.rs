@@ -12,8 +12,7 @@ use crate::{
     util::Reconciler,
 };
 use ctf_cli::k8s::{
-    Challenge, ConditionStatus, Conditions, Ctf, Flag, FlagSpec, Instance, InstancePhase,
-    InstanceStatus,
+    Challenge, ConditionStatus, Ctf, Flag, FlagSpec, Instance, InstancePhase, InstanceStatus,
 };
 use ctf_cli::k8s::{PortClaim, PortClaimSpec, ReservationRef, ReservationSet, ReservationSetSpec};
 use jiff::Timestamp;
@@ -155,36 +154,28 @@ async fn validate_references(
     }))
 }
 
-/// Checks if the instance has expired and handles deletion if needed
-async fn check_and_handle_expiry(
+/// Recomputes `expires_at` from `ready_since + duration_seconds` so that
+/// changes to `spec.duration_seconds` are immediately reflected in status.
+fn recompute_expires_at(
     instance: &Instance,
-    state: &CtfState,
     status: &mut InstanceStatus,
-) -> Result<Option<Action>, CtfError> {
-    let namespace = instance.namespace().unwrap_or_default();
-    let now_unix = now_unix_seconds();
-
-    let Some(expires_at) = get_existing_expires_at(instance) else {
-        return Ok(None);
+    default_duration_seconds: u64,
+) {
+    let Some(ready_since) = instance
+        .status
+        .as_ref()
+        .and_then(|s| s.ready_since.as_ref())
+    else {
+        return;
     };
 
+    let ready_since_unix = u64::try_from(ready_since.0.as_second()).unwrap_or(0);
+    let duration = instance
+        .spec
+        .duration_seconds
+        .unwrap_or(default_duration_seconds);
+    let expires_at = ready_since_unix.saturating_add(duration);
     status.expires_at = unix_seconds_to_time(expires_at);
-    status.time_left = Some(humanize_duration(expires_at.saturating_sub(now_unix)));
-
-    if now_unix >= expires_at {
-        let api: Api<Instance> = Api::namespaced(state.client.clone(), &namespace);
-        match api
-            .delete(&instance.name_any(), &DeleteParams::default())
-            .await
-        {
-            Ok(_) => {}
-            Err(kube::Error::Api(ref ae)) if ae.code == 404 => {}
-            Err(err) => return Err(err.into()),
-        }
-        return Ok(Some(Action::await_change()));
-    }
-
-    Ok(None)
 }
 
 /// Updates all status conditions based on observed resources
@@ -235,7 +226,6 @@ async fn reconcile_apply(
     instance: Arc<Instance>,
     state: Arc<CtfState>,
 ) -> Result<Action, CtfError> {
-    let namespace = instance.namespace().unwrap_or_default();
     let target_namespace = target_namespace_for_instance(instance.as_ref(), &state)?;
     let mut status = instance.status.clone().unwrap_or_default();
 
@@ -245,10 +235,8 @@ async fn reconcile_apply(
         RefValidationResult::NotReady(action) => return Ok(action),
     };
 
-    // Check expiry and handle deletion if expired
-    if let Some(action) = check_and_handle_expiry(instance.as_ref(), &state, &mut status).await? {
-        return Ok(action);
-    }
+    // Recompute expires_at so spec.duration_seconds changes are reflected
+    recompute_expires_at(instance.as_ref(), &mut status, refs.duration_seconds);
 
     // Ensure all resources exist
     ensure_target_namespace(instance.as_ref(), &target_namespace, &state).await?;
@@ -322,26 +310,30 @@ async fn reconcile_apply(
     update_status_conditions(&mut status, &observed);
     let all_ready = all_conditions_true_except(&status, "Ready");
 
-    // Start timer only when instance becomes ready for the first time
-    if all_ready && get_existing_expires_at(instance.as_ref()).is_none() {
+    // Start timer when instance becomes ready for the first time
+    if all_ready
+        && instance
+            .status
+            .as_ref()
+            .and_then(|s| s.ready_since.as_ref())
+            .is_none()
+    {
+        let duration = instance
+            .spec
+            .duration_seconds
+            .unwrap_or(refs.duration_seconds);
         let now_unix = now_unix_seconds();
-        let expires_at = now_unix.saturating_add(refs.duration_seconds);
-        status.expires_at = unix_seconds_to_time(expires_at);
-        status.time_left = Some(humanize_duration(refs.duration_seconds));
-        ensure_instance_expiry_annotations(
-            instance.as_ref(),
-            &namespace,
-            refs.duration_seconds,
-            expires_at,
-            &state,
-        )
-        .await?;
+        status.ready_since = unix_seconds_to_time(now_unix);
+        status.expires_at = unix_seconds_to_time(now_unix.saturating_add(duration));
     }
+
+    // Always recompute expires_at so duration_seconds changes take effect
+    recompute_expires_at(instance.as_ref(), &mut status, refs.duration_seconds);
 
     patch_status_if_needed(instance.as_ref(), &state, status).await?;
 
     if all_ready {
-        Ok(Action::requeue(Duration::from_secs(30)))
+        Ok(Action::await_change())
     } else {
         Ok(Action::requeue(Duration::from_secs(10)))
     }
@@ -551,68 +543,6 @@ fn unix_seconds_to_time(
     Some(k8s_openapi::apimachinery::pkg::apis::meta::v1::Time(
         timestamp,
     ))
-}
-
-fn humanize_duration(seconds: u64) -> String {
-    let hours = seconds / 3600;
-    let minutes = (seconds % 3600) / 60;
-    let secs = seconds % 60;
-
-    if hours > 0 {
-        format!("{hours}h {minutes}m {secs}s")
-    } else if minutes > 0 {
-        format!("{minutes}m {secs}s")
-    } else {
-        format!("{secs}s")
-    }
-}
-
-/// Get the existing `expires_at` timestamp from instance annotations.
-/// Returns None if instance hasn't been marked ready yet (timer not started).
-fn get_existing_expires_at(instance: &Instance) -> Option<u64> {
-    instance
-        .metadata
-        .annotations
-        .as_ref()
-        .and_then(|annotations| annotations.get("app.ctf.rs/expires-at"))
-        .and_then(|value| value.parse::<u64>().ok())
-}
-
-async fn ensure_instance_expiry_annotations(
-    instance: &Instance,
-    namespace: &str,
-    duration_seconds: u64,
-    expires_at: u64,
-    state: &CtfState,
-) -> Result<(), CtfError> {
-    let mut annotations = instance.metadata.annotations.clone().unwrap_or_default();
-    let duration_value = duration_seconds.to_string();
-    let expires_value = expires_at.to_string();
-
-    if annotations.get("app.ctf.rs/duration-seconds") == Some(&duration_value)
-        && annotations.get("app.ctf.rs/expires-at") == Some(&expires_value)
-    {
-        return Ok(());
-    }
-
-    annotations.insert("app.ctf.rs/duration-seconds".to_string(), duration_value);
-    annotations.insert("app.ctf.rs/expires-at".to_string(), expires_value);
-
-    let api: Api<Instance> = Api::namespaced(state.client.clone(), namespace);
-    let patch = serde_json::json!({
-        "metadata": {
-            "annotations": annotations,
-        }
-    });
-
-    api.patch(
-        &instance.name_any(),
-        &PatchParams::apply(InstanceReconciler::NAME),
-        &Patch::Merge(&patch),
-    )
-    .await?;
-
-    Ok(())
 }
 
 fn base_labels(instance: &Instance) -> BTreeMap<String, String> {
@@ -872,7 +802,6 @@ async fn ensure_flags(
                     || ctf.spec.flag.options.ignore_random,
             },
             scoring: challenge_flag.scoring.clone(),
-            conditions: Conditions::default(),
         };
 
         let resource = Flag {
@@ -1080,7 +1009,6 @@ async fn ensure_reservation_set(
         spec: ReservationSetSpec {
             start: ctf.spec.network.ports.start,
             end: ctf.spec.network.ports.end,
-            conditions: Conditions::default(),
         },
         status: None,
     };
@@ -1163,7 +1091,6 @@ async fn ensure_port_claims(
                         name: reservation_name.to_owned(),
                         namespace: None,
                     },
-                    conditions: Conditions::default(),
                 },
                 status: None,
             };
@@ -1194,7 +1121,6 @@ mod tests {
                 description: None,
                 public: false,
                 instance_duration_seconds: 15 * 60,
-                conditions: Default::default(),
                 challenges: vec!["chall-1".to_string()],
                 flag: ctf_cli::models::CtfFlag {
                     prefix: "SCC".to_string(),
@@ -1236,7 +1162,6 @@ mod tests {
                 categories: HashSet::new(),
                 tags: HashSet::new(),
                 authors: HashSet::new(),
-                conditions: Default::default(),
                 flags: vec![ctf_cli::models::ChallengeFlag {
                     name: "flag-1".to_string(),
                     body: "body".to_string(),
@@ -1276,7 +1201,8 @@ mod tests {
             ctf_cli::k8s::InstanceSpec {
                 ctf: "ctf-1".to_string(),
                 challenge: "chall-1".to_string(),
-                conditions: Default::default(),
+                user: None,
+                duration_seconds: None,
             },
         );
         instance.metadata.namespace = Some("ctf".to_string());

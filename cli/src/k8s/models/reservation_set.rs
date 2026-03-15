@@ -27,8 +27,6 @@ use crate::Conditions;
 pub struct ReservationSetSpec {
     pub start: u16,
     pub end: u16,
-    #[serde(default)]
-    pub conditions: Conditions,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema, Default)]

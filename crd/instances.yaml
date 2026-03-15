@@ -16,9 +16,6 @@ spec:
         - jsonPath: .status.phase
           name: Phase
           type: string
-        - jsonPath: .status.timeLeft
-          name: TimeLeft
-          type: string
         - jsonPath: .status.expiresAt
           name: ExpiresAt
           type: string
@@ -31,47 +28,27 @@ spec:
               properties:
                 challenge:
                   type: string
-                conditions:
-                  default: []
-                  items:
-                    properties:
-                      lastProbeTime:
-                        description: >-
-                          Time is a wrapper around time.Time which supports correct marshaling to YAML
-                          and JSON.  Wrappers are provided for many of the factory methods that the time
-                          package offers.
-                        format: date-time
-                        nullable: true
-                        type: string
-                      lastTransitionTime:
-                        description: >-
-                          Time is a wrapper around time.Time which supports correct marshaling to YAML
-                          and JSON.  Wrappers are provided for many of the factory methods that the time
-                          package offers.
-                        format: date-time
-                        nullable: true
-                        type: string
-                      message:
-                        nullable: true
-                        type: string
-                      reason:
-                        nullable: true
-                        type: string
-                      status:
-                        enum:
-                          - "True"
-                          - "False"
-                          - Unknown
-                        type: string
-                      type:
-                        type: string
-                    required:
-                      - status
-                      - type
-                    type: object
-                  type: array
                 ctf:
                   type: string
+                durationSeconds:
+                  description: Requested lifetime in seconds.
+                  format: uint64
+                  minimum: 0.0
+                  nullable: true
+                  type: integer
+                user:
+                  description: The user who spawned this instance.
+                  nullable: true
+                  properties:
+                    id:
+                      format: int64
+                      type: integer
+                    username:
+                      type: string
+                  required:
+                    - id
+                    - username
+                  type: object
               required:
                 - challenge
                 - ctf
@@ -142,7 +119,9 @@ spec:
                     - Error
                     - Terminating
                   type: string
-                timeLeft:
+                readySince:
+                  description: Timestamp when the instance first became ready (timer started).
+                  format: date-time
                   nullable: true
                   type: string
               type: object

@@ -124,7 +124,8 @@ mod tests {
             InstanceSpec {
                 ctf: ctf.to_string(),
                 challenge: challenge.to_string(),
-                conditions: Default::default(),
+                user: None,
+                duration_seconds: None,
             },
         );
         instance.metadata.namespace = Some(ns.to_string());
@@ -139,7 +140,6 @@ mod tests {
                 description: None,
                 public: false,
                 instance_duration_seconds: 15 * 60,
-                conditions: Default::default(),
                 challenges: vec!["chall-a".to_string()],
                 flag: ctf_cli::models::CtfFlag {
                     prefix: "SCC".to_string(),
@@ -171,7 +171,6 @@ mod tests {
                 categories: HashSet::new(),
                 tags: HashSet::new(),
                 authors: HashSet::new(),
-                conditions: Default::default(),
                 flags: vec![],
                 containers: vec![ctf_cli::k8s::ChallengeContainer {
                     name: "svc".to_string(),

@@ -37,8 +37,6 @@ pub struct ChallengeSpec {
     pub tags: HashSet<String>,
     #[serde(default)]
     pub authors: HashSet<String>,
-    #[serde(default)]
-    pub conditions: Conditions,
     pub flags: Vec<crate::models::ChallengeFlag>,
     pub containers: Vec<ChallengeContainer>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

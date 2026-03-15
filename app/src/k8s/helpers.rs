@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use ctf_cli::k8s::{Challenge, Ctf, Instance, InstancePhase};
+use ctf_cli::k8s::{Challenge, Ctf, Instance, InstancePhase, InstanceTimeLeft};
 use kube::Api;
 
-use crate::{db::User, helpers::now_unix_seconds, state::AppState};
+use crate::{db::User, state::AppState};
 
 /// Check whether an Instance resource has a `Ready=True` condition.
 pub fn instance_ready_from_resource(instance: &Instance) -> bool {
@@ -41,27 +41,22 @@ pub fn instance_phase_description(instance: &Instance) -> String {
     base_desc
 }
 
-/// Seconds remaining before the instance expires, based on the
-/// `app.ctf.rs/expires-at` annotation.
+/// Seconds remaining before the instance expires, based on
+/// `status.expires_at`.
 pub fn instance_time_left_seconds(instance: &Instance) -> Option<u64> {
-    let now_unix = now_unix_seconds();
-    instance
-        .metadata
-        .annotations
-        .as_ref()
-        .and_then(|annotations| annotations.get("app.ctf.rs/expires-at"))
-        .and_then(|value| value.parse::<u64>().ok())
-        .map(|expires_at| expires_at.saturating_sub(now_unix))
+    match instance.status.as_ref()?.time_left()? {
+        InstanceTimeLeft::Remaining(dur) => Some(dur.as_secs()),
+        InstanceTimeLeft::Expired => Some(0),
+    }
 }
 
-/// Does the instance belong to the given user (by annotation)?
+/// Does the instance belong to the given user (by spec)?
 pub fn is_instance_owned_by_user(instance: &Instance, user: &User) -> bool {
     instance
-        .metadata
-        .annotations
+        .spec
+        .user
         .as_ref()
-        .and_then(|annotations| annotations.get("app.ctf.rs/user-id"))
-        .map(|value| value == &user.id.to_string())
+        .map(|u| u.id == user.id)
         .unwrap_or(false)
 }
 

@@ -147,13 +147,10 @@ fn spawn_flag_watcher(
                         let instance_key =
                             kube::runtime::reflector::ObjectRef::<Instance>::new(instance_name)
                                 .within(flag_ns);
-                        let user_id = state.instances.get(&instance_key).and_then(|inst| {
-                            inst.metadata
-                                .annotations
-                                .as_ref()
-                                .and_then(|a| a.get("app.ctf.rs/user-id"))
-                                .and_then(|s| s.parse::<i64>().ok())
-                        });
+                        let user_id = state
+                            .instances
+                            .get(&instance_key)
+                            .and_then(|inst| inst.spec.user.as_ref().map(|u| u.id));
 
                         if let Err(err) = db::log_flag_generation(
                             &state.db,

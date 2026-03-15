@@ -25,45 +25,6 @@ spec:
               properties:
                 body:
                   type: string
-                conditions:
-                  default: []
-                  items:
-                    properties:
-                      lastProbeTime:
-                        description: >-
-                          Time is a wrapper around time.Time which supports correct marshaling to YAML
-                          and JSON.  Wrappers are provided for many of the factory methods that the time
-                          package offers.
-                        format: date-time
-                        nullable: true
-                        type: string
-                      lastTransitionTime:
-                        description: >-
-                          Time is a wrapper around time.Time which supports correct marshaling to YAML
-                          and JSON.  Wrappers are provided for many of the factory methods that the time
-                          package offers.
-                        format: date-time
-                        nullable: true
-                        type: string
-                      message:
-                        nullable: true
-                        type: string
-                      reason:
-                        nullable: true
-                        type: string
-                      status:
-                        enum:
-                          - "True"
-                          - "False"
-                          - Unknown
-                        type: string
-                      type:
-                        type: string
-                    required:
-                      - status
-                      - type
-                    type: object
-                  type: array
                 format:
                   default: curly
                   enum:
@@ -112,26 +73,30 @@ spec:
                 scoring:
                   default:
                     basePoints: 500
-                    minPoints: 100
-                    decay: 15
+                    decay: 6
+                    minPoints: 50
+                  description: Controls dynamic scoring for a flag based on solve count.
                   properties:
                     basePoints:
                       default: 500
+                      description: "Base points when no one has solved (default: 500)"
                       format: uint32
                       maximum: 10000.0
                       minimum: 1.0
                       type: integer
-                    minPoints:
-                      default: 100
-                      format: uint32
-                      maximum: 10000.0
-                      minimum: 0.0
-                      type: integer
                     decay:
-                      default: 15
+                      default: 6
+                      description: "Decay factor - higher = slower decay (default: 15)"
                       format: uint32
                       maximum: 100.0
                       minimum: 1.0
+                      type: integer
+                    minPoints:
+                      default: 50
+                      description: "Minimum points floor (default: 100)"
+                      format: uint32
+                      maximum: 10000.0
+                      minimum: 0.0
                       type: integer
                   type: object
               required:

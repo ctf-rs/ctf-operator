@@ -156,7 +156,7 @@ pub async fn run(
     let port_claim_controller =
         core::port_claim::controller(Arc::clone(&state), &crd.port_claim, &crd.reservation_set)?;
     let instance_controller = core::instance::controller(
-        state,
+        Arc::clone(&state),
         &crd.instance,
         &crd.ctf,
         &crd.challenge,
@@ -166,6 +166,7 @@ pub async fn run(
         &res.deployment,
         &res.service,
     )?;
+    let instance_cleaner_controller = core::instance_cleaner::controller(state, &crd.instance)?;
 
     Waiter::builder()
         .watcher(crd.ctf)
@@ -184,6 +185,7 @@ pub async fn run(
         .controller(reservation_set_controller)
         .controller(port_claim_controller)
         .controller(instance_controller)
+        .controller(instance_cleaner_controller)
         .run()
         .await?;
 

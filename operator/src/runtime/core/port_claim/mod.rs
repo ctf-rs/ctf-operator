@@ -77,7 +77,6 @@ mod tests {
             ReservationSetSpec {
                 start: 20000,
                 end: 20010,
-                conditions: Default::default(),
             },
         );
         rs.metadata.namespace = Some(ns.to_string());
@@ -92,7 +91,6 @@ mod tests {
                     name: reservation.to_string(),
                     namespace: None,
                 },
-                conditions: Default::default(),
             },
         );
         claim.metadata.namespace = Some(ns.to_string());

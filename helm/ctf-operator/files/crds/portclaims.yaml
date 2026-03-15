@@ -24,45 +24,6 @@ spec:
           properties:
             spec:
               properties:
-                conditions:
-                  default: []
-                  items:
-                    properties:
-                      lastProbeTime:
-                        description: >-
-                          Time is a wrapper around time.Time which supports correct marshaling to YAML
-                          and JSON.  Wrappers are provided for many of the factory methods that the time
-                          package offers.
-                        format: date-time
-                        nullable: true
-                        type: string
-                      lastTransitionTime:
-                        description: >-
-                          Time is a wrapper around time.Time which supports correct marshaling to YAML
-                          and JSON.  Wrappers are provided for many of the factory methods that the time
-                          package offers.
-                        format: date-time
-                        nullable: true
-                        type: string
-                      message:
-                        nullable: true
-                        type: string
-                      reason:
-                        nullable: true
-                        type: string
-                      status:
-                        enum:
-                          - "True"
-                          - "False"
-                          - Unknown
-                        type: string
-                      type:
-                        type: string
-                    required:
-                      - status
-                      - type
-                    type: object
-                  type: array
                 reservation:
                   properties:
                     name:

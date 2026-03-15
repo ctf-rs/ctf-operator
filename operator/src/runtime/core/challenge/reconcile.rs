@@ -134,7 +134,6 @@ mod tests {
                 categories: HashSet::new(),
                 tags: HashSet::new(),
                 authors: HashSet::new(),
-                conditions: Default::default(),
                 flags: vec![ctf_cli::models::ChallengeFlag {
                     name: "flag-1".to_string(),
                     body: "flagbody".to_string(),

@@ -112,7 +112,6 @@ mod tests {
                 random: None,
                 options: Default::default(),
                 scoring: Default::default(),
-                conditions: Default::default(),
             },
         );
         flag.metadata.namespace = Some("ctf".to_string());

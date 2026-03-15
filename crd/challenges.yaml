@@ -38,45 +38,6 @@ spec:
                       - misc
                     type: string
                   type: array
-                conditions:
-                  default: []
-                  items:
-                    properties:
-                      lastProbeTime:
-                        description: >-
-                          Time is a wrapper around time.Time which supports correct marshaling to YAML
-                          and JSON.  Wrappers are provided for many of the factory methods that the time
-                          package offers.
-                        format: date-time
-                        nullable: true
-                        type: string
-                      lastTransitionTime:
-                        description: >-
-                          Time is a wrapper around time.Time which supports correct marshaling to YAML
-                          and JSON.  Wrappers are provided for many of the factory methods that the time
-                          package offers.
-                        format: date-time
-                        nullable: true
-                        type: string
-                      message:
-                        nullable: true
-                        type: string
-                      reason:
-                        nullable: true
-                        type: string
-                      status:
-                        enum:
-                          - "True"
-                          - "False"
-                          - Unknown
-                        type: string
-                      type:
-                        type: string
-                    required:
-                      - status
-                      - type
-                    type: object
-                  type: array
                 containers:
                   items:
                     properties:
@@ -237,6 +198,35 @@ spec:
                           upper:
                             default: true
                             type: boolean
+                        type: object
+                      scoring:
+                        default:
+                          basePoints: 500
+                          decay: 6
+                          minPoints: 50
+                        description: Scoring configuration for dynamic points
+                        properties:
+                          basePoints:
+                            default: 500
+                            description: "Base points when no one has solved (default: 500)"
+                            format: uint32
+                            maximum: 10000.0
+                            minimum: 1.0
+                            type: integer
+                          decay:
+                            default: 6
+                            description: "Decay factor - higher = slower decay (default: 15)"
+                            format: uint32
+                            maximum: 100.0
+                            minimum: 1.0
+                            type: integer
+                          minPoints:
+                            default: 50
+                            description: "Minimum points floor (default: 100)"
+                            format: uint32
+                            maximum: 10000.0
+                            minimum: 0.0
+                            type: integer
                         type: object
                     required:
                       - body

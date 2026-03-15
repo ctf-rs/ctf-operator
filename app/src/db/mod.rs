@@ -125,13 +125,5 @@ pub async fn migrate(db: &DatabaseConnection) -> Result<()> {
     )
     .await?;
 
-    // Migrations
-    db.execute_unprepared(
-        "ALTER TABLE flag_submissions DROP COLUMN IF EXISTS cheated_from_user_id",
-    )
-    .await?;
-    db.execute_unprepared("ALTER TABLE flag_submissions DROP COLUMN IF EXISTS cheated_flag_gen_id")
-        .await?;
-
     Ok(())
 }

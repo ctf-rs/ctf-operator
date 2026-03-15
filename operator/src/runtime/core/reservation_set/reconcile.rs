@@ -143,14 +143,7 @@ mod tests {
     use ctf_cli::k8s::ReservationSetSpec;
 
     fn reservation(start: u16, end: u16) -> ReservationSet {
-        let mut rs = ReservationSet::new(
-            "res-a",
-            ReservationSetSpec {
-                start,
-                end,
-                conditions: Default::default(),
-            },
-        );
+        let mut rs = ReservationSet::new("res-a", ReservationSetSpec { start, end });
         rs.metadata.namespace = Some("ctf".to_string());
         rs
     }

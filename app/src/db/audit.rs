@@ -23,11 +23,7 @@ pub async fn log_flag_generation(
         ..Default::default()
     };
 
-    let _ = instance_flags::Entity::insert(model)
-        .on_conflict_do_nothing()
-        .exec(db)
-        .await;
-
+    instance_flags::Entity::insert(model).exec(db).await?;
     Ok(())
 }
 

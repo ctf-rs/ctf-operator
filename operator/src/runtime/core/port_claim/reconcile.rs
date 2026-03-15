@@ -244,7 +244,6 @@ mod tests {
                     name: reservation.to_string(),
                     namespace: reservation_ns.map(str::to_string),
                 },
-                conditions: Default::default(),
             },
         );
         claim.metadata.namespace = ns.map(str::to_string);

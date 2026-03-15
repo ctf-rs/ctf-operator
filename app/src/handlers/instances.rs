@@ -1,9 +1,4 @@
-use std::{
-    collections::BTreeMap,
-    net::SocketAddr,
-    sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
     Extension, Json,
@@ -12,20 +7,15 @@ use axum::{
     response::{IntoResponse, Response},
 };
 // Note: Extension + State + Path are still used by the manual `instance_state` handler.
-use ctf_cli::k8s::{Instance, InstanceSpec};
-use kube::{
-    Api, ResourceExt,
-    api::{Patch, PatchParams},
-};
+use ctf_cli::k8s::{Instance, InstanceSpec, InstanceUser};
+use kube::ResourceExt;
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 use crate::{
     db,
-    helpers::{
-        challenge_route, extract_client_ip, has_ctf_access, now_unix_seconds, sanitize_k8s_name,
-    },
+    helpers::{challenge_route, extract_client_ip, has_ctf_access, sanitize_k8s_name},
     k8s::{
         challenges,
         helpers::{
@@ -95,21 +85,10 @@ pub async fn spawn_instance(challenge_name: String) -> Result<(), ServerFnError>
     };
 
     // ---- Guard: one instance per user per challenge -------------------
-    if let Some(existing) =
-        k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name)
-    {
-        let time_left = instance_time_left_seconds(&existing);
-        if time_left == Some(0) {
-            let _ = k8s_instances::delete_instance(
-                &state.kube,
-                existing.metadata.namespace.as_deref().unwrap_or_default(),
-                &existing.name_any(),
-            )
-            .await;
-        } else {
-            leptos_axum::redirect(&challenge_route(&challenge_name));
-            return Ok(());
-        }
+    if k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name).is_some() {
+        // Instance already exists — redirect (operator handles expired cleanup)
+        leptos_axum::redirect(&challenge_route(&challenge_name));
+        return Ok(());
     }
 
     // ---- Deterministic name: prefix-challenge-userId ------------------
@@ -123,54 +102,33 @@ pub async fn spawn_instance(challenge_name: String) -> Result<(), ServerFnError>
     .take(63)
     .collect();
 
-    let mut instance = Instance::new(
-        &instance_name,
-        InstanceSpec {
-            ctf: ctf_name.clone(),
-            challenge: challenge_name.clone(),
-            conditions: Default::default(),
-        },
-    );
-
     let user_label = user
         .name
         .clone()
         .or(user.email.clone())
         .unwrap_or_else(|| user.sub.clone());
-    let now_unix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
-        .unwrap_or(0);
 
     let duration_seconds =
         resolve_instance_duration_seconds(&state, &challenge_namespace, ctf_name, &challenge_name)
             .await;
 
-    let api: Api<Instance> = Api::namespaced(state.kube.clone(), &challenge_namespace);
-
-    let annotations = instance
-        .metadata
-        .annotations
-        .get_or_insert_with(BTreeMap::new);
-    annotations.insert("app.ctf.rs/user-id".to_string(), user.id.to_string());
-    annotations.insert("app.ctf.rs/username".to_string(), user_label);
-    annotations.insert("app.ctf.rs/spawned-at".to_string(), now_unix.to_string());
-    annotations.insert(
-        "app.ctf.rs/duration-seconds".to_string(),
-        duration_seconds.to_string(),
-    );
-    annotations.insert(
-        "app.ctf.rs/expires-at".to_string(),
-        now_unix.saturating_add(duration_seconds).to_string(),
+    let mut instance = Instance::new(
+        &instance_name,
+        InstanceSpec {
+            ctf: ctf_name.clone(),
+            challenge: challenge_name.clone(),
+            user: Some(InstanceUser {
+                id: user.id,
+                username: user_label,
+            }),
+            duration_seconds: Some(duration_seconds),
+        },
     );
 
-    if let Err(err) = api
-        .patch(
-            &instance_name,
-            &PatchParams::apply("ctf-app").force(),
-            &Patch::Apply(&instance),
-        )
-        .await
+    instance.metadata.namespace = Some(challenge_namespace.clone());
+
+    if let Err(err) =
+        k8s_instances::create_or_update_instance(&state.kube, &challenge_namespace, &instance).await
     {
         warn!(error = %err, "failed to spawn instance");
         return Err(ServerFnError::new("failed to create instance"));
@@ -250,39 +208,29 @@ pub async fn extend_instance(challenge_name: String) -> Result<(), ServerFnError
     let instance_ns = instance.metadata.namespace.clone().unwrap_or_default();
     let instance_name = instance.name_any();
 
-    let duration_seconds =
+    let extension_duration =
         resolve_instance_duration_seconds(&state, &instance_ns, ctf_name, &challenge_name).await;
 
-    let now_unix = now_unix_seconds();
-
-    let current_expires_at = instance
-        .metadata
-        .annotations
-        .as_ref()
-        .and_then(|annotations| annotations.get("app.ctf.rs/expires-at"))
-        .and_then(|value| value.parse::<u64>().ok())
-        .unwrap_or_else(|| now_unix.saturating_add(duration_seconds));
-
-    let time_left_seconds = current_expires_at.saturating_sub(now_unix);
-    if time_left_seconds > 300 {
+    // Only allow extending in the last 5 minutes.
+    let time_left_secs = instance_time_left_seconds(&instance).unwrap_or(0);
+    if time_left_secs > 300 {
         redirect_with("bad", "extension is available only in the last 5 minutes");
         return Ok(());
     }
 
-    let new_expires_at = current_expires_at
-        .max(now_unix)
-        .saturating_add(duration_seconds);
+    // Add one full duration period to the current spec value.
+    let current_duration = instance.spec.duration_seconds.unwrap_or(extension_duration);
+    let new_duration = current_duration.saturating_add(extension_duration);
 
-    if let Err(err) = k8s_instances::extend_instance_ttl(
+    if let Err(err) = k8s_instances::extend_instance_duration(
         &state.kube,
         &instance_ns,
         &instance_name,
-        duration_seconds,
-        new_expires_at,
+        new_duration,
     )
     .await
     {
-        warn!(error = %err, "failed to extend instance ttl");
+        warn!(error = %err, "failed to extend instance duration");
         redirect_with("bad", "failed to extend instance");
         return Ok(());
     }

@@ -1,70 +1,12 @@
 use leptos::prelude::*;
 
-use super::{
-    CategorySection, ChallengePageData, ScoreboardPageData,
-    components::{ChallengeCard, InstanceControls},
+use super::super::{
+    ChallengePageData,
+    components::InstanceControls,
     display_file_name, file_route, format_countdown,
     layout::PageShell,
-    scripts::{index_timer_script, instance_live_script},
+    scripts::instance_live_script,
 };
-
-// ---------------------------------------------------------------------------
-// Login page
-// ---------------------------------------------------------------------------
-
-#[component]
-pub fn LoginPage(ctf_title: String) -> impl IntoView {
-    view! {
-        <PageShell title=ctf_title.clone()>
-            <div class="auth-card">
-                <h1>{ctf_title}</h1>
-                <p>"Login required to view challenges."</p>
-                <a class="btn" href="/login">"Login with Keycloak"</a>
-            </div>
-        </PageShell>
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Challenge list (index page)
-// ---------------------------------------------------------------------------
-
-#[component]
-pub fn IndexPage(
-    ctf_title: String,
-    user_label: String,
-    sections: Vec<CategorySection>,
-) -> impl IntoView {
-    let timer_script = index_timer_script();
-    view! {
-        <PageShell title=ctf_title.clone()>
-            <header class="topbar">
-                <div>
-                    <h1>{ctf_title}</h1>
-                    <p class="muted">"Logged in as " {user_label}</p>
-                </div>
-                <div class="nav-buttons">
-                    <a class="btn secondary" href="/scoreboard">"Scoreboard"</a>
-                    <form method="post" action="/logout" style="display:inline-block;">
-                        <button class="btn secondary" type="submit">"Logout"</button>
-                    </form>
-                </div>
-            </header>
-            {sections.into_iter().map(|section| {
-                let label = section.label.clone();
-                view! {
-                    <section class="category-section">
-                        <h2 class="category-heading">{label}</h2>
-                        <div class="grid">
-                            {section.cards.into_iter().map(|card| view! { <ChallengeCard data=card/> }).collect_view()}
-                        </div>
-                    </section>
-                }
-            }).collect_view()}
-            <script>{timer_script}</script>
-        </PageShell>
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Challenge detail page
@@ -251,70 +193,6 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                 </div>
             </div>
             <script>{instance_script}</script>
-        </PageShell>
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Scoreboard page
-// ---------------------------------------------------------------------------
-
-#[component]
-pub fn ScoreboardPage(data: ScoreboardPageData) -> impl IntoView {
-    view! {
-        <PageShell title=format!("{} - Scoreboard", data.ctf_title)>
-            <header class="topbar">
-                <div class="nav-buttons">
-                    <a class="btn secondary" href="/">"← Challenges"</a>
-                </div>
-                <div class="nav-buttons">
-                    <span class="muted">{data.user_label.clone()}</span>
-                    <form method="post" action="/logout" style="display:inline-block;">
-                        <button class="btn secondary small" type="submit">"Logout"</button>
-                    </form>
-                </div>
-            </header>
-
-            <div class="scoreboard-container">
-                <h1>"Scoreboard"</h1>
-                {if data.leaderboard.is_empty() {
-                    view! {
-                        <p class="muted" style="text-align:center;margin-top:2rem;">"No solves yet. Be the first!"</p>
-                    }.into_any()
-                } else {
-                    view! {
-                        <table class="scoreboard-table">
-                            <thead>
-                                <tr>
-                                    <th class="rank">"#"</th>
-                                    <th class="username">"Player"</th>
-                                    <th class="points">"Points"</th>
-                                    <th class="solves">"Solves"</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {data.leaderboard.into_iter().enumerate().map(|(i, entry)| {
-                                    let rank = i + 1;
-                                    let rank_class = match rank {
-                                        1 => "rank gold",
-                                        2 => "rank silver",
-                                        3 => "rank bronze",
-                                        _ => "rank",
-                                    };
-                                    view! {
-                                        <tr>
-                                            <td class={rank_class}>{rank}</td>
-                                            <td class="username">{entry.username}</td>
-                                            <td class="points">{entry.total_points}</td>
-                                            <td class="solves">{entry.solves}</td>
-                                        </tr>
-                                    }
-                                }).collect_view()}
-                            </tbody>
-                        </table>
-                    }.into_any()
-                }}
-            </div>
         </PageShell>
     }
 }

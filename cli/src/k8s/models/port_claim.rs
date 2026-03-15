@@ -22,8 +22,6 @@ use crate::k8s::{Conditions, ReservationRef};
 )]
 pub struct PortClaimSpec {
     pub reservation: ReservationRef,
-    #[serde(default)]
-    pub conditions: Conditions,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema, Default)]

@@ -39,26 +39,24 @@ pub async fn delete_instance(
     }
 }
 
-/// Extends the TTL of an Instance by updating its annotations.
-pub async fn extend_instance_ttl(
+/// Extends an instance's lifetime by patching `spec.durationSeconds`.
+///
+/// The operator will pick up the new value and recompute `status.expiresAt`.
+pub async fn extend_instance_duration(
     client: &Client,
     namespace: &str,
     name: &str,
-    duration_seconds: u64,
-    new_expires_at: u64,
+    new_duration_seconds: u64,
 ) -> Result<(), kube::Error> {
     let api: Api<Instance> = Api::namespaced(client.clone(), namespace);
 
     let patch = serde_json::json!({
-        "metadata": {
-            "annotations": {
-                "app.ctf.rs/duration-seconds": duration_seconds.to_string(),
-                "app.ctf.rs/expires-at": new_expires_at.to_string(),
-            }
+        "spec": {
+            "durationSeconds": new_duration_seconds,
         }
     });
 
-    api.patch(name, &PatchParams::apply("ctf-app"), &Patch::Merge(&patch))
+    api.patch(name, &PatchParams::default(), &Patch::Merge(&patch))
         .await?;
     Ok(())
 }
@@ -74,12 +72,12 @@ pub fn get_instance_for_user(
     challenge_name: &str,
     ctf_name: &str,
 ) -> Option<Arc<Instance>> {
-    let user_id_str = user_id.to_string();
     state.instances.state().into_iter().find(|instance| {
-        let annotations = instance.metadata.annotations.as_ref();
-        let matches_user = annotations
-            .and_then(|a| a.get("app.ctf.rs/user-id"))
-            .map(|v| v == &user_id_str)
+        let matches_user = instance
+            .spec
+            .user
+            .as_ref()
+            .map(|u| u.id == user_id)
             .unwrap_or(false);
         matches_user && instance.spec.challenge == challenge_name && instance.spec.ctf == ctf_name
     })
@@ -87,18 +85,16 @@ pub fn get_instance_for_user(
 
 /// List all active instances owned by a user (from Store).
 pub fn list_instances_for_user(state: &AppState, user_id: i64) -> Vec<Arc<Instance>> {
-    let user_id_str = user_id.to_string();
     state
         .instances
         .state()
         .into_iter()
         .filter(|instance| {
             instance
-                .metadata
-                .annotations
+                .spec
+                .user
                 .as_ref()
-                .and_then(|a| a.get("app.ctf.rs/user-id"))
-                .map(|v| v == &user_id_str)
+                .map(|u| u.id == user_id)
                 .unwrap_or(false)
         })
         .collect()
