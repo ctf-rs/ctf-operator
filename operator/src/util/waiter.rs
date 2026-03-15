@@ -17,7 +17,10 @@ pub enum WaitReadyError {
     WriterDropped(#[from] WriterDropped),
 }
 
-#[expect(missing_debug_implementations, reason = "JoinSet and BoxFuture don't impl Debug")]
+#[expect(
+    missing_debug_implementations,
+    reason = "JoinSet and BoxFuture don't impl Debug"
+)]
 pub struct Waiter {
     ready_tasks: JoinSet<Result<(), WriterDropped>>,
     tasks: JoinSet<()>,

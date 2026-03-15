@@ -32,9 +32,10 @@ pub fn controller(
     reservation_set_watcher: &Watcher<ReservationSet>,
 ) -> CtfResult<Controller<PortClaimReconciler>> {
     Ok(
-        Controller::new(Arc::clone(&ctx), watcher)?.watches(reservation_set_watcher, move |rs| {
-            map_port_claims_for_reservation_set(rs.as_ref(), ctx.port_claims.state())
-        })?,
+        Controller::new(Arc::clone(&ctx), watcher)?
+            .watches(reservation_set_watcher, move |rs| {
+                map_port_claims_for_reservation_set(rs.as_ref(), ctx.port_claims.state())
+            })?,
     )
 }
 

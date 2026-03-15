@@ -1,10 +1,14 @@
 //! Kubernetes operations for Instance resources.
 
+use std::sync::Arc;
+
 use ctf_cli::k8s::Instance;
 use kube::{
     Api, Client,
     api::{DeleteParams, Patch, PatchParams},
 };
+
+use crate::state::AppState;
 
 /// Creates or updates an Instance resource.
 pub async fn create_or_update_instance(
@@ -57,4 +61,45 @@ pub async fn extend_instance_ttl(
     api.patch(name, &PatchParams::apply("ctf-app"), &Patch::Merge(&patch))
         .await?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Store-based lookups (replaces DB app_instances table)
+// ---------------------------------------------------------------------------
+
+/// Find the user's active instance for a specific challenge (from Store).
+pub fn get_instance_for_user(
+    state: &AppState,
+    user_id: i64,
+    challenge_name: &str,
+    ctf_name: &str,
+) -> Option<Arc<Instance>> {
+    let user_id_str = user_id.to_string();
+    state.instances.state().into_iter().find(|instance| {
+        let annotations = instance.metadata.annotations.as_ref();
+        let matches_user = annotations
+            .and_then(|a| a.get("app.ctf.rs/user-id"))
+            .map(|v| v == &user_id_str)
+            .unwrap_or(false);
+        matches_user && instance.spec.challenge == challenge_name && instance.spec.ctf == ctf_name
+    })
+}
+
+/// List all active instances owned by a user (from Store).
+pub fn list_instances_for_user(state: &AppState, user_id: i64) -> Vec<Arc<Instance>> {
+    let user_id_str = user_id.to_string();
+    state
+        .instances
+        .state()
+        .into_iter()
+        .filter(|instance| {
+            instance
+                .metadata
+                .annotations
+                .as_ref()
+                .and_then(|a| a.get("app.ctf.rs/user-id"))
+                .map(|v| v == &user_id_str)
+                .unwrap_or(false)
+        })
+        .collect()
 }

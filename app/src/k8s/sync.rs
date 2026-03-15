@@ -65,15 +65,11 @@ pub fn spawn_sync_workers(
     let ctf_name = config.ctf_name.clone();
 
     vec![
-        // Instance watcher with DB cleanup on deletion
-        spawn_instance_watcher(
-            Arc::clone(&state),
-            watchers.instance_watcher,
-            ctf_name.clone(),
-        ),
+        // Instance watcher - just populate Store
+        spawn_store_watcher(watchers.instance_watcher, "instance"),
         // Flag watcher with audit logging
         spawn_flag_watcher(Arc::clone(&state), watchers.flag_watcher, ns, ctf_name),
-        // Challenge and Ctf watchers - just populate Store, no DB sync
+        // Challenge and Ctf watchers - just populate Store
         spawn_store_watcher(watchers.challenge_watcher, "challenge"),
         spawn_store_watcher(watchers.ctf_watcher, "ctf"),
     ]
@@ -99,60 +95,6 @@ where
                 Ok(_) => {} // Store is populated automatically by reflect_shared
                 Err(err) => {
                     error!(watcher = %name, error = %err, "watcher error, stream continuing");
-                }
-            }
-        }
-    })
-}
-
-fn spawn_instance_watcher(
-    state: Arc<AppState>,
-    watcher: Watcher<Instance>,
-    ctf_name: String,
-) -> JoinHandle<()> {
-    tokio::spawn(async move {
-        let stream = watcher.to_stream();
-        tokio::pin!(stream);
-
-        while let Some(event) = stream.next().await {
-            match event {
-                Ok(watcher::Event::Delete(instance)) => {
-                    // Clean up DB record for this instance
-                    if let Some(user_id_str) = instance
-                        .metadata
-                        .annotations
-                        .as_ref()
-                        .and_then(|a| a.get("app.ctf.rs/user-id"))
-                    {
-                        if let Ok(user_id) = user_id_str.parse::<i64>() {
-                            let challenge_name = &instance.spec.challenge;
-                            if let Err(err) = db::clear_instance_for_user(
-                                &state.db,
-                                user_id,
-                                challenge_name,
-                                &ctf_name,
-                            )
-                            .await
-                            {
-                                warn!(
-                                    instance = %instance.name_any(),
-                                    user_id = %user_id,
-                                    error = %err,
-                                    "failed to clean DB on instance delete"
-                                );
-                            } else {
-                                info!(
-                                    instance = %instance.name_any(),
-                                    user_id = %user_id,
-                                    "cleaned DB record on instance deletion"
-                                );
-                            }
-                        }
-                    }
-                }
-                Ok(_) => {} // Store is populated automatically by reflect_shared
-                Err(err) => {
-                    error!(error = %err, "instance watcher error, stream continuing");
                 }
             }
         }

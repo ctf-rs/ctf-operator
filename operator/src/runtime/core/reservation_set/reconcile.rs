@@ -16,7 +16,10 @@ impl Reconciler for ReservationSetReconciler {
     type Ctx = CtfState;
     type Err = CtfError;
 
-    async fn reconcile(resource: Arc<ReservationSet>, ctx: Arc<CtfState>) -> Result<Action, CtfError> {
+    async fn reconcile(
+        resource: Arc<ReservationSet>,
+        ctx: Arc<CtfState>,
+    ) -> Result<Action, CtfError> {
         let namespace = resource.namespace().unwrap_or_default();
         if !ctx.manages_namespace(&namespace) {
             return Ok(Action::await_change());

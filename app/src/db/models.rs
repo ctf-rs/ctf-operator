@@ -67,12 +67,6 @@ pub struct ChallengeView {
     pub flag_hint: String,
 }
 
-#[derive(Debug, Clone)]
-pub struct InstanceView {
-    pub instance_name: String,
-    pub namespace: String,
-}
-
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct SolvedKey {
     pub challenge_name: String,
@@ -88,12 +82,6 @@ pub(super) struct UserRow {
     pub(super) email: Option<String>,
     pub(super) name: Option<String>,
     pub(super) roles_json: sqlx::types::Json<Vec<String>>,
-}
-
-#[derive(Debug, FromRow)]
-pub(super) struct InstanceRow {
-    pub(super) instance_name: String,
-    pub(super) challenge_namespace: String,
 }
 
 // ---- Row → model converters ----

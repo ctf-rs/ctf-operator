@@ -12,7 +12,10 @@ pub struct OperatorConfig {
     pub runtime_config: OperatorRuntimeConfig,
 }
 
-#[expect(missing_debug_implementations, reason = "kube Client and Store don't impl Debug")]
+#[expect(
+    missing_debug_implementations,
+    reason = "kube Client and Store don't impl Debug"
+)]
 pub struct CtfState {
     pub client: Client,
     pub config: OperatorConfig,

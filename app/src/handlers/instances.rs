@@ -14,9 +14,8 @@ use axum::{
 use axum_extra::extract::cookie::CookieJar;
 use ctf_cli::k8s::{Instance, InstanceSpec};
 use kube::{
-    Api,
+    Api, ResourceExt,
     api::{Patch, PatchParams},
-    runtime::reflector::ObjectRef,
 };
 use serde::Serialize;
 use tracing::warn;
@@ -84,8 +83,7 @@ pub async fn spawn_instance(
         .into_response();
     }
 
-    let Some(challenge_namespace) =
-        challenges::find_challenge_namespace(&state, &challenge_name)
+    let Some(challenge_namespace) = challenges::find_challenge_namespace(&state, &challenge_name)
     else {
         return (
             axum::http::StatusCode::NOT_FOUND,
@@ -95,40 +93,23 @@ pub async fn spawn_instance(
     };
 
     // ---- Guard: one instance per user per challenge -------------------
-    // If the user already has a tracked instance, check whether it still
-    // exists in the cluster.  If it does and is not expired, redirect back.
-    // If expired, delete it and allow re-spawn.
-    if let Ok(Some(existing)) =
-        db::get_instance_for_user(&state.db, user.id, &challenge_name, ctf_name).await
+    // If the user already has a tracked instance in the Store, check whether
+    // it is expired.  If expired, delete it and allow re-spawn.
+    if let Some(existing) =
+        k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name)
     {
-        let instance_ref =
-            ObjectRef::<Instance>::new(&existing.instance_name).within(&existing.namespace);
-        match state.instances.get(&instance_ref) {
-            Some(instance_obj) => {
-                // Check if instance is expired
-                let time_left = instance_time_left_seconds(&instance_obj);
-                if time_left == Some(0) {
-                    // Instance expired → delete it and allow re-spawn
-                    let _ = k8s_instances::delete_instance(
-                        &state.kube,
-                        &existing.namespace,
-                        &existing.instance_name,
-                    )
-                    .await;
-                    let _ =
-                        db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
-                            .await;
-                } else {
-                    // Instance still alive and not expired → redirect back.
-                    return Redirect::to(&challenge_route(&challenge_name)).into_response();
-                }
-            }
-            None => {
-                // Instance gone from cluster → clean up DB row so we can
-                // re-create below.
-                let _ = db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
-                    .await;
-            }
+        let time_left = instance_time_left_seconds(&existing);
+        if time_left == Some(0) {
+            // Instance expired → delete it and allow re-spawn
+            let _ = k8s_instances::delete_instance(
+                &state.kube,
+                existing.metadata.namespace.as_deref().unwrap_or_default(),
+                &existing.name_any(),
+            )
+            .await;
+        } else {
+            // Instance still alive and not expired → redirect back.
+            return Redirect::to(&challenge_route(&challenge_name)).into_response();
         }
     }
 
@@ -200,19 +181,6 @@ pub async fn spawn_instance(
             .into_response();
     }
 
-    if let Err(err) = db::set_instance(
-        &state.db,
-        user.id,
-        &challenge_name,
-        ctf_name,
-        &challenge_namespace,
-        &instance_name,
-    )
-    .await
-    {
-        warn!(error = %err, "failed to persist instance relation");
-    }
-
     // Audit log: instance spawned
     if let Err(err) = db::log_instance_action(
         &state.db,
@@ -271,31 +239,25 @@ pub async fn extend_instance(
         ))
     };
 
-    let Some(instance) = db::get_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
-        .await
-        .ok()
-        .flatten()
+    let Some(instance) =
+        k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name)
     else {
         return redirect_with("bad", "spawn an instance first").into_response();
     };
 
-    let instance_ref =
-        ObjectRef::<Instance>::new(&instance.instance_name).within(&instance.namespace);
-    let Some(instance_obj) = state.instances.get(&instance_ref) else {
-        return redirect_with("bad", "instance not found").into_response();
-    };
-
-    if !is_instance_owned_by_user(&instance_obj, &user) {
+    if !is_instance_owned_by_user(&instance, &user) {
         return redirect_with("bad", "instance belongs to a different user").into_response();
     }
 
+    let instance_ns = instance.metadata.namespace.clone().unwrap_or_default();
+    let instance_name = instance.name_any();
+
     let duration_seconds =
-        resolve_instance_duration_seconds(&state, &instance.namespace, ctf_name, &challenge_name)
-            .await;
+        resolve_instance_duration_seconds(&state, &instance_ns, ctf_name, &challenge_name).await;
 
     let now_unix = now_unix_seconds();
 
-    let current_expires_at = instance_obj
+    let current_expires_at = instance
         .metadata
         .annotations
         .as_ref()
@@ -315,8 +277,8 @@ pub async fn extend_instance(
 
     if let Err(err) = k8s_instances::extend_instance_ttl(
         &state.kube,
-        &instance.namespace,
-        &instance.instance_name,
+        &instance_ns,
+        &instance_name,
         duration_seconds,
         new_expires_at,
     )
@@ -330,7 +292,7 @@ pub async fn extend_instance(
     if let Err(err) = db::log_instance_action(
         &state.db,
         user.id,
-        &instance.instance_name,
+        &instance_name,
         &challenge_name,
         ctf_name,
         "extend",
@@ -397,10 +359,8 @@ pub async fn instance_state(
         .into_response();
     }
 
-    let Some(instance) = db::get_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
-        .await
-        .ok()
-        .flatten()
+    let Some(instance) =
+        k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name)
     else {
         return Json(InstanceStateResponse {
             has_instance: false,
@@ -414,26 +374,7 @@ pub async fn instance_state(
         .into_response();
     };
 
-    // Look up instance from Store
-    let obj_ref = ObjectRef::<Instance>::new(&instance.instance_name).within(&instance.namespace);
-    let Some(instance_obj) = state.instances.get(&obj_ref) else {
-        // Instance not in cache (deleted) - watcher will clean DB, but fallback here
-        let _ = db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name).await;
-        return Json(InstanceStateResponse {
-            has_instance: false,
-            ready: false,
-            can_extend: false,
-            solved: false,
-            deleting: false,
-            time_left_seconds: None,
-            instance_name: None,
-        })
-        .into_response();
-    };
-
-    if !is_instance_owned_by_user(&instance_obj, &user) {
-        // Instance not owned by user - clean up stale DB record
-        let _ = db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name).await;
+    if !is_instance_owned_by_user(&instance, &user) {
         return Json(InstanceStateResponse {
             has_instance: false,
             ready: false,
@@ -446,9 +387,9 @@ pub async fn instance_state(
         .into_response();
     }
 
-    let ready = instance_ready_from_resource(&instance_obj);
-    let time_left_seconds = instance_time_left_seconds(&instance_obj);
-    let deleting = is_instance_deleting(&instance_obj);
+    let ready = instance_ready_from_resource(&instance);
+    let time_left_seconds = instance_time_left_seconds(&instance);
+    let deleting = is_instance_deleting(&instance);
     let can_extend = ready
         && !deleting
         && time_left_seconds
@@ -462,7 +403,7 @@ pub async fn instance_state(
         solved: false,
         deleting,
         time_left_seconds,
-        instance_name: Some(instance.instance_name),
+        instance_name: Some(instance.name_any()),
     })
     .into_response()
 }
@@ -495,27 +436,23 @@ pub async fn stop_instance(
         ))
     };
 
-    let Some(instance) = db::get_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
-        .await
-        .ok()
-        .flatten()
+    let Some(instance) =
+        k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name)
     else {
         return redirect_with("bad", "no instance to stop").into_response();
     };
 
-    // Verify ownership from store before deleting
-    let instance_ref =
-        ObjectRef::<Instance>::new(&instance.instance_name).within(&instance.namespace);
-    if let Some(instance_obj) = state.instances.get(&instance_ref) {
-        if !is_instance_owned_by_user(&instance_obj, &user) {
-            return redirect_with("bad", "instance belongs to a different user").into_response();
-        }
+    // Verify ownership before deleting
+    if !is_instance_owned_by_user(&instance, &user) {
+        return redirect_with("bad", "instance belongs to a different user").into_response();
     }
+
+    let instance_name = instance.name_any();
+    let instance_ns = instance.metadata.namespace.clone().unwrap_or_default();
 
     // Delete the instance from cluster (initiates termination)
     if let Err(err) =
-        k8s_instances::delete_instance(&state.kube, &instance.namespace, &instance.instance_name)
-            .await
+        k8s_instances::delete_instance(&state.kube, &instance_ns, &instance_name).await
     {
         warn!(error = %err, "failed to stop instance");
         return redirect_with("bad", "failed to stop instance").into_response();
@@ -525,7 +462,7 @@ pub async fn stop_instance(
     if let Err(err) = db::log_instance_action(
         &state.db,
         user.id,
-        &instance.instance_name,
+        &instance_name,
         &challenge_name,
         ctf_name,
         "stop",
@@ -535,10 +472,6 @@ pub async fn stop_instance(
     {
         warn!(error = %err, "failed to log instance stop audit");
     }
-
-    // Don't clear DB record here - keep it so UI shows "Stopping..." phase
-    // The record will be cleaned up when the instance is fully gone from k8s
-    // (detected by pages handler or instance_state handler)
 
     redirect_with("ok", "instance stopping").into_response()
 }

@@ -26,7 +26,10 @@ pub struct Ctf {
     #[serde(default)]
     #[garde(skip)]
     pub public: bool,
-    #[serde(default = "default_instance_duration_seconds", rename = "instanceDurationSeconds")]
+    #[serde(
+        default = "default_instance_duration_seconds",
+        rename = "instanceDurationSeconds"
+    )]
     #[garde(range(min = 1))]
     pub instance_duration_seconds: u32,
     #[serde(default)]
@@ -104,8 +107,9 @@ pub struct CtfFlag {
     pub options: FlagMatchOptions,
 }
 
-#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]
-#[derive(Default)]
+#[derive(
+    Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate, Default,
+)]
 pub struct CtfNetwork {
     #[garde(dive)]
     pub ports: CtfPorts,
@@ -132,7 +136,6 @@ impl Default for CtfFlag {
         }
     }
 }
-
 
 impl Default for CtfPorts {
     fn default() -> Self {

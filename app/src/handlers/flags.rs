@@ -6,16 +6,20 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::cookie::CookieJar;
-use ctf_cli::k8s::{Flag, Instance};
+use ctf_cli::k8s::Flag;
 use ctf_cli::models::Flag as CoreFlag;
-use kube::runtime::reflector::ObjectRef;
+use kube::{ResourceExt, runtime::reflector::ObjectRef};
 use serde::Deserialize;
 use tracing::warn;
 
 use crate::{
     db,
     helpers::{challenge_route, current_user, extract_client_ip},
-    k8s::{challenges, helpers::is_instance_owned_by_user, instances::delete_instance},
+    k8s::{
+        challenges,
+        helpers::is_instance_owned_by_user,
+        instances::{self as k8s_instances, delete_instance},
+    },
     state::AppState,
 };
 
@@ -76,10 +80,8 @@ pub async fn submit_flag(
         ))
     };
 
-    let Some(instance) = db::get_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
-        .await
-        .ok()
-        .flatten()
+    let Some(instance) =
+        k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name)
     else {
         persist_flag_with_audit(
             &state,
@@ -96,30 +98,16 @@ pub async fn submit_flag(
         return redirect_with("bad", "spawn an instance first").into_response();
     };
 
-    let obj_ref = ObjectRef::<Instance>::new(&instance.instance_name).within(&instance.namespace);
-    let Some(instance_obj) = state.instances.get(&obj_ref) else {
-        persist_flag_with_audit(
-            &state,
-            user.id,
-            &challenge_name,
-            ctf_name,
-            &instance.namespace,
-            &form.flag_name,
-            submitted_flag,
-            false,
-            client_ip.as_deref(),
-        )
-        .await;
-        return redirect_with("bad", "instance not found").into_response();
-    };
+    let instance_ns = instance.metadata.namespace.clone().unwrap_or_default();
+    let instance_name = instance.name_any();
 
-    if !is_instance_owned_by_user(&instance_obj, &user) {
+    if !is_instance_owned_by_user(&instance, &user) {
         persist_flag_with_audit(
             &state,
             user.id,
             &challenge_name,
             ctf_name,
-            &instance.namespace,
+            &instance_ns,
             &form.flag_name,
             submitted_flag,
             false,
@@ -129,13 +117,13 @@ pub async fn submit_flag(
         return redirect_with("bad", "instance belongs to a different user").into_response();
     };
 
-    let Some(uid) = instance_obj.metadata.uid.clone() else {
+    let Some(uid) = instance.metadata.uid.clone() else {
         persist_flag_with_audit(
             &state,
             user.id,
             &challenge_name,
             ctf_name,
-            &instance.namespace,
+            &instance_ns,
             &form.flag_name,
             submitted_flag,
             false,
@@ -146,7 +134,7 @@ pub async fn submit_flag(
     };
 
     let runtime_ns = format!("ctf-inst-{uid}");
-    let flag_name = format!("{}-{}", instance.instance_name, form.flag_name);
+    let flag_name = format!("{}-{}", instance_name, form.flag_name);
     let flag_obj_ref = ObjectRef::<Flag>::new(&flag_name).within(&runtime_ns);
 
     let accepted = match state.flags.get(&flag_obj_ref) {
@@ -169,7 +157,7 @@ pub async fn submit_flag(
         user.id,
         &challenge_name,
         ctf_name,
-        &instance.namespace,
+        &instance_ns,
         &form.flag_name,
         submitted_flag,
         accepted,
@@ -194,7 +182,7 @@ pub async fn submit_flag(
             if let Err(err) = db::mark_challenge_solved(
                 &state.db,
                 user.id,
-                &instance.namespace,
+                &instance_ns,
                 &challenge_name,
                 ctf_name,
             )
@@ -203,16 +191,8 @@ pub async fn submit_flag(
                 warn!(error = %err, "failed to persist solved challenge state");
             }
 
-            if let Err(err) =
-                delete_instance(&state.kube, &instance.namespace, &instance.instance_name).await
-            {
+            if let Err(err) = delete_instance(&state.kube, &instance_ns, &instance_name).await {
                 warn!(error = %err, "failed to delete solved instance");
-            }
-
-            if let Err(err) =
-                db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name).await
-            {
-                warn!(error = %err, "failed to clear solved instance relation");
             }
 
             return redirect_with("good", "challenge solved").into_response();

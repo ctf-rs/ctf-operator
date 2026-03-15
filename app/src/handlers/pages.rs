@@ -5,8 +5,8 @@ use axum::{
     response::{Html, IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::cookie::CookieJar;
-use ctf_cli::{ChallengeCategory, k8s::Instance};
-use kube::runtime::reflector::ObjectRef;
+use ctf_cli::ChallengeCategory;
+use kube::ResourceExt;
 use serde::Deserialize;
 use tracing::warn;
 
@@ -78,22 +78,19 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         .await
         .unwrap_or_default();
 
-    // Get all instances for this user and fetch their time left from cache
-    let instances = db::list_instances_for_user(&state.db, user.id)
-        .await
-        .unwrap_or_default();
+    // Get all instances for this user from Store
+    let instances = crate::k8s::instances::list_instances_for_user(&state, user.id);
 
     // Build a map of (ctf_name, challenge_name) -> time_left_seconds
     let mut instance_times: std::collections::HashMap<(String, String), Option<u64>> =
         std::collections::HashMap::new();
 
     for inst in instances {
-        let obj_ref = ObjectRef::<Instance>::new(&inst.instance_name).within(&inst.namespace);
-        if let Some(instance_obj) = state.instances.get(&obj_ref) {
-            let time_left = instance_time_left_seconds(&instance_obj);
-            instance_times.insert((inst.ctf_name, inst.challenge_name), time_left);
-        }
-        // If not in cache, instance no longer exists - don't add to map
+        let time_left = instance_time_left_seconds(&inst);
+        instance_times.insert(
+            (inst.spec.ctf.clone(), inst.spec.challenge.clone()),
+            time_left,
+        );
     }
 
     // Build category → cards map. Challenges with multiple categories appear in all of them.
@@ -242,73 +239,55 @@ pub async fn challenge_page(
         .await
         .unwrap_or(false);
 
-    let mut instance = db::get_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
-        .await
-        .ok()
-        .flatten();
+    let instance =
+        crate::k8s::instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name);
 
     let mut ready = false;
     let mut time_left_seconds: Option<u64> = None;
     let mut can_extend = false;
     let mut deleting = false;
     let mut instance_phase_desc: Option<String> = None;
+    let mut has_instance = false;
+    let mut instance_name_str: Option<String> = None;
 
-    if let Some(existing) = &instance {
-        // Look up instance from Store
-        let obj_ref =
-            ObjectRef::<Instance>::new(&existing.instance_name).within(&existing.namespace);
-        let instance_obj = state.instances.get(&obj_ref);
+    if let Some(ref existing) = instance {
+        if is_instance_owned_by_user(existing, &user) {
+            has_instance = true;
+            instance_name_str = Some(existing.name_any());
+            ready = instance_ready_from_resource(existing);
+            time_left_seconds = instance_time_left_seconds(existing);
+            deleting = is_instance_deleting(existing);
+            can_extend = ready
+                && !deleting
+                && time_left_seconds
+                    .map(|seconds| seconds <= 300 && seconds > 0)
+                    .unwrap_or(false);
+            instance_phase_desc = Some(if deleting {
+                "Stopping...".to_string()
+            } else {
+                instance_phase_description(existing)
+            });
 
-        match instance_obj {
-            Some(instance_obj) if is_instance_owned_by_user(&instance_obj, &user) => {
-                ready = instance_ready_from_resource(&instance_obj);
-                time_left_seconds = instance_time_left_seconds(&instance_obj);
-                deleting = is_instance_deleting(&instance_obj);
-                can_extend = ready
-                    && !deleting
-                    && time_left_seconds
-                        .map(|seconds| seconds <= 300 && seconds > 0)
-                        .unwrap_or(false);
-                instance_phase_desc = Some(if deleting {
-                    "Stopping...".to_string()
-                } else {
-                    instance_phase_description(&instance_obj)
-                });
-
-                // Fetch allocated ports from PortClaims when instance is ready
-                if ready {
-                    if let Some(uid) = &instance_obj.metadata.uid {
-                        let target_ns =
-                            format!("{}{}", state.config.instance_namespace_prefix, uid);
-                        if let Ok(allocated_ports) = get_allocated_ports_for_instance(
-                            &state.kube,
-                            &target_ns,
-                            &existing.instance_name,
-                        )
-                        .await
-                        {
-                            for (port_name, allocated) in &allocated_ports {
-                                for port in &mut challenge.exposed_ports {
-                                    if &port.name == port_name {
-                                        port.allocated_port = Some(*allocated);
-                                    }
+            // Fetch allocated ports from PortClaims when instance is ready
+            if ready {
+                if let Some(uid) = &existing.metadata.uid {
+                    let target_ns = format!("{}{}", state.config.instance_namespace_prefix, uid);
+                    if let Ok(allocated_ports) = get_allocated_ports_for_instance(
+                        &state.kube,
+                        &target_ns,
+                        &existing.name_any(),
+                    )
+                    .await
+                    {
+                        for (port_name, allocated) in &allocated_ports {
+                            for port in &mut challenge.exposed_ports {
+                                if &port.name == port_name {
+                                    port.allocated_port = Some(*allocated);
                                 }
                             }
                         }
                     }
                 }
-            }
-            Some(_) => {
-                // Instance not owned by user - watcher will clean DB, but fallback here
-                let _ = db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
-                    .await;
-                instance = None;
-            }
-            None => {
-                // Instance not in cache (deleted) - watcher will clean DB, but fallback here
-                let _ = db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
-                    .await;
-                instance = None;
             }
         }
     }
@@ -327,7 +306,6 @@ pub async fn challenge_page(
     let extend_feedback =
         views::parse_extend_feedback(query.extend.as_deref(), query.message.as_deref());
 
-    let instance_name = instance.as_ref().map(|i| i.instance_name.clone());
     // Use config override if set, otherwise use the hostname from the request
     let instance_base_domain = state
         .config
@@ -345,7 +323,7 @@ pub async fn challenge_page(
         challenge,
         ctf_title: ctf_name.clone(),
         user_label,
-        has_instance: instance.is_some(),
+        has_instance,
         ready,
         time_left_seconds,
         can_extend,
@@ -353,7 +331,7 @@ pub async fn challenge_page(
         deleting,
         submit_feedback,
         extend_feedback,
-        instance_name,
+        instance_name: instance_name_str,
         instance_base_domain,
         instance_phase_desc,
         points,

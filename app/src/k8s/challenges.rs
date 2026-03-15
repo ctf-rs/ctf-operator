@@ -13,7 +13,11 @@ pub fn list_challenges_for_ctf(state: &AppState) -> Vec<ChallengeView> {
     let ctf_name = &state.config.ctf_name;
 
     // Find the CTF resource to get the list of enabled challenges
-    let ctf = state.ctfs.state().into_iter().find(|c| c.name_any() == *ctf_name);
+    let ctf = state
+        .ctfs
+        .state()
+        .into_iter()
+        .find(|c| c.name_any() == *ctf_name);
 
     let Some(ctf) = ctf else {
         return Vec::new();
@@ -51,7 +55,11 @@ pub fn get_challenge(state: &AppState, challenge_name: &str) -> Option<Challenge
     let ctf_name = &state.config.ctf_name;
 
     // Find the CTF resource
-    let ctf = state.ctfs.state().into_iter().find(|c| c.name_any() == *ctf_name)?;
+    let ctf = state
+        .ctfs
+        .state()
+        .into_iter()
+        .find(|c| c.name_any() == *ctf_name)?;
 
     // Check if this challenge is in the CTF's challenge list
     if !ctf.spec.challenges.iter().any(|c| c == challenge_name) {
@@ -76,7 +84,11 @@ pub fn get_challenge(state: &AppState, challenge_name: &str) -> Option<Challenge
 /// Finds the namespace a challenge lives in.
 pub fn find_challenge_namespace(state: &AppState, challenge_name: &str) -> Option<String> {
     let ctf_name = &state.config.ctf_name;
-    let ctf = state.ctfs.state().into_iter().find(|c| c.name_any() == *ctf_name)?;
+    let ctf = state
+        .ctfs
+        .state()
+        .into_iter()
+        .find(|c| c.name_any() == *ctf_name)?;
 
     // Check if this challenge is in the CTF's challenge list
     if !ctf.spec.challenges.iter().any(|c| c == challenge_name) {

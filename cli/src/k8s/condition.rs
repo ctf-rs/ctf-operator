@@ -32,24 +32,24 @@ pub struct Conditions {
 }
 
 impl Conditions {
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn all_true(&self) -> bool {
         self.inner
             .values()
             .all(|condition| condition.status == ConditionStatus::True)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn get(&self, typ: &str) -> Option<&Condition> {
         self.inner.get(typ)
     }

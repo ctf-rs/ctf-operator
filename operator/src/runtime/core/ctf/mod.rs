@@ -11,7 +11,10 @@ use kube::{runtime::watcher::Config, Client};
 use std::sync::Arc;
 
 #[must_use]
-#[expect(clippy::needless_pass_by_value, reason = "Client is cloned for each namespace API")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Client is cloned for each namespace API"
+)]
 pub fn watcher(client: Client, namespaces: &[String]) -> Watcher<Ctf> {
     let apis = namespaces
         .iter()
