@@ -57,7 +57,10 @@ async fn server_fn_handler(req: Request<Body>) -> impl IntoResponse {
 /// Look up the authenticated user from the session cookie (if present).
 async fn resolve_user(state: &AppState, headers: &http::HeaderMap) -> Option<db::User> {
     let token = extract_session_cookie(headers, &state.config.session_cookie_name)?;
-    db::get_user_by_session(&state.db, &token).await.ok().flatten()
+    db::get_user_by_session(&state.db, &token)
+        .await
+        .ok()
+        .flatten()
 }
 
 /// Build the application router with all routes wired to their handlers.
@@ -86,7 +89,10 @@ pub fn router(state: Arc<AppState>) -> Router {
 
     Router::new()
         // Server functions (spawn, extend, stop, submit_flag, …)
-        .route("/api/{*fn_name}", get(server_fn_handler).post(server_fn_handler))
+        .route(
+            "/api/{*fn_name}",
+            get(server_fn_handler).post(server_fn_handler),
+        )
         .merge(protected_pages)
         .merge(public)
         .nest_service("/pkg", ServeDir::new("target/site/pkg"))
