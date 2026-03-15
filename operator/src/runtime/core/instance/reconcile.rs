@@ -57,9 +57,7 @@ impl Reconciler for InstanceReconciler {
 
         // Not being deleted - ensure finalizer is present and do normal reconciliation
         let finalizers = obj.metadata.finalizers.as_ref();
-        let has_finalizer = finalizers
-            .map(|f| f.contains(&FINALIZER_NAME.to_string()))
-            .unwrap_or(false);
+        let has_finalizer = finalizers.is_some_and(|f| f.contains(&FINALIZER_NAME.to_string()));
 
         if !has_finalizer {
             // Add our finalizer
@@ -303,23 +301,26 @@ async fn reconcile_cleanup(
     match ns_api.get(&target_namespace).await {
         Ok(_ns) => {
             // Namespace still exists, try to delete it (or it's already terminating)
-            if let Err(err) = ns_api
+            match ns_api
                 .delete(&target_namespace, &DeleteParams::default())
                 .await
             {
-                match err {
-                    kube::Error::Api(ae) if ae.code == 404 => {
-                        // Already gone - fall through to remove finalizer
+                Err(err) => {
+                    match err {
+                        kube::Error::Api(ae) if ae.code == 404 => {
+                            // Already gone - fall through to remove finalizer
+                        }
+                        kube::Error::Api(ae) if ae.code == 409 => {
+                            // Conflict - namespace is already being deleted, wait for it
+                            return Ok(Action::requeue(Duration::from_secs(2)));
+                        }
+                        other => return Err(other.into()),
                     }
-                    kube::Error::Api(ae) if ae.code == 409 => {
-                        // Conflict - namespace is already being deleted, wait for it
-                        return Ok(Action::requeue(Duration::from_secs(2)));
-                    }
-                    other => return Err(other.into()),
                 }
-            } else {
-                // Delete initiated, wait for namespace to be fully removed
-                return Ok(Action::requeue(Duration::from_secs(2)));
+                _ => {
+                    // Delete initiated, wait for namespace to be fully removed
+                    return Ok(Action::requeue(Duration::from_secs(2)));
+                }
             }
         }
         Err(kube::Error::Api(ae)) if ae.code == 404 => {
@@ -410,7 +411,7 @@ fn set_resource_condition(
 }
 
 /// Determines the instance phase based on observed resource states
-fn determine_phase(observed: &ObservedInstanceResources, all_ready: bool) -> InstancePhase {
+const fn determine_phase(observed: &ObservedInstanceResources, all_ready: bool) -> InstancePhase {
     if all_ready {
         return InstancePhase::Ready;
     }
@@ -452,31 +453,27 @@ fn conditions_true_excluding_ready(conditions: &ctf_cli::k8s::Conditions) -> boo
 fn is_ready_ctf(ctf: &Ctf) -> bool {
     ctf.status
         .as_ref()
-        .map(|status| status.conditions.all_true())
-        .unwrap_or(false)
+        .is_some_and(|status| status.conditions.all_true())
 }
 
 fn is_ready_challenge(challenge: &Challenge) -> bool {
     challenge
         .status
         .as_ref()
-        .map(|status| status.conditions.all_true())
-        .unwrap_or(false)
+        .is_some_and(|status| status.conditions.all_true())
 }
 
 fn resolve_instance_duration_seconds(ctf: &Ctf, challenge: &Challenge) -> u64 {
     challenge
         .spec
         .instance_duration_seconds
-        .map(u64::from)
-        .unwrap_or_else(|| u64::from(ctf.spec.instance_duration_seconds))
+        .map_or_else(|| u64::from(ctf.spec.instance_duration_seconds), u64::from)
 }
 
 fn now_unix_seconds() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
-        .unwrap_or(0)
+        .map_or(0, |duration| duration.as_secs())
 }
 
 fn unix_seconds_to_time(
@@ -495,15 +492,15 @@ fn humanize_duration(seconds: u64) -> String {
     let secs = seconds % 60;
 
     if hours > 0 {
-        format!("{}h {}m {}s", hours, minutes, secs)
+        format!("{hours}h {minutes}m {secs}s")
     } else if minutes > 0 {
-        format!("{}m {}s", minutes, secs)
+        format!("{minutes}m {secs}s")
     } else {
-        format!("{}s", secs)
+        format!("{secs}s")
     }
 }
 
-/// Get the existing expires_at timestamp from instance annotations.
+/// Get the existing `expires_at` timestamp from instance annotations.
 /// Returns None if instance hasn't been marked ready yet (timer not started).
 fn get_existing_expires_at(instance: &Instance) -> Option<u64> {
     instance
@@ -632,8 +629,7 @@ fn collect_instance_resources(
         .reservation_sets
         .get(&reservation_ref)
         .and_then(|resource| resource.status.clone())
-        .map(|status| conditions_true_excluding_ready(&status.conditions))
-        .unwrap_or(false);
+        .is_some_and(|status| conditions_true_excluding_ready(&status.conditions));
 
     let mut flag_values = BTreeMap::new();
     let mut flags_ready = true;
@@ -693,8 +689,7 @@ fn collect_instance_resources(
         .deployments
         .get(&deployment_ref)
         .and_then(|resource| resource.status.clone())
-        .map(|status| status.available_replicas.unwrap_or_default() > 0)
-        .unwrap_or(false);
+        .is_some_and(|status| status.available_replicas.unwrap_or_default() > 0);
 
     let service_ref = ObjectRef::<Service>::new(&instance.name_any()).within(target_namespace);
     let service_ready = state.services.get(&service_ref).is_some();
@@ -801,6 +796,7 @@ async fn ensure_flags(
                 ignore_random: challenge_flag.options.ignore_random
                     || ctf.spec.flag.options.ignore_random,
             },
+            scoring: challenge_flag.scoring.clone(),
             conditions: Default::default(),
         };
 
@@ -1054,8 +1050,7 @@ async fn ensure_port_claims(
                 .labels
                 .as_ref()
                 .and_then(|labels| labels.get(LABEL_INSTANCE))
-                .map(|label| label == &instance.name_any())
-                .unwrap_or(false)
+                .is_some_and(|label| label == &instance.name_any())
         })
         .map(|claim| claim.name_any())
         .filter(|name| !desired_claim_names.contains(name))

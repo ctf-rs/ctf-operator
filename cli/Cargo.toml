@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 default-run = "ctf"
 
+[lints]
+workspace = true
+
 [[bin]]
 name = "ctf"
 path = "src/main.rs"

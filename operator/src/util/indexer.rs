@@ -34,7 +34,7 @@ where
                             index.write().apply(obj.clone());
                         }
                         watcher::Event::Delete(obj) => {
-                            index.write().delete(&obj);
+                            index.write().delete(obj);
                         }
                         watcher::Event::Init => {
                             buffer = Vec::new();
@@ -46,7 +46,7 @@ where
                             index.write().rehydrate(buffer);
                             buffer = Vec::new();
                         }
-                    };
+                    }
 
                     yield Ok(ev);
                 },

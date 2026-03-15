@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Conditions;
 
-#[derive(CustomResource, Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
+#[derive(CustomResource, Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[kube(
 	group = "operator.ctf.rs",
 	version = "v1alpha1",

@@ -45,7 +45,7 @@ fn port_claim_to_reservation_ref(port_claim: &PortClaim) -> Option<ObjectRef<Res
         .reservation
         .namespace
         .as_deref()
-        .or_else(|| port_claim.metadata.namespace.as_deref())?;
+        .or(port_claim.metadata.namespace.as_deref())?;
 
     Some(ObjectRef::new(reservation_name).within(namespace))
 }

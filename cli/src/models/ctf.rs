@@ -80,11 +80,11 @@ pub enum CtfStorageKind {
     S3,
 }
 
-fn default_storage_path_style() -> bool {
+const fn default_storage_path_style() -> bool {
     true
 }
 
-fn default_instance_duration_seconds() -> u32 {
+const fn default_instance_duration_seconds() -> u32 {
     15 * 60
 }
 
@@ -105,6 +105,7 @@ pub struct CtfFlag {
 }
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]
+#[derive(Default)]
 pub struct CtfNetwork {
     #[garde(dive)]
     pub ports: CtfPorts,
@@ -132,14 +133,6 @@ impl Default for CtfFlag {
     }
 }
 
-impl Default for CtfNetwork {
-    fn default() -> Self {
-        Self {
-            ports: CtfPorts::default(),
-            ip: None,
-        }
-    }
-}
 
 impl Default for CtfPorts {
     fn default() -> Self {

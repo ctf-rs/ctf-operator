@@ -147,7 +147,7 @@ async fn build_s3_client(
         .request_checksum_calculation(aws_sdk_s3::config::RequestChecksumCalculation::WhenRequired);
 
     if let Some(credentials_provider) = shared.credentials_provider() {
-        builder = builder.credentials_provider(credentials_provider.clone());
+        builder = builder.credentials_provider(credentials_provider);
     }
 
     Ok(Client::from_conf(builder.build()))

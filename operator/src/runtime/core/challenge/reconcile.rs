@@ -71,6 +71,7 @@ fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
                 format: flag.format,
                 random: flag.random.clone(),
                 options: flag.options.clone(),
+                scoring: flag.scoring.clone(),
             })
             .collect(),
         containers: resource

@@ -65,7 +65,7 @@ pub enum ChallengeCategory {
 }
 
 impl ChallengeCategory {
-    pub fn label(self) -> &'static str {
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Web => "Web",
             Self::Pwn => "Pwn",
@@ -79,7 +79,7 @@ impl ChallengeCategory {
     }
 
     /// Canonical display order for categories.
-    pub fn sort_key(self) -> u8 {
+    pub const fn sort_key(self) -> u8 {
         match self {
             Self::Web => 0,
             Self::Pwn => 1,
@@ -106,7 +106,7 @@ pub enum ChallengeDifficulty {
 
 impl ChallengeDifficulty {
     /// Returns a sort key (lower = easier).
-    pub fn sort_key(self) -> u8 {
+    pub const fn sort_key(self) -> u8 {
         match self {
             Self::Veryeasy => 0,
             Self::Easy => 1,
@@ -116,7 +116,7 @@ impl ChallengeDifficulty {
         }
     }
 
-    pub fn label(self) -> &'static str {
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Veryeasy => "Very Easy",
             Self::Easy => "Easy",
@@ -126,7 +126,7 @@ impl ChallengeDifficulty {
         }
     }
 
-    pub fn css_class(self) -> &'static str {
+    pub const fn css_class(self) -> &'static str {
         match self {
             Self::Veryeasy => "veryeasy",
             Self::Easy => "easy",
@@ -264,9 +264,7 @@ impl Challenge {
         let mut file_names = HashSet::<String>::new();
         for file in &self.files {
             let name = file
-                .file_name()
-                .map(|value| value.to_string_lossy().to_string())
-                .unwrap_or_else(|| file.to_string_lossy().to_string());
+                .file_name().map_or_else(|| file.to_string_lossy().to_string(), |value| value.to_string_lossy().to_string());
 
             if !file_names.insert(name) {
                 return Err(ValidationError::DuplicateChallengeFileName);

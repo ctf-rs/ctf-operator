@@ -14,7 +14,7 @@ pub enum CtfError {
     KubeError(#[from] kube::Error),
 
     #[error("Finalizer Error: {0}")]
-    FinalizerError(#[from] Box<kube::runtime::finalizer::Error<CtfError>>),
+    FinalizerError(#[from] Box<kube::runtime::finalizer::Error<Self>>),
 
     #[error("Controller Error {0}")]
     ControllerError(#[from] ControllerError),

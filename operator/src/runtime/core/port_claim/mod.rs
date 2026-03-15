@@ -60,7 +60,7 @@ fn map_port_claims_for_reservation_set(
                     .unwrap_or_else(|| claim.metadata.namespace.as_deref().unwrap_or_default())
                     == reservation_ns
         })
-        .map(|claim| claim.to_object_ref(Default::default()))
+        .map(|claim| claim.to_object_ref(()))
         .collect()
 }
 

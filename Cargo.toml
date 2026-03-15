@@ -2,6 +2,46 @@
 resolver = "2"
 members = ["app","cli", "operator"]
 
+[workspace.lints.rust]
+unsafe_code = "forbid"
+rust_2018_idioms = { level = "warn", priority = -1 }
+# Allow drop order warnings for now - code is correct, just informational about 2024 edition
+tail_expr_drop_order = "allow"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+# Allow common patterns
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+redundant_pub_crate = "allow"
+significant_drop_tightening = "allow"
+future_not_send = "allow"
+# Allow these for practical reasons
+too_many_lines = "allow"
+too_many_arguments = "allow"
+needless_pass_by_value = "allow"
+struct_field_names = "allow"
+multiple_bound_locations = "allow"
+type_repetition_in_bounds = "allow"
+default_trait_access = "allow"
+struct_excessive_bools = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+unnecessary_wraps = "allow"
+trivially_copy_pass_by_ref = "allow"
+missing_const_for_fn = "allow"
+or_fun_call = "allow"
+use_self = "allow"
+match_same_arms = "allow"
+option_if_let_else = "allow"
+format_push_string = "allow"
+assigning_clones = "allow"
+return_self_not_must_use = "allow"
+
 [[workspace.metadata.leptos]]
 name = "app"
 bin-package = "app"

@@ -92,7 +92,7 @@ fn reservation_ref_for_port_claim(port_claim: &PortClaim) -> Option<ObjectRef<Re
         .reservation
         .namespace
         .as_deref()
-        .or_else(|| port_claim.metadata.namespace.as_deref())?;
+        .or(port_claim.metadata.namespace.as_deref())?;
 
     Some(ObjectRef::new(reservation_name).within(namespace))
 }
@@ -125,8 +125,7 @@ fn find_reservation_set(
     if !reservation_set
         .status
         .as_ref()
-        .map(|status| status.conditions.all_true())
-        .unwrap_or(false)
+        .is_some_and(|status| status.conditions.all_true())
     {
         status.conditions.set(
             "ReservationSet",
@@ -185,22 +184,19 @@ fn allocate_port(
         .filter(|port| range.contains(port) && !used_ports.contains(port))
         .or_else(|| pick_free_port(range, &used_ports));
 
-    match selected {
-        Some(port) => {
-            status.port = Some(port);
-            status
-                .conditions
-                .set("Allocation", ConditionStatus::True, "Allocated", "");
-        }
-        None => {
-            status.port = None;
-            status.conditions.set(
-                "Allocation",
-                ConditionStatus::False,
-                "Exhausted",
-                "no free ports in reservation range",
-            );
-        }
+    if let Some(port) = selected {
+        status.port = Some(port);
+        status
+            .conditions
+            .set("Allocation", ConditionStatus::True, "Allocated", "");
+    } else {
+        status.port = None;
+        status.conditions.set(
+            "Allocation",
+            ConditionStatus::False,
+            "Exhausted",
+            "no free ports in reservation range",
+        );
     }
 }
 

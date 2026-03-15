@@ -45,7 +45,7 @@ pub struct CtfSpec {
     pub network: crate::models::CtfNetwork,
 }
 
-fn default_instance_duration_seconds() -> u32 {
+const fn default_instance_duration_seconds() -> u32 {
     15 * 60
 }
 

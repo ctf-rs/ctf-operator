@@ -74,6 +74,6 @@ pub enum ChallengeFileRef {
     },
 }
 
-fn default_path_style() -> bool {
+const fn default_path_style() -> bool {
     true
 }

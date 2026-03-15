@@ -18,6 +18,7 @@
       "approve": true,
       "matchCommandLine": true
     },
-    "timeout": true
+    "timeout": true,
+    "cargo clippy": true
   }
 }

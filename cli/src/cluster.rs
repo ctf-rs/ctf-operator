@@ -327,8 +327,7 @@ async fn install_operator_chart(
         values.push_str(&format!("  - {namespace}\n"));
     }
     values.push_str(&format!(
-        "instanceNamespacePrefix: {}\n",
-        instance_namespace_prefix
+        "instanceNamespacePrefix: {instance_namespace_prefix}\n"
     ));
 
     fs::write(&values_path, values).await?;
@@ -543,15 +542,13 @@ async fn apply_ctf_bundle(
 fn temp_file_path(prefix: &str, ext: &str) -> PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or(0);
+        .map_or(0, |duration| duration.as_nanos());
     std::env::temp_dir().join(format!("{prefix}-{nanos}.{ext}"))
 }
 
 fn temp_dir_path(prefix: &str) -> PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or(0);
+        .map_or(0, |duration| duration.as_nanos());
     std::env::temp_dir().join(format!("{prefix}-{nanos}"))
 }

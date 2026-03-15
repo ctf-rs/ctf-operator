@@ -27,7 +27,7 @@ pub struct CtfState {
 
 impl CtfState {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub const fn new(
         client: Client,
         config: OperatorConfig,
         ctfs: Store<Ctf>,

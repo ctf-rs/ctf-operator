@@ -103,25 +103,25 @@ impl Default for FlagScoring {
 
 impl FlagScoring {
     /// Calculate points for this flag given the number of solves.
-    /// Uses formula: max(min_points, base_points / (1 + (solves / decay)))
+    /// Uses formula: `max(min_points`, `base_points` / (1 + (solves / decay)))
     pub fn calculate_points(&self, solves: u32) -> u32 {
         if solves == 0 {
             return self.base_points;
         }
-        let points = (self.base_points as f64) / (1.0 + (solves as f64 / self.decay as f64));
-        points.round().max(self.min_points as f64) as u32
+        let points = f64::from(self.base_points) / (1.0 + (f64::from(solves) / f64::from(self.decay)));
+        points.round().max(f64::from(self.min_points)) as u32
     }
 }
 
-fn default_base_points() -> u32 {
+const fn default_base_points() -> u32 {
     500
 }
 
-fn default_min_points() -> u32 {
+const fn default_min_points() -> u32 {
     50
 }
 
-fn default_decay() -> u32 {
+const fn default_decay() -> u32 {
     6
 }
 
@@ -138,28 +138,28 @@ fn validate_unique_chars(value: &str, _: &()) -> garde::Result {
 }
 
 #[allow(dead_code)]
-fn default_random_len() -> u8 {
+const fn default_random_len() -> u8 {
     8
 }
 
 #[allow(dead_code)]
-fn default_random_upper() -> bool {
+const fn default_random_upper() -> bool {
     true
 }
 
 #[allow(dead_code)]
-fn default_random_lower() -> bool {
+const fn default_random_lower() -> bool {
     true
 }
 
 #[allow(dead_code)]
-fn default_random_digits() -> bool {
+const fn default_random_digits() -> bool {
     true
 }
 
 #[allow(dead_code)]
 fn default_random_special_chars() -> String {
-    "".into()
+    String::new()
 }
 
 impl Flag {
@@ -223,7 +223,7 @@ impl Flag {
 
     pub fn generate(&self) -> String {
         let prefix = &self.prefix;
-        let mut body = self.body.to_owned();
+        let mut body = self.body.clone();
         if let Some(random) = &self.random {
             body.push_str(&random.generate());
         }

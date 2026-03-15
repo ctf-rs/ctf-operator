@@ -10,7 +10,6 @@ pub use reconciler::*;
 pub use waiter::*;
 pub use watcher::*;
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::de::DeserializeOwned;
 use std::fmt::Debug;
@@ -24,9 +23,9 @@ pub trait KubeObject:
         let kind = Self::kind(&());
 
         if group.is_empty() {
-            format!("{}, {}", version, kind)
+            format!("{version}, {kind}")
         } else {
-            format!("{}/{}, {}", group, version, kind)
+            format!("{group}/{version}, {kind}")
         }
     }
 
@@ -43,8 +42,8 @@ impl<T> KubeObject for T where
 {
 }
 
-static DNS1123_LABEL: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$").unwrap());
+static DNS1123_LABEL: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$").unwrap());
 
 pub fn is_dns1123_label(name: &str) -> bool {
     DNS1123_LABEL.is_match(name)

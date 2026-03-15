@@ -83,7 +83,7 @@ impl Conditions {
                 entry.insert(Condition {
                     typ,
                     status,
-                    last_transition_time: Some(now.clone()),
+                    last_transition_time: Some(now),
                     last_probe_time: None,
                     reason: Some(reason),
                     message: Some(message),
@@ -98,7 +98,7 @@ impl Conditions {
 
                 if condition.status != status {
                     condition.status = status;
-                    condition.last_transition_time = Some(now.clone());
+                    condition.last_transition_time = Some(now);
                     changed = true;
                 }
 

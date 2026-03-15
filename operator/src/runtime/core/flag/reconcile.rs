@@ -47,6 +47,7 @@ fn validate_and_generate(resource: &Flag, status: &mut FlagStatus) {
         body: resource.spec.body.clone(),
         random: resource.spec.random.clone(),
         options: resource.spec.options.clone(),
+        scoring: resource.spec.scoring.clone(),
     };
 
     match core.validate_strict() {

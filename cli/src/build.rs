@@ -96,9 +96,9 @@ pub async fn build(args: BuildArgs) -> anyhow::Result<()> {
 
                 if !dockerfile_path.exists() {
                     bail!(
-                        "Container: {} Dockerfile not found at {:?}",
+                        "Container: {} Dockerfile not found at {}",
                         container.name,
-                        dockerfile_path
+                        dockerfile_path.display()
                     );
                 }
 
@@ -159,10 +159,10 @@ async fn run_streamed(mut cmd: Command) -> anyhow::Result<()> {
     let status = cmd
         .status()
         .await
-        .with_context(|| format!("failed to spawn command: {:?}", cmd))?;
+        .with_context(|| format!("failed to spawn command: {cmd:?}"))?;
 
     if !status.success() {
-        bail!("command failed with exit status: {}", status);
+        bail!("command failed with exit status: {status}");
     }
 
     Ok(())

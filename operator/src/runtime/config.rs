@@ -72,7 +72,7 @@ pub enum InstanceServiceType {
 }
 
 impl InstanceServiceType {
-    pub fn as_k8s_str(&self) -> &'static str {
+    pub const fn as_k8s_str(&self) -> &'static str {
         match self {
             Self::ClusterIp => "ClusterIP",
             Self::LoadBalancer => "LoadBalancer",
@@ -80,7 +80,7 @@ impl InstanceServiceType {
     }
 }
 
-fn default_instance_replicas() -> i32 {
+const fn default_instance_replicas() -> i32 {
     1
 }
 

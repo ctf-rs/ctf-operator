@@ -43,7 +43,7 @@ pub fn controller(
             move |ctf| map_instances_for_ctf(ctf.as_ref(), ctx.instances.state())
         })?
         .watches(challenge_watcher, {
-            let ctx = ctx.clone();
+            let ctx = ctx;
             move |challenge| map_instances_for_challenge(challenge.as_ref(), ctx.instances.state())
         })?
         .watches(flag_watcher, |flag| {
@@ -74,7 +74,7 @@ fn map_instances_for_ctf(
         .filter(|instance| {
             instance.metadata.namespace.as_deref() == Some(ctf_ns) && instance.spec.ctf == ctf_name
         })
-        .map(|instance| instance.to_object_ref(Default::default()))
+        .map(|instance| instance.to_object_ref(()))
         .collect()
 }
 
@@ -90,7 +90,7 @@ fn map_instances_for_challenge(
             instance.metadata.namespace.as_deref() == Some(challenge_ns)
                 && instance.spec.challenge == challenge_name
         })
-        .map(|instance| instance.to_object_ref(Default::default()))
+        .map(|instance| instance.to_object_ref(()))
         .collect()
 }
 

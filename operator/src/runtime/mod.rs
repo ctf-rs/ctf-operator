@@ -40,9 +40,7 @@ pub async fn run(
     let runtime_config = load_operator_runtime_config(config_path.as_deref())?;
     info!(
         config_path = %config_path
-            .as_deref()
-            .map(|path| path.display().to_string())
-            .unwrap_or_else(|| "<not set>".to_owned()),
+            .as_deref().map_or_else(|| "<not set>".to_owned(), |path| path.display().to_string()),
         registry_configs = runtime_config.registry.len(),
         s3_configs = runtime_config.storage.s3.len(),
         "loaded operator runtime config"
