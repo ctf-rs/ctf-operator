@@ -712,15 +712,9 @@ fn collect_instance_resources(
 )]
 fn target_namespace_for_instance(
     instance: &Instance,
-    state: &CtfState,
+    _state: &CtfState,
 ) -> Result<String, CtfError> {
-    let name = instance.name_any();
-
-    let mut ns = format!(
-        "{}{}",
-        state.config.instance_namespace_prefix,
-        name.to_ascii_lowercase()
-    );
+    let mut ns = instance.name_any().to_ascii_lowercase();
     if ns.len() > 63 {
         ns.truncate(63);
     }

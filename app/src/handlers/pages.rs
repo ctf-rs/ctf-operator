@@ -270,11 +270,7 @@ pub async fn challenge_page(
 
             // Fetch allocated ports from PortClaims when instance is ready
             if ready {
-                let target_ns = format!(
-                    "{}{}",
-                    state.config.instance_namespace_prefix,
-                    existing.name_any()
-                );
+                let target_ns = existing.name_any();
                 if let Ok(allocated_ports) =
                     get_allocated_ports_for_instance(&state.kube, &target_ns, &existing.name_any())
                         .await

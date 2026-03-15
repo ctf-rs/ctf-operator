@@ -1,9 +1,13 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, Statement};
+use sea_orm::{
+    ColumnTrait, ConnectionTrait, DatabaseConnection, DbBackend, EntityTrait, QueryFilter,
+    QuerySelect, Statement, sea_query::Expr,
+};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
+use crate::db::entity::flag_submissions;
 use crate::{metrics, state::AppState};
 
 /// Key for flag in scoreboard: (ctf_name, challenge_name, flag_name)
@@ -129,7 +133,8 @@ fn update_instance_gauges(state: &AppState) {
         m.active_instances
             .record(*count, &m.attrs(&[metrics::challenge_kv(challenge)]));
     }
-    m.active_users.record(active_user_ids.len() as u64, &m.attrs(&[]));
+    m.active_users
+        .record(active_user_ids.len() as u64, &m.attrs(&[]));
 }
 
 /// Refresh the scoreboard cache from database
@@ -206,27 +211,23 @@ async fn get_flag_solve_counts(
     db: &DatabaseConnection,
     ctf_name: &str,
 ) -> anyhow::Result<HashMap<(String, String), u32>> {
-    let rows = db
-        .query_all_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            r#"
-            SELECT challenge_name, flag_name, COUNT(DISTINCT user_id) as solve_count
-            FROM flag_submissions
-            WHERE ctf_name = $1 AND accepted = true
-            GROUP BY challenge_name, flag_name
-            "#,
-            [ctf_name.into()],
-        ))
+    let rows: Vec<(String, String, i64)> = flag_submissions::Entity::find()
+        .select_only()
+        .column(flag_submissions::Column::ChallengeName)
+        .column(flag_submissions::Column::FlagName)
+        .column_as(Expr::cust("COUNT(DISTINCT user_id)"), "solve_count")
+        .filter(flag_submissions::Column::CtfName.eq(ctf_name))
+        .filter(flag_submissions::Column::Accepted.eq(true))
+        .group_by(flag_submissions::Column::ChallengeName)
+        .group_by(flag_submissions::Column::FlagName)
+        .into_tuple()
+        .all(db)
         .await?;
 
-    let mut map = HashMap::new();
-    for row in &rows {
-        let ch: String = row.try_get_by_index(0)?;
-        let fl: String = row.try_get_by_index(1)?;
-        let cnt: i64 = row.try_get_by_index(2)?;
-        map.insert((ch, fl), cnt as u32);
-    }
-    Ok(map)
+    Ok(rows
+        .into_iter()
+        .map(|(ch, fl, cnt)| ((ch, fl), cnt as u32))
+        .collect())
 }
 
 /// Calculate user scores based on their solves

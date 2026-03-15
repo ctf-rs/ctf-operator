@@ -39,7 +39,7 @@ ctf:
       start: 12000
       end: 13000
 
-instanceNamePrefix: app-inst
+instanceNamePrefix: ctf-inst
 
 database:
   url: ""

@@ -51,7 +51,7 @@ spec:
             - name: CTF_NAMESPACE
               value: {{ .Values.ctf.namespace | default "ctf" | quote }}
             - name: INSTANCE_NAME_PREFIX
-              value: {{ .Values.instanceNamePrefix | quote }}
+              value: {{ .Values.instanceNamePrefix | default "ctf-inst" | quote }}
             - name: SESSION_COOKIE_NAME
               value: {{ .Values.session.cookieName | quote }}
           resources:

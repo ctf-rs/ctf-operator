@@ -119,10 +119,7 @@ pub async fn submit_flag(
         return Ok(());
     }
 
-    let runtime_ns = format!(
-        "{}{}",
-        state.config.instance_namespace_prefix, instance_name
-    );
+    let runtime_ns = instance_name.to_string();
     let flag_obj_name = format!("{}-{}", instance_name, flag_name);
     let flag_obj_ref = ObjectRef::<Flag>::new(&flag_obj_name).within(&runtime_ns);
 

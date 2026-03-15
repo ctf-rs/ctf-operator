@@ -18,8 +18,6 @@ pub struct AppConfig {
     pub challenge_files_s3_session_token: Option<String>,
     /// Base domain for instance connections (e.g., "ctf.local").
     pub instance_base_domain: Option<String>,
-    /// Prefix for instance namespaces (default: "ctf-inst-").
-    pub instance_namespace_prefix: String,
     /// If true, extract client IP from proxy headers (X-Forwarded-For, etc.).
     /// If false, use the socket connection IP directly.
     pub behind_reverse_proxy: bool,
@@ -52,7 +50,7 @@ impl AppConfig {
         let ctf_namespace = std::env::var("CTF_NAMESPACE").unwrap_or_else(|_| "ctf".to_string());
 
         let instance_name_prefix =
-            std::env::var("INSTANCE_NAME_PREFIX").unwrap_or_else(|_| "app-inst".to_string());
+            std::env::var("INSTANCE_NAME_PREFIX").unwrap_or_else(|_| "ctf-inst".to_string());
         let session_cookie_name =
             std::env::var("SESSION_COOKIE_NAME").unwrap_or_else(|_| "ctf_app_session".to_string());
         let challenge_files_s3_endpoint = std::env::var("CHALLENGE_FILES_S3_ENDPOINT")
@@ -97,8 +95,6 @@ impl AppConfig {
             .ok()
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty());
-        let instance_namespace_prefix =
-            std::env::var("INSTANCE_NAMESPACE_PREFIX").unwrap_or_else(|_| "ctf-inst-".to_string());
         let behind_reverse_proxy = std::env::var("BEHIND_REVERSE_PROXY")
             .ok()
             .as_deref()
@@ -132,7 +128,6 @@ impl AppConfig {
             challenge_files_s3_secret_access_key,
             challenge_files_s3_session_token,
             instance_base_domain,
-            instance_namespace_prefix,
             behind_reverse_proxy,
         })
     }

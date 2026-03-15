@@ -1,7 +1,7 @@
 use anyhow::Result;
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, DatabaseConnection, DbBackend, EntityTrait, PaginatorTrait,
-    QueryFilter, Set, Statement, sea_query::OnConflict,
+    ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter, QuerySelect, Set,
+    sea_query::{Expr, OnConflict},
 };
 
 use super::entity::{flag_submissions, solved_challenges};
@@ -109,69 +109,51 @@ pub async fn get_solved_flags_for_user(
     challenge_name: &str,
     ctf_name: &str,
 ) -> Result<Vec<String>> {
-    // Use raw SQL for SELECT DISTINCT
-    let rows = db
-        .query_all_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            r#"SELECT DISTINCT flag_name
-               FROM flag_submissions
-               WHERE user_id = $1 AND challenge_name = $2 AND ctf_name = $3 AND accepted = true"#,
-            [user_id.into(), challenge_name.into(), ctf_name.into()],
-        ))
-        .await?;
-
-    Ok(rows
-        .iter()
-        .filter_map(|r| r.try_get_by_index::<String>(0).ok())
-        .collect())
+    Ok(flag_submissions::Entity::find()
+        .select_only()
+        .column(flag_submissions::Column::FlagName)
+        .distinct()
+        .filter(flag_submissions::Column::UserId.eq(user_id))
+        .filter(flag_submissions::Column::ChallengeName.eq(challenge_name))
+        .filter(flag_submissions::Column::CtfName.eq(ctf_name))
+        .filter(flag_submissions::Column::Accepted.eq(true))
+        .into_tuple::<String>()
+        .all(db)
+        .await?)
 }
 
-/// Count how many flags are solved for a challenge by a user.
+/// Count how many distinct flags are solved for a challenge by a user.
 pub async fn count_solved_flags_for_user(
     db: &DatabaseConnection,
     user_id: i64,
     challenge_name: &str,
     ctf_name: &str,
 ) -> Result<i64> {
-    let result = db
-        .query_one_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            r#"SELECT COUNT(DISTINCT flag_name)
-               FROM flag_submissions
-               WHERE user_id = $1 AND challenge_name = $2 AND ctf_name = $3 AND accepted = true"#,
-            [user_id.into(), challenge_name.into(), ctf_name.into()],
-        ))
-        .await?;
-
-    match result {
-        Some(row) => Ok(row.try_get_by_index::<i64>(0)?),
-        None => Ok(0),
-    }
+    let flags = get_solved_flags_for_user(db, user_id, challenge_name, ctf_name).await?;
+    Ok(flags.len() as i64)
 }
 
-/// Returns a map of (ctf_name, challenge_name) → count of solved flags for a user.
+/// Returns a map of (ctf_name, challenge_name) → count of distinct solved flags for a user.
 /// Used to detect partial solves on the index page.
 pub async fn get_partial_solve_counts_for_user(
     db: &DatabaseConnection,
     user_id: i64,
 ) -> Result<std::collections::HashMap<(String, String), i64>> {
-    let rows = db
-        .query_all_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            r#"SELECT ctf_name, challenge_name, COUNT(DISTINCT flag_name)
-               FROM flag_submissions
-               WHERE user_id = $1 AND accepted = true
-               GROUP BY ctf_name, challenge_name"#,
-            [user_id.into()],
-        ))
+    let rows: Vec<(String, String, i64)> = flag_submissions::Entity::find()
+        .select_only()
+        .column(flag_submissions::Column::CtfName)
+        .column(flag_submissions::Column::ChallengeName)
+        .column_as(Expr::cust("COUNT(DISTINCT flag_name)"), "count")
+        .filter(flag_submissions::Column::UserId.eq(user_id))
+        .filter(flag_submissions::Column::Accepted.eq(true))
+        .group_by(flag_submissions::Column::CtfName)
+        .group_by(flag_submissions::Column::ChallengeName)
+        .into_tuple()
+        .all(db)
         .await?;
 
-    let mut map = std::collections::HashMap::new();
-    for row in &rows {
-        let ctf: String = row.try_get_by_index(0)?;
-        let challenge: String = row.try_get_by_index(1)?;
-        let count: i64 = row.try_get_by_index(2)?;
-        map.insert((ctf, challenge), count);
-    }
-    Ok(map)
+    Ok(rows
+        .into_iter()
+        .map(|(ctf, challenge, count)| ((ctf, challenge), count))
+        .collect())
 }
