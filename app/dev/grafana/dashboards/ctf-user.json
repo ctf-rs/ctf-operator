@@ -1,0 +1,503 @@
+{
+    "annotations": { "list": [] },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "id": null,
+    "links": [],
+    "panels": [
+        {
+            "collapsed": false,
+            "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+            "id": 100,
+            "title": "User Overview",
+            "type": "row"
+        },
+        {
+            "datasource": { "type": "postgres", "uid": "postgres" },
+            "fieldConfig": {
+                "defaults": {
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [{ "color": "blue", "value": null }]
+                    },
+                    "color": { "mode": "thresholds" }
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+            "id": 1,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+                "textMode": "auto"
+            },
+            "title": "Total Submissions",
+            "type": "stat",
+            "targets": [
+                {
+                    "rawSql": "SELECT COUNT(*) FROM flag_submissions fs JOIN users u ON u.id = fs.user_id WHERE COALESCE(u.name, u.email, u.sub) = '$user' AND fs.ctf_name = '$ctf';",
+                    "refId": "A",
+                    "format": "table"
+                }
+            ]
+        },
+        {
+            "datasource": { "type": "postgres", "uid": "postgres" },
+            "fieldConfig": {
+                "defaults": {
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [{ "color": "green", "value": null }]
+                    },
+                    "color": { "mode": "thresholds" }
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+            "id": 2,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+                "textMode": "auto"
+            },
+            "title": "Correct Submissions",
+            "type": "stat",
+            "targets": [
+                {
+                    "rawSql": "SELECT COUNT(*) FROM flag_submissions fs JOIN users u ON u.id = fs.user_id WHERE COALESCE(u.name, u.email, u.sub) = '$user' AND fs.ctf_name = '$ctf' AND fs.accepted = true;",
+                    "refId": "A",
+                    "format": "table"
+                }
+            ]
+        },
+        {
+            "datasource": { "type": "postgres", "uid": "postgres" },
+            "fieldConfig": {
+                "defaults": {
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [{ "color": "purple", "value": null }]
+                    },
+                    "color": { "mode": "thresholds" }
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+            "id": 3,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+                "textMode": "auto"
+            },
+            "title": "Challenges Solved",
+            "type": "stat",
+            "targets": [
+                {
+                    "rawSql": "SELECT COUNT(*) FROM solved_challenges sc JOIN users u ON u.id = sc.user_id WHERE COALESCE(u.name, u.email, u.sub) = '$user' AND sc.ctf_name = '$ctf';",
+                    "refId": "A",
+                    "format": "table"
+                }
+            ]
+        },
+        {
+            "datasource": { "type": "postgres", "uid": "postgres" },
+            "fieldConfig": {
+                "defaults": {
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [{ "color": "red", "value": null }]
+                    },
+                    "color": { "mode": "thresholds" }
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+            "id": 4,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+                "textMode": "auto"
+            },
+            "title": "Cheats Detected",
+            "type": "stat",
+            "targets": [
+                {
+                    "rawSql": "SELECT COUNT(*) FROM flag_submissions fs JOIN users u ON u.id = fs.user_id WHERE COALESCE(u.name, u.email, u.sub) = '$user' AND fs.ctf_name = '$ctf' AND fs.cheated = true;",
+                    "refId": "A",
+                    "format": "table"
+                }
+            ]
+        },
+        {
+            "datasource": { "type": "postgres", "uid": "postgres" },
+            "fieldConfig": {
+                "defaults": {
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [{ "color": "orange", "value": null }]
+                    },
+                    "color": { "mode": "thresholds" }
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+            "id": 5,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+                "textMode": "auto"
+            },
+            "title": "Instances Spawned",
+            "type": "stat",
+            "targets": [
+                {
+                    "rawSql": "SELECT COUNT(*) FROM instance_actions ia JOIN users u ON u.id = ia.user_id WHERE COALESCE(u.name, u.email, u.sub) = '$user' AND ia.ctf_name = '$ctf' AND ia.action = 'spawn';",
+                    "refId": "A",
+                    "format": "table"
+                }
+            ]
+        },
+        {
+            "datasource": { "type": "postgres", "uid": "postgres" },
+            "fieldConfig": {
+                "defaults": {
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [{ "color": "yellow", "value": null }]
+                    },
+                    "color": { "mode": "thresholds" }
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+            "id": 6,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+                "textMode": "auto"
+            },
+            "title": "File Downloads",
+            "type": "stat",
+            "targets": [
+                {
+                    "rawSql": "SELECT COUNT(*) FROM downloads d JOIN users u ON u.id = d.user_id WHERE COALESCE(u.name, u.email, u.sub) = '$user' AND d.ctf_name = '$ctf';",
+                    "refId": "A",
+                    "format": "table"
+                }
+            ]
+        },
+
+        {
+            "collapsed": false,
+            "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+            "id": 101,
+            "title": "Flag Submissions",
+            "type": "row"
+        },
+        {
+            "datasource": { "type": "postgres", "uid": "postgres" },
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "line",
+                        "lineWidth": 2,
+                        "fillOpacity": 20,
+                        "gradientMode": "scheme",
+                        "pointSize": 5,
+                        "showPoints": "auto"
+                    }
+                },
+                "overrides": [
+                    {
+                        "matcher": { "id": "byName", "options": "correct" },
+                        "properties": [
+                            { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }
+                        ]
+                    },
+                    {
+                        "matcher": { "id": "byName", "options": "incorrect" },
+                        "properties": [
+                            { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+            "id": 10,
+            "options": {
+                "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["sum"] },
+                "tooltip": { "mode": "multi" }
+            },
+            "title": "Submissions Over Time",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "rawSql": "SELECT date_trunc('hour', fs.created_at) AS time, CASE WHEN fs.cheated THEN 'cheated' WHEN fs.accepted THEN 'correct' ELSE 'incorrect' END AS metric, COUNT(*) AS value FROM flag_submissions fs JOIN users u ON u.id = fs.user_id WHERE COALESCE(u.name, u.email, u.sub) = '$user' AND fs.ctf_name = '$ctf' AND fs.created_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1, 2 ORDER BY 1;",
+                    "refId": "A",
+                    "format": "time_series"
+                }
+            ]
+        },
+        {
+            "datasource": { "type": "postgres", "uid": "postgres" },
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "bars",
+                        "lineWidth": 1,
+                        "fillOpacity": 80,
+                        "stacking": { "mode": "normal" }
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+            "id": 11,
+            "options": {
+                "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["sum"] },
+                "tooltip": { "mode": "multi" }
+            },
+            "title": "Submissions by Challenge",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "rawSql": "SELECT date_trunc('hour', fs.created_at) AS time, fs.challenge_name AS metric, COUNT(*) AS value FROM flag_submissions fs JOIN users u ON u.id = fs.user_id WHERE COALESCE(u.name, u.email, u.sub) = '$user' AND fs.ctf_name = '$ctf' AND fs.accepted = true AND fs.created_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1, 2 ORDER BY 1;",
+                    "refId": "A",
+                    "format": "time_series"
+                }
+            ]
+        },
+
+        {
+            "collapsed": false,
+            "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+            "id": 102,
+            "title": "Challenges Solved",
+            "type": "row"
+        },
+        {
+            "datasource": { "type": "postgres", "uid": "postgres" },
+            "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+            },
+            "gridPos": { "h": 8, "w": 24, "x": 0, "y": 15 },
+            "id": 20,
+            "options": {
+                "showHeader": true,
+                "sortBy": [{ "displayName": "solved_at", "desc": true }],
+                "cellHeight": "sm"
+            },
+            "title": "Solved Challenges",
+            "type": "table",
+            "targets": [
+                {
+                    "rawSql": "SELECT sc.challenge_name AS \"Challenge\", sc.solved_at AS \"Solved At\" FROM solved_challenges sc JOIN users u ON u.id = sc.user_id WHERE COALESCE(u.name, u.email, u.sub) = '$user' AND sc.ctf_name = '$ctf' ORDER BY sc.solved_at DESC;",
+                    "refId": "A",
+                    "format": "table"
+                }
+            ]
+        },
+
+        {
+            "collapsed": false,
+            "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+            "id": 103,
+            "title": "Instance Activity",
+            "type": "row"
+        },
+        {
+            "datasource": { "type": "postgres", "uid": "postgres" },
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "line",
+                        "lineWidth": 2,
+                        "fillOpacity": 20,
+                        "gradientMode": "scheme",
+                        "pointSize": 5,
+                        "showPoints": "auto"
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+            "id": 30,
+            "options": {
+                "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["sum"] },
+                "tooltip": { "mode": "multi" }
+            },
+            "title": "Instance Actions Over Time",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "rawSql": "SELECT date_trunc('hour', ia.created_at) AS time, ia.action AS metric, COUNT(*) AS value FROM instance_actions ia JOIN users u ON u.id = ia.user_id WHERE COALESCE(u.name, u.email, u.sub) = '$user' AND ia.ctf_name = '$ctf' AND ia.created_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1, 2 ORDER BY 1;",
+                    "refId": "A",
+                    "format": "time_series"
+                }
+            ]
+        },
+        {
+            "datasource": { "type": "postgres", "uid": "postgres" },
+            "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+            },
+            "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+            "id": 31,
+            "options": {
+                "showHeader": true,
+                "sortBy": [{ "displayName": "Time", "desc": true }],
+                "cellHeight": "sm"
+            },
+            "title": "Recent Instance Actions",
+            "type": "table",
+            "targets": [
+                {
+                    "rawSql": "SELECT ia.created_at AS \"Time\", ia.action AS \"Action\", ia.challenge_name AS \"Challenge\", ia.instance_name AS \"Instance\", ia.ip_address AS \"IP\" FROM instance_actions ia JOIN users u ON u.id = ia.user_id WHERE COALESCE(u.name, u.email, u.sub) = '$user' AND ia.ctf_name = '$ctf' ORDER BY ia.created_at DESC LIMIT 50;",
+                    "refId": "A",
+                    "format": "table"
+                }
+            ]
+        },
+
+        {
+            "collapsed": false,
+            "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+            "id": 104,
+            "title": "File Downloads",
+            "type": "row"
+        },
+        {
+            "datasource": { "type": "postgres", "uid": "postgres" },
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "bars",
+                        "lineWidth": 1,
+                        "fillOpacity": 60,
+                        "stacking": { "mode": "normal" }
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
+            "id": 40,
+            "options": {
+                "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["sum"] },
+                "tooltip": { "mode": "multi" }
+            },
+            "title": "Downloads Over Time",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "rawSql": "SELECT date_trunc('hour', d.created_at) AS time, d.challenge_name AS metric, COUNT(*) AS value FROM downloads d JOIN users u ON u.id = d.user_id WHERE COALESCE(u.name, u.email, u.sub) = '$user' AND d.ctf_name = '$ctf' AND d.created_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1, 2 ORDER BY 1;",
+                    "refId": "A",
+                    "format": "time_series"
+                }
+            ]
+        },
+        {
+            "datasource": { "type": "postgres", "uid": "postgres" },
+            "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+            },
+            "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
+            "id": 41,
+            "options": {
+                "showHeader": true,
+                "sortBy": [{ "displayName": "Time", "desc": true }],
+                "cellHeight": "sm"
+            },
+            "title": "Recent Downloads",
+            "type": "table",
+            "targets": [
+                {
+                    "rawSql": "SELECT d.created_at AS \"Time\", d.challenge_name AS \"Challenge\", d.file_url AS \"File\", d.ip_address AS \"IP\" FROM downloads d JOIN users u ON u.id = d.user_id WHERE COALESCE(u.name, u.email, u.sub) = '$user' AND d.ctf_name = '$ctf' ORDER BY d.created_at DESC LIMIT 50;",
+                    "refId": "A",
+                    "format": "table"
+                }
+            ]
+        },
+
+        {
+            "collapsed": false,
+            "gridPos": { "h": 1, "w": 24, "x": 0, "y": 41 },
+            "id": 105,
+            "title": "Submission Audit Log",
+            "type": "row"
+        },
+        {
+            "datasource": { "type": "postgres", "uid": "postgres" },
+            "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+            },
+            "gridPos": { "h": 10, "w": 24, "x": 0, "y": 42 },
+            "id": 50,
+            "options": {
+                "showHeader": true,
+                "sortBy": [{ "displayName": "Time", "desc": true }],
+                "cellHeight": "sm"
+            },
+            "title": "All Flag Submissions",
+            "type": "table",
+            "targets": [
+                {
+                    "rawSql": "SELECT fs.created_at AS \"Time\", fs.challenge_name AS \"Challenge\", fs.flag_name AS \"Flag\", fs.submitted_flag AS \"Submitted\", CASE WHEN fs.cheated THEN 'CHEATED' WHEN fs.accepted THEN 'Correct' ELSE 'Incorrect' END AS \"Result\", fs.ip_address AS \"IP\" FROM flag_submissions fs JOIN users u ON u.id = fs.user_id WHERE COALESCE(u.name, u.email, u.sub) = '$user' AND fs.ctf_name = '$ctf' ORDER BY fs.created_at DESC LIMIT 100;",
+                    "refId": "A",
+                    "format": "table"
+                }
+            ]
+        }
+    ],
+    "refresh": "",
+    "schemaVersion": 39,
+    "tags": ["ctf", "user"],
+    "templating": {
+        "list": [
+            {
+                "name": "ctf",
+                "label": "CTF",
+                "type": "query",
+                "datasource": { "type": "postgres", "uid": "postgres" },
+                "query": "SELECT DISTINCT ctf_name FROM instance_actions UNION SELECT DISTINCT ctf_name FROM flag_submissions ORDER BY 1;",
+                "refresh": 2,
+                "includeAll": false,
+                "multi": false,
+                "sort": 1
+            },
+            {
+                "name": "user",
+                "label": "User",
+                "type": "query",
+                "datasource": { "type": "postgres", "uid": "postgres" },
+                "query": "SELECT DISTINCT COALESCE(u.name, u.email, u.sub) AS display_name FROM users u ORDER BY 1;",
+                "refresh": 2,
+                "includeAll": false,
+                "multi": false,
+                "sort": 1
+            }
+        ]
+    },
+    "time": { "from": "now-24h", "to": "now" },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "CTF User Statistics",
+    "uid": "ctf-user-stats",
+    "version": 1
+}

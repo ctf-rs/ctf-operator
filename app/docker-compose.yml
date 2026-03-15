@@ -43,6 +43,7 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - ./dev/grafana/provisioning/dashboards:/otel-lgtm/grafana/conf/provisioning/dashboards:ro
+      - ./dev/grafana/provisioning/datasources/postgres.yaml:/otel-lgtm/grafana/conf/provisioning/datasources/postgres.yaml:ro
       - ./dev/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "3000:3000"   # Grafana UI

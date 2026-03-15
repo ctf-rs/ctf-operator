@@ -270,20 +270,19 @@ pub async fn challenge_page(
 
             // Fetch allocated ports from PortClaims when instance is ready
             if ready {
-                if let Some(uid) = &existing.metadata.uid {
-                    let target_ns = format!("{}{}", state.config.instance_namespace_prefix, uid);
-                    if let Ok(allocated_ports) = get_allocated_ports_for_instance(
-                        &state.kube,
-                        &target_ns,
-                        &existing.name_any(),
-                    )
-                    .await
-                    {
-                        for (port_name, allocated) in &allocated_ports {
-                            for port in &mut challenge.exposed_ports {
-                                if &port.name == port_name {
-                                    port.allocated_port = Some(*allocated);
-                                }
+                let target_ns = format!(
+                    "{}{}",
+                    state.config.instance_namespace_prefix,
+                    existing.name_any()
+                );
+                if let Ok(allocated_ports) =
+                    get_allocated_ports_for_instance(&state.kube, &target_ns, &existing.name_any())
+                        .await
+                {
+                    for (port_name, allocated) in &allocated_ports {
+                        for port in &mut challenge.exposed_ports {
+                            if &port.name == port_name {
+                                port.allocated_port = Some(*allocated);
                             }
                         }
                     }

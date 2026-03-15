@@ -74,9 +74,9 @@ pub fn get() -> &'static Metrics {
 }
 
 /// One-time initialisation.  Must be called after [`init_meter_provider`].
-pub fn init() {
+pub fn init(namespace: &str, ctf: &str) {
     let meter = opentelemetry::global::meter("ctf-app");
-    METRICS.get_or_init(|| Metrics::new(&meter));
+    METRICS.get_or_init(|| Metrics::new(&meter, namespace.to_owned(), ctf.to_owned()));
 }
 
 /// All application-level metric instruments.
@@ -85,49 +85,57 @@ pub fn init() {
     reason = "OTel instruments don't impl Debug"
 )]
 pub struct Metrics {
+    // -- Common labels (added to every data-point) -------------------------
+    ns_kv: KeyValue,
+    ctf_kv: KeyValue,
+
     // -- Flag submissions --------------------------------------------------
     /// Total flag submission attempts.
-    /// Labels: `challenge`, `result` (correct | incorrect | cheated)
+    /// Labels: `namespace`, `ctf`, `challenge`, `result`
     pub flag_submissions: Counter<u64>,
 
     // -- Cheat detection ---------------------------------------------------
     /// Total cheat detections (flag submitted by non-owner).
-    /// Labels: `challenge`
+    /// Labels: `namespace`, `ctf`, `challenge`
     pub cheats_detected: Counter<u64>,
 
     // -- Challenge progression ---------------------------------------------
     /// Total challenges fully solved (all flags accepted).
-    /// Labels: `challenge`
+    /// Labels: `namespace`, `ctf`, `challenge`
     pub challenges_solved: Counter<u64>,
 
     // -- Instance lifecycle ------------------------------------------------
-    /// Total instances spawned.  Labels: `challenge`
+    /// Total instances spawned.  Labels: `namespace`, `ctf`, `challenge`
     pub instances_spawned: Counter<u64>,
-    /// Total instance extend requests.  Labels: `challenge`
+    /// Total instance extend requests.  Labels: `namespace`, `ctf`, `challenge`
     pub instances_extended: Counter<u64>,
-    /// Total instances stopped by user.  Labels: `challenge`
+    /// Total instances stopped by user.  Labels: `namespace`, `ctf`, `challenge`
     pub instances_stopped: Counter<u64>,
 
     // -- File downloads ----------------------------------------------------
-    /// Total challenge file downloads.  Labels: `challenge`
+    /// Total challenge file downloads.  Labels: `namespace`, `ctf`, `challenge`
     pub file_downloads: Counter<u64>,
 
     // -- Live gauges -------------------------------------------------------
     /// Currently running instances (set externally by a periodic task or
-    /// watcher).  Labels: `challenge`
+    /// watcher).  Labels: `namespace`, `ctf`, `challenge`
     pub active_instances: Gauge<u64>,
     /// Currently authenticated users with at least one active instance.
+    /// Labels: `namespace`, `ctf`
     pub active_users: Gauge<u64>,
 
     // -- HTTP semantic convention metrics ----------------------------------
     /// HTTP server request duration histogram (seconds).
-    /// Labels: `http.request.method`, `http.route`, `http.response.status_code`
+    /// Labels: `namespace`, `ctf`, `http.request.method`, `http.route`,
+    ///         `http.response.status_code`
     pub http_server_request_duration: Histogram<f64>,
 }
 
 impl Metrics {
-    fn new(meter: &Meter) -> Self {
+    fn new(meter: &Meter, namespace: String, ctf: String) -> Self {
         Self {
+            ns_kv: KeyValue::new("namespace", namespace),
+            ctf_kv: KeyValue::new("ctf", ctf),
             flag_submissions: meter
                 .u64_counter("ctf.flag_submissions")
                 .with_description("Total flag submission attempts")
@@ -171,6 +179,16 @@ impl Metrics {
                 .build(),
         }
     }
+
+    /// Prepend the common `namespace` and `ctf` labels to any extra
+    /// attributes.  Use this for every metric recording call.
+    pub fn attrs(&self, extra: &[KeyValue]) -> Vec<KeyValue> {
+        let mut v = Vec::with_capacity(2 + extra.len());
+        v.push(self.ns_kv.clone());
+        v.push(self.ctf_kv.clone());
+        v.extend_from_slice(extra);
+        v
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -181,3 +199,5 @@ impl Metrics {
 pub fn challenge_kv(name: &str) -> KeyValue {
     KeyValue::new("challenge", name.to_owned())
 }
+
+

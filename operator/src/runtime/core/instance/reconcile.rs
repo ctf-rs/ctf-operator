@@ -714,16 +714,12 @@ fn target_namespace_for_instance(
     instance: &Instance,
     state: &CtfState,
 ) -> Result<String, CtfError> {
-    let uid = instance
-        .metadata
-        .uid
-        .clone()
-        .unwrap_or_else(|| instance.name_any());
+    let name = instance.name_any();
 
     let mut ns = format!(
         "{}{}",
         state.config.instance_namespace_prefix,
-        uid.to_ascii_lowercase()
+        name.to_ascii_lowercase()
     );
     if ns.len() > 63 {
         ns.truncate(63);

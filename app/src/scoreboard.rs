@@ -127,9 +127,9 @@ fn update_instance_gauges(state: &AppState) {
     let m = metrics::get();
     for (challenge, count) in &per_challenge {
         m.active_instances
-            .record(*count, &[metrics::challenge_kv(challenge)]);
+            .record(*count, &m.attrs(&[metrics::challenge_kv(challenge)]));
     }
-    m.active_users.record(active_user_ids.len() as u64, &[]);
+    m.active_users.record(active_user_ids.len() as u64, &m.attrs(&[]));
 }
 
 /// Refresh the scoreboard cache from database

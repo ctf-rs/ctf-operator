@@ -136,9 +136,9 @@ pub async fn spawn_instance(challenge_name: String) -> Result<(), ServerFnError>
     }
 
     // Audit log: instance spawned
-    metrics::get()
-        .instances_spawned
-        .add(1, &[metrics::challenge_kv(&challenge_name)]);
+    let m = metrics::get();
+    m.instances_spawned
+        .add(1, &m.attrs(&[metrics::challenge_kv(&challenge_name)]));
     if let Err(err) = db::log_instance_action(
         &state.db,
         user.id,
@@ -240,9 +240,9 @@ pub async fn extend_instance(challenge_name: String) -> Result<(), ServerFnError
     }
 
     // Audit log: instance extended
-    metrics::get()
-        .instances_extended
-        .add(1, &[metrics::challenge_kv(&challenge_name)]);
+    let m = metrics::get();
+    m.instances_extended
+        .add(1, &m.attrs(&[metrics::challenge_kv(&challenge_name)]));
     if let Err(err) = db::log_instance_action(
         &state.db,
         user.id,
@@ -416,9 +416,9 @@ pub async fn stop_instance(challenge_name: String) -> Result<(), ServerFnError> 
     }
 
     // Audit log: instance stopped
-    metrics::get()
-        .instances_stopped
-        .add(1, &[metrics::challenge_kv(&challenge_name)]);
+    let m = metrics::get();
+    m.instances_stopped
+        .add(1, &m.attrs(&[metrics::challenge_kv(&challenge_name)]));
     if let Err(err) = db::log_instance_action(
         &state.db,
         user.id,

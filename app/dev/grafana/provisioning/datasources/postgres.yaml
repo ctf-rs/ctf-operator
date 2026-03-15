@@ -1,0 +1,18 @@
+apiVersion: 1
+datasources:
+  - name: PostgreSQL
+    type: postgres
+    uid: postgres
+    url: postgres:5432
+    user: ctf
+    jsonData:
+      database: ctf_app
+      sslmode: disable
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+      postgresVersion: 1700
+    secureJsonData:
+      password: ctf
+    isDefault: false
+    editable: true

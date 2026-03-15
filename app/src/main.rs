@@ -12,7 +12,6 @@ async fn main() -> anyhow::Result<()> {
     // Initialise OpenTelemetry meter provider (OTLP exporter).
     let _meter_provider = metrics::init_meter_provider()?;
     let _tracer_provider = metrics::init_tracer_provider()?;
-    metrics::init();
 
     // Build a tracing subscriber with an OpenTelemetry layer so spans are
     // exported as well.  Uses the global tracer provider we just registered
@@ -27,6 +26,10 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let config = Arc::new(config::AppConfig::from_env()?);
+
+    // Initialise metric instruments *after* config is available so we can
+    // attach the `namespace` and `ctf` labels to every data-point.
+    metrics::init(&config.ctf_namespace, &config.ctf_name);
     let db = db::connect(&config.database_url).await?;
     db::migrate(&db).await?;
 

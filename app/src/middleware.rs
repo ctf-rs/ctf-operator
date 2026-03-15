@@ -37,11 +37,11 @@ pub async fn http_metrics(request: Request, next: Next) -> Response {
     let elapsed = start.elapsed().as_secs_f64();
 
     let m = crate::metrics::get();
-    let attrs = [
+    let attrs = m.attrs(&[
         opentelemetry::KeyValue::new("http.request.method", method),
         opentelemetry::KeyValue::new("http.route", route),
         opentelemetry::KeyValue::new("http.response.status_code", status),
-    ];
+    ]);
     m.http_server_request_duration.record(elapsed, &attrs);
 
     response

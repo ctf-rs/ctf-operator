@@ -42,9 +42,9 @@ pub async fn download_file(
     };
 
     // Audit log: file download
-    metrics::get()
-        .file_downloads
-        .add(1, &[metrics::challenge_kv(&challenge_name)]);
+    let m = metrics::get();
+    m.file_downloads
+        .add(1, &m.attrs(&[metrics::challenge_kv(&challenge_name)]));
     if let Err(err) = db::log_download(
         &state.db,
         user.id,

@@ -103,7 +103,7 @@ pub async fn submit_flag(
         return Ok(());
     };
 
-    let Some(uid) = instance.metadata.uid.clone() else {
+    if instance.metadata.uid.is_none() {
         persist_flag_with_audit(
             &state,
             user.id,
@@ -117,9 +117,12 @@ pub async fn submit_flag(
         .await;
         redirect_with("bad", "instance is not ready yet");
         return Ok(());
-    };
+    }
 
-    let runtime_ns = format!("ctf-inst-{uid}");
+    let runtime_ns = format!(
+        "{}{}",
+        state.config.instance_namespace_prefix, instance_name
+    );
     let flag_obj_name = format!("{}-{}", instance_name, flag_name);
     let flag_obj_ref = ObjectRef::<Flag>::new(&flag_obj_name).within(&runtime_ns);
 
@@ -152,12 +155,13 @@ pub async fn submit_flag(
 
     if accepted {
         // Record correct submission metric
-        metrics::get().flag_submissions.add(
+        let m = metrics::get();
+        m.flag_submissions.add(
             1,
-            &[
+            &m.attrs(&[
                 metrics::challenge_kv(&challenge_name),
                 opentelemetry::KeyValue::new("result", "correct"),
-            ],
+            ]),
         );
 
         // Check if all flags are now solved
@@ -174,9 +178,8 @@ pub async fn submit_flag(
 
         if all_flags_solved {
             // Record challenge solved metric
-            metrics::get()
-                .challenges_solved
-                .add(1, &[metrics::challenge_kv(&challenge_name)]);
+            m.challenges_solved
+                .add(1, &m.attrs(&[metrics::challenge_kv(&challenge_name)]));
             if let Err(err) =
                 db::mark_challenge_solved(&state.db, user.id, &challenge_name, ctf_name).await
             {
@@ -199,12 +202,13 @@ pub async fn submit_flag(
     redirect_with("bad", "flag is not correct");
 
     // Record incorrect submission metric
-    metrics::get().flag_submissions.add(
+    let m = metrics::get();
+    m.flag_submissions.add(
         1,
-        &[
+        &m.attrs(&[
             metrics::challenge_kv(&challenge_name),
             opentelemetry::KeyValue::new("result", "incorrect"),
-        ],
+        ]),
     );
 
     Ok(())
@@ -235,15 +239,15 @@ async fn persist_flag_with_audit(
                     submitted_flag = submitted_flag,
                     "CHEAT DETECTED: user submitted flag belonging to another user"
                 );
-                metrics::get()
-                    .cheats_detected
-                    .add(1, &[metrics::challenge_kv(challenge_name)]);
-                metrics::get().flag_submissions.add(
+                let m = metrics::get();
+                m.cheats_detected
+                    .add(1, &m.attrs(&[metrics::challenge_kv(challenge_name)]));
+                m.flag_submissions.add(
                     1,
-                    &[
+                    &m.attrs(&[
                         metrics::challenge_kv(challenge_name),
                         opentelemetry::KeyValue::new("result", "cheated"),
-                    ],
+                    ]),
                 );
                 (true, Some(instance_flag_id))
             }
