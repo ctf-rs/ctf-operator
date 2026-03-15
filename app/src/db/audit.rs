@@ -12,7 +12,7 @@ pub async fn log_flag_generation(
     generated_flag: &str,
 ) -> Result<()> {
     sqlx::query(
-        r#"INSERT INTO app_audit_flag_gen(
+        r#"INSERT INTO instance_flags(
             instance_name, user_id, challenge_name, ctf_name, flag_name, generated_flag
         ) VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT DO NOTHING"#,
@@ -39,7 +39,7 @@ pub async fn check_flag_cheated(
 ) -> Result<Option<(i64, i64)>> {
     let result = sqlx::query_as::<_, (i64, Option<i64>)>(
         r#"SELECT id, user_id
-           FROM app_audit_flag_gen
+           FROM instance_flags
            WHERE generated_flag = $1
              AND ctf_name = $2
              AND (user_id IS NULL OR user_id != $3)
@@ -69,7 +69,7 @@ pub async fn log_instance_action(
     ip_address: Option<&str>,
 ) -> Result<()> {
     sqlx::query(
-        r#"INSERT INTO app_audit_instance(
+        r#"INSERT INTO instance_actions(
             user_id, instance_name, challenge_name, ctf_name, action, ip_address
         ) VALUES ($1, $2, $3, $4, $5, $6)"#,
     )
@@ -78,42 +78,6 @@ pub async fn log_instance_action(
     .bind(challenge_name)
     .bind(ctf_name)
     .bind(action)
-    .bind(ip_address)
-    .execute(db)
-    .await?;
-
-    Ok(())
-}
-
-/// Log a flag submission with cheat detection info
-pub async fn log_submission(
-    db: &PgPool,
-    user_id: i64,
-    challenge_name: &str,
-    ctf_name: &str,
-    flag_name: &str,
-    submitted_flag: &str,
-    accepted: bool,
-    cheated: bool,
-    cheated_from_user_id: Option<i64>,
-    cheated_flag_gen_id: Option<i64>,
-    ip_address: Option<&str>,
-) -> Result<()> {
-    sqlx::query(
-        r#"INSERT INTO app_audit_submission(
-            user_id, challenge_name, ctf_name, flag_name, submitted_flag,
-            accepted, cheated, cheated_from_user_id, cheated_flag_gen_id, ip_address
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"#,
-    )
-    .bind(user_id)
-    .bind(challenge_name)
-    .bind(ctf_name)
-    .bind(flag_name)
-    .bind(submitted_flag)
-    .bind(accepted)
-    .bind(cheated)
-    .bind(cheated_from_user_id)
-    .bind(cheated_flag_gen_id)
     .bind(ip_address)
     .execute(db)
     .await?;
@@ -131,7 +95,7 @@ pub async fn log_download(
     ip_address: Option<&str>,
 ) -> Result<()> {
     sqlx::query(
-        r#"INSERT INTO app_audit_download(
+        r#"INSERT INTO downloads(
             user_id, challenge_name, ctf_name, file_url, ip_address
         ) VALUES ($1, $2, $3, $4, $5)"#,
     )

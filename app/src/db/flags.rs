@@ -8,23 +8,30 @@ pub async fn add_flag_submission(
     user_id: i64,
     challenge_name: &str,
     ctf_name: &str,
-    challenge_namespace: &str,
     flag_name: &str,
     submitted_flag: &str,
     accepted: bool,
+    cheated: bool,
+    cheated_from_user_id: Option<i64>,
+    cheated_flag_gen_id: Option<i64>,
+    ip_address: Option<&str>,
 ) -> Result<()> {
     sqlx::query(
-        r#"INSERT INTO app_flag_submissions(
-            user_id, challenge_namespace, challenge_name, ctf_name, flag_name, submitted_flag, accepted
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
+        r#"INSERT INTO flag_submissions(
+            user_id, challenge_name, ctf_name, flag_name, submitted_flag,
+            accepted, cheated, cheated_from_user_id, cheated_flag_gen_id, ip_address
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"#,
     )
     .bind(user_id)
-    .bind(challenge_namespace)
     .bind(challenge_name)
     .bind(ctf_name)
     .bind(flag_name)
     .bind(submitted_flag)
     .bind(accepted)
+    .bind(cheated)
+    .bind(cheated_from_user_id)
+    .bind(cheated_flag_gen_id)
+    .bind(ip_address)
     .execute(db)
     .await?;
 
@@ -34,19 +41,17 @@ pub async fn add_flag_submission(
 pub async fn mark_challenge_solved(
     db: &PgPool,
     user_id: i64,
-    challenge_namespace: &str,
     challenge_name: &str,
     ctf_name: &str,
 ) -> Result<()> {
     sqlx::query(
-        r#"INSERT INTO app_solved_challenges(
-            user_id, challenge_namespace, challenge_name, ctf_name
-        ) VALUES ($1, $2, $3, $4)
-        ON CONFLICT(user_id, challenge_namespace, challenge_name, ctf_name)
+        r#"INSERT INTO solved_challenges(
+            user_id, challenge_name, ctf_name
+        ) VALUES ($1, $2, $3)
+        ON CONFLICT(user_id, challenge_name, ctf_name)
         DO UPDATE SET solved_at = now()"#,
     )
     .bind(user_id)
-    .bind(challenge_namespace)
     .bind(challenge_name)
     .bind(ctf_name)
     .execute(db)
@@ -63,7 +68,7 @@ pub async fn is_challenge_solved_for_user(
 ) -> Result<bool> {
     let solved = sqlx::query_scalar::<_, bool>(
         r#"SELECT EXISTS (
-            SELECT 1 FROM app_solved_challenges
+            SELECT 1 FROM solved_challenges
             WHERE user_id = $1 AND challenge_name = $2 AND ctf_name = $3
         )"#,
     )
@@ -79,7 +84,7 @@ pub async fn is_challenge_solved_for_user(
 pub async fn list_solved_challenges_for_user(db: &PgPool, user_id: i64) -> Result<Vec<SolvedKey>> {
     let rows = sqlx::query_as::<_, (String, String)>(
         r#"SELECT challenge_name, ctf_name
-           FROM app_solved_challenges
+           FROM solved_challenges
            WHERE user_id = $1"#,
     )
     .bind(user_id)
@@ -104,7 +109,7 @@ pub async fn get_solved_flags_for_user(
 ) -> Result<Vec<String>> {
     let rows = sqlx::query_scalar::<_, String>(
         r#"SELECT DISTINCT flag_name
-           FROM app_flag_submissions
+           FROM flag_submissions
            WHERE user_id = $1 AND challenge_name = $2 AND ctf_name = $3 AND accepted = true"#,
     )
     .bind(user_id)
@@ -125,7 +130,7 @@ pub async fn count_solved_flags_for_user(
 ) -> Result<i64> {
     let count = sqlx::query_scalar::<_, i64>(
         r#"SELECT COUNT(DISTINCT flag_name)
-           FROM app_flag_submissions
+           FROM flag_submissions
            WHERE user_id = $1 AND challenge_name = $2 AND ctf_name = $3 AND accepted = true"#,
     )
     .bind(user_id)
@@ -145,7 +150,7 @@ pub async fn get_partial_solve_counts_for_user(
 ) -> Result<std::collections::HashMap<(String, String), i64>> {
     let rows = sqlx::query_as::<_, (String, String, i64)>(
         r#"SELECT ctf_name, challenge_name, COUNT(DISTINCT flag_name)
-           FROM app_flag_submissions
+           FROM flag_submissions
            WHERE user_id = $1 AND accepted = true
            GROUP BY ctf_name, challenge_name"#,
     )

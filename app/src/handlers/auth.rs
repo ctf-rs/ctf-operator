@@ -70,7 +70,6 @@ pub async fn oauth_callback(
         &claims.sub,
         claims.email.as_deref(),
         claims.name.as_deref(),
-        &claims.roles,
     )
     .await
     {
@@ -86,7 +85,7 @@ pub async fn oauth_callback(
     };
 
     let token = Uuid::new_v4().to_string();
-    if let Err(err) = db::create_session(&state.db, &token, user.id).await {
+    if let Err(err) = db::create_session(&state.db, &token, user.id, &claims.roles).await {
         warn!(error = %err, "failed to create session");
         return (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,

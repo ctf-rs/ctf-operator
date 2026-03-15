@@ -67,8 +67,6 @@ pub async fn submit_flag(
     }
 
     let submitted_flag = form.submitted_flag.trim();
-    let challenge_namespace = challenges::find_challenge_namespace(&state, &challenge_name)
-        .unwrap_or_else(|| "unknown".to_string());
 
     let redirect_with = |submit: &str, message: &str| {
         Redirect::to(&format!(
@@ -88,7 +86,6 @@ pub async fn submit_flag(
             user.id,
             &challenge_name,
             ctf_name,
-            &challenge_namespace,
             &form.flag_name,
             submitted_flag,
             false,
@@ -107,7 +104,6 @@ pub async fn submit_flag(
             user.id,
             &challenge_name,
             ctf_name,
-            &instance_ns,
             &form.flag_name,
             submitted_flag,
             false,
@@ -123,7 +119,6 @@ pub async fn submit_flag(
             user.id,
             &challenge_name,
             ctf_name,
-            &instance_ns,
             &form.flag_name,
             submitted_flag,
             false,
@@ -157,7 +152,6 @@ pub async fn submit_flag(
         user.id,
         &challenge_name,
         ctf_name,
-        &instance_ns,
         &form.flag_name,
         submitted_flag,
         accepted,
@@ -179,14 +173,8 @@ pub async fn submit_flag(
         let all_flags_solved = solved_flag_count >= total_flags;
 
         if all_flags_solved {
-            if let Err(err) = db::mark_challenge_solved(
-                &state.db,
-                user.id,
-                &instance_ns,
-                &challenge_name,
-                ctf_name,
-            )
-            .await
+            if let Err(err) =
+                db::mark_challenge_solved(&state.db, user.id, &challenge_name, ctf_name).await
             {
                 warn!(error = %err, "failed to persist solved challenge state");
             }
@@ -209,13 +197,12 @@ pub async fn submit_flag(
 // Internal helper
 // ---------------------------------------------------------------------------
 
-/// Persist flag submission and log to audit trail with cheat detection
+/// Persist flag submission with cheat detection
 async fn persist_flag_with_audit(
     state: &Arc<AppState>,
     user_id: i64,
     challenge_name: &str,
     ctf_name: &str,
-    challenge_namespace: &str,
     flag_name: &str,
     submitted_flag: &str,
     accepted: bool,
@@ -244,24 +231,7 @@ async fn persist_flag_with_audit(
         (false, None, None)
     };
 
-    // Log to the existing submissions table
     if let Err(err) = db::add_flag_submission(
-        &state.db,
-        user_id,
-        challenge_name,
-        ctf_name,
-        challenge_namespace,
-        flag_name,
-        submitted_flag,
-        accepted,
-    )
-    .await
-    {
-        warn!(error = %err, "failed to persist flag submission");
-    }
-
-    // Log to audit trail with full details
-    if let Err(err) = db::log_submission(
         &state.db,
         user_id,
         challenge_name,
@@ -276,6 +246,6 @@ async fn persist_flag_with_audit(
     )
     .await
     {
-        warn!(error = %err, "failed to log submission audit");
+        warn!(error = %err, "failed to persist flag submission");
     }
 }

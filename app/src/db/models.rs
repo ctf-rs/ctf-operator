@@ -81,7 +81,6 @@ pub(super) struct UserRow {
     pub(super) sub: String,
     pub(super) email: Option<String>,
     pub(super) name: Option<String>,
-    pub(super) roles_json: sqlx::types::Json<Vec<String>>,
 }
 
 // ---- Row → model converters ----
@@ -92,6 +91,6 @@ pub(super) fn user_from_row(row: UserRow) -> User {
         sub: row.sub,
         email: row.email,
         name: row.name,
-        roles: row.roles_json.0,
+        roles: Vec::new(),
     }
 }

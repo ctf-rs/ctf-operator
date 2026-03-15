@@ -183,7 +183,7 @@ async fn get_flag_solve_counts(
     let rows = sqlx::query_as::<_, (String, String, i64)>(
         r#"
         SELECT challenge_name, flag_name, COUNT(DISTINCT user_id) as solve_count
-        FROM app_flag_submissions
+        FROM flag_submissions
         WHERE ctf_name = $1 AND accepted = true
         GROUP BY challenge_name, flag_name
         "#,
@@ -213,8 +213,8 @@ async fn calculate_user_scores(
             s.challenge_name, 
             s.flag_name,
             s.created_at
-        FROM app_flag_submissions s
-        JOIN app_users u ON u.id = s.user_id
+        FROM flag_submissions s
+        JOIN users u ON u.id = s.user_id
         WHERE s.ctf_name = $1 AND s.accepted = true
         ORDER BY s.user_id, s.challenge_name, s.flag_name, s.created_at
         "#,
