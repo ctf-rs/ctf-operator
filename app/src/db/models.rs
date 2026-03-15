@@ -91,22 +91,6 @@ pub(super) struct UserRow {
 }
 
 #[derive(Debug, FromRow)]
-pub(super) struct ChallengeRow {
-    pub(super) namespace: String,
-    pub(super) name: String,
-    pub(super) ctf_name: String,
-    pub(super) ctf_public: bool,
-    pub(super) full_name: String,
-    pub(super) description: Option<String>,
-    pub(super) categories_json: sqlx::types::Json<Vec<ChallengeCategory>>,
-    pub(super) difficulty: Option<String>,
-    pub(super) files_json: sqlx::types::Json<Vec<String>>,
-    pub(super) flags_json: sqlx::types::Json<Vec<FlagView>>,
-    pub(super) exposed_ports_json: sqlx::types::Json<Vec<PortView>>,
-    pub(super) flag_hint: String,
-}
-
-#[derive(Debug, FromRow)]
 pub(super) struct InstanceRow {
     pub(super) instance_name: String,
     pub(super) challenge_namespace: String,
@@ -121,25 +105,5 @@ pub(super) fn user_from_row(row: UserRow) -> User {
         email: row.email,
         name: row.name,
         roles: row.roles_json.0,
-    }
-}
-
-pub(super) fn challenge_from_row(row: ChallengeRow) -> ChallengeView {
-    let difficulty = row.difficulty.and_then(|s| {
-        serde_json::from_value::<ChallengeDifficulty>(serde_json::Value::String(s)).ok()
-    });
-    ChallengeView {
-        namespace: row.namespace,
-        name: row.name,
-        ctf_name: row.ctf_name,
-        ctf_public: row.ctf_public,
-        full_name: row.full_name,
-        description: row.description,
-        categories: row.categories_json.0,
-        difficulty,
-        files: row.files_json.0,
-        flags: row.flags_json.0,
-        exposed_ports: row.exposed_ports_json.0,
-        flag_hint: row.flag_hint,
     }
 }

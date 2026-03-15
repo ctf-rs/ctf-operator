@@ -28,6 +28,7 @@ use crate::{
         sanitize_k8s_name,
     },
     k8s::{
+        challenges,
         helpers::{
             instance_ready_from_resource, instance_time_left_seconds, is_instance_deleting,
             is_instance_owned_by_user, resolve_instance_duration_seconds,
@@ -84,10 +85,7 @@ pub async fn spawn_instance(
     }
 
     let Some(challenge_namespace) =
-        db::find_challenge_namespace(&state.db, &challenge_name, ctf_name)
-            .await
-            .ok()
-            .flatten()
+        challenges::find_challenge_namespace(&state, &challenge_name)
     else {
         return (
             axum::http::StatusCode::NOT_FOUND,
@@ -362,11 +360,7 @@ pub async fn instance_state(
 
     let ctf_name = &state.config.ctf_name;
 
-    let Some(challenge) = db::get_challenge(&state.db, ctf_name, &challenge_name)
-        .await
-        .ok()
-        .flatten()
-    else {
+    let Some(challenge) = challenges::get_challenge(&state, &challenge_name) else {
         return (
             axum::http::StatusCode::NOT_FOUND,
             Json(InstanceStateResponse {

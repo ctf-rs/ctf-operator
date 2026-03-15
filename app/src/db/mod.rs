@@ -1,16 +1,11 @@
 mod audit;
-mod challenges;
 mod flags;
 mod instances;
-mod models;
+pub mod models;
 mod users;
 
 pub use audit::{
     check_flag_cheated, log_download, log_flag_generation, log_instance_action, log_submission,
-};
-pub use challenges::{
-    find_challenge_namespace, get_challenge, list_challenges_for_ctf,
-    replace_challenges_for_namespace,
 };
 pub use flags::{
     add_flag_submission, count_solved_flags_for_user, get_partial_solve_counts_for_user,

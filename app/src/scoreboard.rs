@@ -157,24 +157,16 @@ async fn refresh_scoreboard(state: &AppState) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Get flag configurations from the sync cache
+/// Get flag configurations from the k8s Store cache
 async fn get_flag_configs(state: &AppState) -> HashMap<(String, String), (u32, u32, u32)> {
-    // Read from challenges table which has flag info
     let mut configs = HashMap::new();
 
-    // Query challenges with their flags
-    let rows = sqlx::query_as::<_, (String, sqlx::types::Json<Vec<crate::db::FlagView>>)>(
-        r#"SELECT name, flags_json FROM app_challenges WHERE ctf_name = $1"#,
-    )
-    .bind(&state.config.ctf_name)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+    let challenges = crate::k8s::challenges::list_challenges_for_ctf(state);
 
-    for (challenge_name, flags) in rows {
-        for flag in flags.0 {
+    for challenge in challenges {
+        for flag in &challenge.flags {
             configs.insert(
-                (challenge_name.clone(), flag.name.clone()),
+                (challenge.name.clone(), flag.name.clone()),
                 (flag.base_points, flag.min_points, flag.decay),
             );
         }

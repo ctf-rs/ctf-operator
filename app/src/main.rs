@@ -31,6 +31,8 @@ async fn main() -> anyhow::Result<()> {
         pending_oauth: Arc::new(RwLock::new(HashMap::new())),
         instances: watchers.instances.clone(),
         flags: watchers.flags.clone(),
+        challenges: watchers.challenges.clone(),
+        ctfs: watchers.ctfs.clone(),
         scoreboard: Arc::new(RwLock::new(scoreboard::Scoreboard::default())),
     });
 

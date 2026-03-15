@@ -14,6 +14,7 @@ use crate::{
     db,
     helpers::{current_user, has_ctf_access},
     k8s::{
+        challenges,
         helpers::{
             instance_phase_description, instance_ready_from_resource, instance_time_left_seconds,
             is_instance_deleting, is_instance_owned_by_user,
@@ -58,13 +59,7 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         return Html(html).into_response();
     };
 
-    let challenges = match db::list_challenges_for_ctf(&state.db, &ctf_name).await {
-        Ok(challenges) => challenges,
-        Err(err) => {
-            warn!(error = %err, "failed to list challenges");
-            Vec::new()
-        }
-    };
+    let challenges = challenges::list_challenges_for_ctf(&state);
 
     let challenges = challenges
         .into_iter()
@@ -226,11 +221,7 @@ pub async fn challenge_page(
 
     let ctf_name = &state.config.ctf_name;
 
-    let Some(challenge) = db::get_challenge(&state.db, ctf_name, &challenge_name)
-        .await
-        .ok()
-        .flatten()
-    else {
+    let Some(challenge) = challenges::get_challenge(&state, &challenge_name) else {
         return (axum::http::StatusCode::NOT_FOUND, "challenge not found").into_response();
     };
 

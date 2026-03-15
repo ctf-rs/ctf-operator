@@ -13,6 +13,7 @@ use tracing::warn;
 use crate::{
     db,
     helpers::{current_user, extract_client_ip, has_ctf_access},
+    k8s::challenges,
     s3::parse_s3_bucket_key,
     state::AppState,
 };
@@ -32,11 +33,7 @@ pub async fn download_file(
     let ctf_name = &state.config.ctf_name;
     let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(addr));
 
-    let Some(challenge) = db::get_challenge(&state.db, ctf_name, &challenge_name)
-        .await
-        .ok()
-        .flatten()
-    else {
+    let Some(challenge) = challenges::get_challenge(&state, &challenge_name) else {
         return (axum::http::StatusCode::NOT_FOUND, "challenge not found").into_response();
     };
 

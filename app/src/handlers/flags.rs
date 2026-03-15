@@ -15,7 +15,7 @@ use tracing::warn;
 use crate::{
     db,
     helpers::{challenge_route, current_user, extract_client_ip},
-    k8s::{helpers::is_instance_owned_by_user, instances::delete_instance},
+    k8s::{challenges, helpers::is_instance_owned_by_user, instances::delete_instance},
     state::AppState,
 };
 
@@ -63,10 +63,7 @@ pub async fn submit_flag(
     }
 
     let submitted_flag = form.submitted_flag.trim();
-    let challenge_namespace = db::find_challenge_namespace(&state.db, &challenge_name, ctf_name)
-        .await
-        .ok()
-        .flatten()
+    let challenge_namespace = challenges::find_challenge_namespace(&state, &challenge_name)
         .unwrap_or_else(|| "unknown".to_string());
 
     let redirect_with = |submit: &str, message: &str| {
@@ -187,10 +184,7 @@ pub async fn submit_flag(
                 .await
                 .unwrap_or(0) as usize;
 
-        let total_flags = db::get_challenge(&state.db, ctf_name, &challenge_name)
-            .await
-            .ok()
-            .flatten()
+        let total_flags = challenges::get_challenge(&state, &challenge_name)
             .map(|ch| ch.flags.len())
             .unwrap_or(1);
 

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use ctf_cli::k8s::{Flag, Instance};
+use ctf_cli::k8s::{Challenge, Ctf, Flag, Instance};
 use kube::{Client, runtime::reflector::Store};
 use sqlx::PgPool;
 use tokio::sync::RwLock;
@@ -22,6 +22,10 @@ pub struct AppState {
     pub instances: Store<Instance>,
     /// Store of Flag resources from k8s watcher
     pub flags: Store<Flag>,
+    /// Store of Challenge resources from k8s watcher
+    pub challenges: Store<Challenge>,
+    /// Store of Ctf resources from k8s watcher
+    pub ctfs: Store<Ctf>,
     /// Scoreboard cache (points, leaderboard)
     pub scoreboard: Arc<RwLock<Scoreboard>>,
 }
