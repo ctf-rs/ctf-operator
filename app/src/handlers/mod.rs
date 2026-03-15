@@ -13,13 +13,14 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
+use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use http::Request;
 use leptos::prelude::*;
 use tower_http::services::ServeDir;
 
 use crate::{
     db,
-    middleware::{extract_session_cookie, require_auth},
+    middleware::{extract_session_cookie, http_metrics, require_auth},
     state::AppState,
 };
 
@@ -96,6 +97,12 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(protected_pages)
         .merge(public)
         .nest_service("/pkg", ServeDir::new("target/site/pkg"))
+        // Include trace context as header in the response
+        .layer(OtelInResponseLayer::default())
+        // Start OpenTelemetry trace on incoming request (HTTP semantic conventions)
+        .layer(OtelAxumLayer::default())
+        // Record HTTP metrics (http.server.request.duration histogram)
+        .layer(axum_mw::from_fn(http_metrics))
         .layer(Extension(state.clone()))
         .with_state(state)
 }

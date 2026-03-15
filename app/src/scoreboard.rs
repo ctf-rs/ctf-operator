@@ -4,7 +4,7 @@ use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, Statement};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
-use crate::state::AppState;
+use crate::{metrics, state::AppState};
 
 /// Key for flag in scoreboard: (ctf_name, challenge_name, flag_name)
 pub type FlagKey = (String, String, String);
@@ -101,9 +101,35 @@ pub fn spawn_scoreboard_worker(state: Arc<AppState>) -> tokio::task::JoinHandle<
             if let Err(err) = refresh_scoreboard(&state).await {
                 error!(error = %err, "failed to refresh scoreboard");
             }
+            update_instance_gauges(&state);
             tokio::time::sleep(Duration::from_secs(10)).await;
         }
     })
+}
+
+/// Update the `active_instances` and `active_users` gauges from the k8s
+/// instance Store.  Runs on the scoreboard timer (every 10 s).
+fn update_instance_gauges(state: &AppState) {
+    use std::collections::HashSet;
+
+    let instances: Vec<_> = state.instances.state();
+    let mut per_challenge: HashMap<String, u64> = HashMap::new();
+    let mut active_user_ids: HashSet<i64> = HashSet::new();
+
+    for inst in &instances {
+        let challenge = inst.spec.challenge.clone();
+        *per_challenge.entry(challenge).or_default() += 1;
+        if let Some(ref user) = inst.spec.user {
+            active_user_ids.insert(user.id);
+        }
+    }
+
+    let m = metrics::get();
+    for (challenge, count) in &per_challenge {
+        m.active_instances
+            .record(*count, &[metrics::challenge_kv(challenge)]);
+    }
+    m.active_users.record(active_user_ids.len() as u64, &[]);
 }
 
 /// Refresh the scoreboard cache from database

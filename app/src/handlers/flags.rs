@@ -15,6 +15,7 @@ use crate::{
         helpers::is_instance_owned_by_user,
         instances::{self as k8s_instances, delete_instance},
     },
+    metrics,
     state::AppState,
 };
 
@@ -150,6 +151,15 @@ pub async fn submit_flag(
     .await;
 
     if accepted {
+        // Record correct submission metric
+        metrics::get().flag_submissions.add(
+            1,
+            &[
+                metrics::challenge_kv(&challenge_name),
+                opentelemetry::KeyValue::new("result", "correct"),
+            ],
+        );
+
         // Check if all flags are now solved
         let solved_flag_count =
             db::count_solved_flags_for_user(&state.db, user.id, &challenge_name, ctf_name)
@@ -163,6 +173,10 @@ pub async fn submit_flag(
         let all_flags_solved = solved_flag_count >= total_flags;
 
         if all_flags_solved {
+            // Record challenge solved metric
+            metrics::get()
+                .challenges_solved
+                .add(1, &[metrics::challenge_kv(&challenge_name)]);
             if let Err(err) =
                 db::mark_challenge_solved(&state.db, user.id, &challenge_name, ctf_name).await
             {
@@ -183,6 +197,16 @@ pub async fn submit_flag(
     }
 
     redirect_with("bad", "flag is not correct");
+
+    // Record incorrect submission metric
+    metrics::get().flag_submissions.add(
+        1,
+        &[
+            metrics::challenge_kv(&challenge_name),
+            opentelemetry::KeyValue::new("result", "incorrect"),
+        ],
+    );
+
     Ok(())
 }
 
@@ -210,6 +234,16 @@ async fn persist_flag_with_audit(
                     cheated_instance_flag_id = instance_flag_id,
                     submitted_flag = submitted_flag,
                     "CHEAT DETECTED: user submitted flag belonging to another user"
+                );
+                metrics::get()
+                    .cheats_detected
+                    .add(1, &[metrics::challenge_kv(challenge_name)]);
+                metrics::get().flag_submissions.add(
+                    1,
+                    &[
+                        metrics::challenge_kv(challenge_name),
+                        opentelemetry::KeyValue::new("result", "cheated"),
+                    ],
                 );
                 (true, Some(instance_flag_id))
             }

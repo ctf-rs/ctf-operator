@@ -9,6 +9,8 @@ pub mod helpers;
 #[cfg(feature = "ssr")]
 pub mod k8s;
 #[cfg(feature = "ssr")]
+pub mod metrics;
+#[cfg(feature = "ssr")]
 pub mod middleware;
 #[cfg(feature = "ssr")]
 pub mod oauth;

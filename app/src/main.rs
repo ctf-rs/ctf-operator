@@ -1,16 +1,29 @@
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    use app::{config, db, handlers, k8s, oauth, scoreboard, state::AppState};
+    use app::{config, db, handlers, k8s, metrics, oauth, scoreboard, state::AppState};
     use std::{collections::HashMap, net::SocketAddr, sync::Arc};
     use tokio::sync::RwLock;
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
 
     let _ = rustls::crypto::ring::default_provider().install_default();
 
-    tracing_subscriber::fmt()
-        .with_env_filter(
+    // Initialise OpenTelemetry meter provider (OTLP exporter).
+    let _meter_provider = metrics::init_meter_provider()?;
+    let _tracer_provider = metrics::init_tracer_provider()?;
+    metrics::init();
+
+    // Build a tracing subscriber with an OpenTelemetry layer so spans are
+    // exported as well.  Uses the global tracer provider we just registered
+    // (which carries the correct service.name resource).
+    let otel_layer = tracing_opentelemetry::layer();
+    tracing_subscriber::registry()
+        .with(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
+        .with(tracing_subscriber::fmt::layer())
+        .with(otel_layer)
         .init();
 
     let config = Arc::new(config::AppConfig::from_env()?);

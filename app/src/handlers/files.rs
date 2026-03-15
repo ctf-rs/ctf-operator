@@ -14,6 +14,7 @@ use crate::{
     db,
     helpers::{extract_client_ip, has_ctf_access},
     k8s::challenges,
+    metrics,
     s3::parse_s3_bucket_key,
     state::AppState,
 };
@@ -41,6 +42,9 @@ pub async fn download_file(
     };
 
     // Audit log: file download
+    metrics::get()
+        .file_downloads
+        .add(1, &[metrics::challenge_kv(&challenge_name)]);
     if let Err(err) = db::log_download(
         &state.db,
         user.id,

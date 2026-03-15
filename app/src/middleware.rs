@@ -14,6 +14,40 @@ use tower::{Layer, Service};
 use crate::{db, state::AppState};
 
 // ---------------------------------------------------------------------------
+// HTTP metrics layer  (OTel semantic conventions)
+// ---------------------------------------------------------------------------
+
+/// HTTP server metrics following OpenTelemetry semantic conventions.
+///
+/// Records:
+/// - `http.server.request.duration` histogram (seconds) with attributes:
+///   `http.request.method`, `http.route`, `http.response.status_code`
+/// - Uses `axum::extract::MatchedPath` for low-cardinality route labels.
+pub async fn http_metrics(request: Request, next: Next) -> Response {
+    let method = request.method().as_str().to_owned();
+    let route = request
+        .extensions()
+        .get::<axum::extract::MatchedPath>()
+        .map(|m| m.as_str().to_owned())
+        .unwrap_or_else(|| "unknown".into());
+
+    let start = std::time::Instant::now();
+    let response = next.run(request).await;
+    let status = response.status().as_u16().to_string();
+    let elapsed = start.elapsed().as_secs_f64();
+
+    let m = crate::metrics::get();
+    let attrs = [
+        opentelemetry::KeyValue::new("http.request.method", method),
+        opentelemetry::KeyValue::new("http.route", route),
+        opentelemetry::KeyValue::new("http.response.status_code", status),
+    ];
+    m.http_server_request_duration.record(elapsed, &attrs);
+
+    response
+}
+
+// ---------------------------------------------------------------------------
 // Tower Layer middleware (used with `#[middleware(crate::middleware::AuthLayer)]`)
 // ---------------------------------------------------------------------------
 

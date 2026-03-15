@@ -36,6 +36,19 @@ services:
       - "3901:3901"
       - "3903:3903"
 
+  lgtm:
+    image: grafana/otel-lgtm:0.10.0
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./dev/grafana/provisioning/dashboards:/otel-lgtm/grafana/conf/provisioning/dashboards:ro
+      - ./dev/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"   # Grafana UI
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+
 volumes:
   pg_data:
   garage_data:
