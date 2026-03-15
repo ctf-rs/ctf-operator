@@ -2,6 +2,12 @@
 name = "app"
 version = "0.1.0"
 edition = "2024"
+description = "Web application for CTF platform management"
+license = "MIT"
+repository = "https://github.com/ctf-rs/ctf-operator"
+readme = "../README.md"
+keywords = ["ctf", "web", "leptos"]
+categories = ["web-programming"]
 
 [lints]
 workspace = true

@@ -3,6 +3,12 @@ name = "ctf-cli"
 version = "0.1.0"
 edition = "2021"
 default-run = "ctf"
+description = "CLI tools for CTF challenge management and Kubernetes resource generation"
+license = "MIT"
+repository = "https://github.com/ctf-rs/ctf-operator"
+readme = "../README.md"
+keywords = ["ctf", "kubernetes", "operator", "cli"]
+categories = ["command-line-utilities", "development-tools"]
 
 [lints]
 workspace = true

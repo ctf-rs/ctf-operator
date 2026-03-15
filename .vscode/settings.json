@@ -19,6 +19,7 @@
       "matchCommandLine": true
     },
     "timeout": true,
-    "cargo clippy": true
+    "cargo clippy": true,
+    "cargo clean": true
   }
 }
