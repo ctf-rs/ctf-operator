@@ -61,6 +61,8 @@ pub struct ChallengePageData {
     pub instance_phase_desc: Option<String>,
     /// Total points this challenge is worth (sum of flag points)
     pub points: u32,
+    /// Current points per-flag (same order as `challenge.flags`)
+    pub flag_points: Vec<u32>,
 }
 
 #[derive(Debug)]

@@ -24,6 +24,7 @@ spec:
   - post-quantum
   flags:
   - name: flag
+    label: "Decrypt the message"
     body: fake_flag_value
   containers:
   - name: test

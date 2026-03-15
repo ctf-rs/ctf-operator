@@ -30,6 +30,7 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
         .unwrap_or_else(|| "No description".to_string());
     let challenge_name = ch.name.clone();
     let flags = ch.flags.clone();
+    let flag_points = data.flag_points.clone();
     // Determine difficulties from flags (difficulty is now per-flag)
     let _difficulty = ch.difficulty;
     let exposed_ports = ch.exposed_ports.clone();
@@ -163,21 +164,26 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
 
                 {(!data.solved).then(move || {
                     view! {
+                        <div class="files-instance-sep"></div>
                         <div class="controls-wrapper">
                             <InstanceControls
+                                instancing=data.instancing
                                 has_instance=data.has_instance
                                 ready=data.ready
                                 can_extend=data.can_extend
                                 challenge_name=challenge_name.clone()
                                 submit_action=submit_action.to_string()
                                 extend_display=extend_display.to_string()
-                                flags=flags.clone()
+                                    flags=flags.clone()
+                                    flag_points=flag_points.clone()
                                 submit_fb_flag_name=submit_fb_flag_name.clone()
                                 submit_fb_kind=submit_fb_kind.clone()
                                 submit_fb_message=submit_fb_message.clone()
                                 exposed_ports=exposed_ports.clone()
                                 instance_name=data.instance_name.clone()
                                 instance_base_domain=data.instance_base_domain.clone()
+                                instance_phase=data.instance_phase_desc.clone()
+                                time_left_seconds=data.time_left_seconds
                                 flag_hint=flag_hint.clone()
                             />
                         </div>

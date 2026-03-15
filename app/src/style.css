@@ -2,6 +2,7 @@
 body { font-family: Inter, system-ui, sans-serif; background: #1f232a; color: #e5e7eb; margin: 0; }
 a { color: #93c5fd; }
 .topbar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+.ctf-title { font-size: 1.5rem; font-weight: 700; color: #e5e7eb; }
 .muted { color: #9ca3af; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
 .tile { background: #2a2f38; border: 1px solid #3a404a; border-radius: 8px; padding: 1rem; }
@@ -39,7 +40,7 @@ a { color: #93c5fd; }
 .category-heading { font-size: 1.4rem; margin: 0 0 .8rem 0; padding-bottom: .4rem; border-bottom: 2px solid #3a404a; color: #93c5fd; }
 
 /* Difficulty badges */
-.difficulty-badge { display: inline-block; padding: .15rem .5rem; border-radius: 999px; font-size: .75rem; font-weight: 600; white-space: nowrap; margin-left: 0.5rem; vertical-align: middle; }
+.difficulty-badge { display: inline-flex; justify-content: center; align-items: center; padding: .15rem .5rem; border-radius: 999px; font-size: .75rem; font-weight: 600; white-space: nowrap; margin-left: 0.5rem; vertical-align: middle; width: fit-content; }
 .diff-veryeasy { background: #064e3b; color: #6ee7b7; border: 1px solid #059669; }
 .diff-easy { background: #065f46; color: #a7f3d0; border: 1px solid #10b981; }
 .diff-mid { background: #713f12; color: #fde68a; border: 1px solid #f59e0b; }
@@ -51,12 +52,20 @@ a { color: #93c5fd; }
 .tile.card .card-content { flex: 1; }
 .tile.card > .btn { margin-top: auto; text-align: center; }
 
+/* Ensure header stacks title above flag progress and keep meta-row on its own line */
+.tile.card .tile-header { flex-direction: column; align-items: stretch; gap: .25rem; }
+.tile.card .title-row { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+.tile.card .title-row .title-right { display: flex; gap: .5rem; align-items: center; }
+.tile.card .meta-row { display: flex; justify-content: center; align-items: center; width: 100%; margin-top: .25rem; }
+.tile.card .meta-center { display: flex; gap: .5rem; justify-content: center; align-items: center; }
+
 /* Challenge card top row (timer + flag progress + points) */
 .flag-progress { font-size: .75rem; padding: .1rem .4rem; background: #374151; border-radius: 4px; color: #9ca3af; font-weight: normal; flex-shrink: 0; }
 .flag-progress.partial { background: #713f12; color: #fde68a; }
 .flag-progress.completed { background: #065f46; color: #a7f3d0; }
 .points-badge { font-size: .75rem; padding: .1rem .5rem; background: #3730a3; border-radius: 4px; color: #c7d2fe; font-weight: 600; flex-shrink: 0; }
 .points-badge.large { font-size: .9rem; padding: .2rem .6rem; }
+.points-badge.small { font-size: .75rem; padding: .08rem .4rem; }
 .card-timer { display: inline-block; font-size: .75rem; padding: .2rem .6rem; background: rgba(37, 99, 235, 0.2); border: 1px solid #3b82f6; border-radius: 999px; color: #93c5fd; flex-shrink: 0; }
 .card-timer.running { background: rgba(99, 102, 241, 0.2); border-color: #6366f1; color: #a5b4fc; }
 .card-meta-row { display: flex; align-items: center; gap: .5rem; margin-bottom: .5rem; flex-wrap: wrap; }
@@ -87,7 +96,9 @@ a { color: #93c5fd; }
 .status-badge.deleting { background: #92400e; color: #fde68a; }
 .timer-badge { font-size: .85rem; color: #fde68a; background: #374151; padding: .3rem .6rem; border-radius: 4px; }
 .controls-row { display: flex; gap: .5rem; margin-bottom: 1rem; flex-wrap: wrap; }
-.flags-section { border-top: 1px solid #3a404a; padding-top: 1rem; display: grid; grid-template-columns: max-content 1fr max-content; gap: .6rem 1rem; align-items: center; }
+.controls-left { display: flex; gap: .5rem; align-items: center; }
+.controls-right { margin-left: auto; display: flex; gap: .5rem; align-items: center; }
+.flags-section { border-top: 1px solid #3a404a; padding-top: 1rem; display: grid; grid-template-columns: max-content 1fr max-content max-content max-content; gap: .6rem 1rem; align-items: center; }
 .flags-section h3 { margin: 0 0 .5rem 0; grid-column: 1 / -1; }
 .files-list { display: flex; flex-wrap: wrap; gap: .5rem; }
 .file-link { display: inline-flex; align-items: center; gap: .3rem; background: #374151; padding: .4rem .8rem; border-radius: 6px; text-decoration: none; font-size: .9rem; }
@@ -107,7 +118,11 @@ a { color: #93c5fd; }
 .flag-label { font-weight: 500; color: #93c5fd; font-size: .9rem; text-align: left; justify-self: start; white-space: nowrap; }
 .flag-form input[type="text"] { width: 100%; min-width: 0; box-sizing: border-box; }
 .flag-form .btn { }
+.flags-section .difficulty-badge { justify-self: center; margin-left: 0; }
 .flags-section .feedback { grid-column: 1 / -1; margin: 0; }
+
+/* Separator when instance-related content is present */
+.files-instance-sep { border-top: 1px solid rgba(255,255,255,0.08); margin: .8rem 0; }
 
 /* Connection details */
 .connection-section { margin-top: 1rem; border-top: 1px solid #3a404a; padding-top: 1rem; }

@@ -23,6 +23,7 @@ spec:
   - cookies
   flags:
   - name: flag
+    label: "Find the flag"
     body: fake_flag_value
   containers:
   - name: test

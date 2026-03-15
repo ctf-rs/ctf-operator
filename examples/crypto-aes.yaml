@@ -24,9 +24,11 @@ spec:
   - chosen-plaintext
   flags:
   - name: flag-a
+    label: "Stage A"
     body: fake_flag_a
     difficulty: mid
   - name: flag-b
+    label: "Stage B"
     body: fake_flag_b
     difficulty: mid
   containers:

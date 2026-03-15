@@ -23,15 +23,19 @@ spec:
   - beginner
   flags:
   - name: flag1
+    label: "Part 1"
     body: fooflag1
     difficulty: veryeasy
   - name: flag2
+    label: "Part 2"
     body: fooflag2
     difficulty: veryeasy
   - name: flag3
+    label: "Part 3"
     body: fooflag3
     difficulty: easy
   - name: flag4
+    label: "Part 4"
     body: fooflag4
     difficulty: mid
     random:

@@ -24,6 +24,7 @@ spec:
   - printf
   flags:
   - name: flag
+    label: "Exploit the binary"
     body: fake_flag_value
   containers:
   - name: test

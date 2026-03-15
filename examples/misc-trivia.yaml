@@ -23,6 +23,7 @@ spec:
   - quiz
   flags:
   - name: flag
+    label: "Solve the puzzle"
     body: fake_flag_value
   containers:
   - name: test

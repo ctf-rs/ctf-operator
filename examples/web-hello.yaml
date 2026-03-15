@@ -23,12 +23,15 @@ spec:
   - beginner
   flags:
   - name: flag1
+    label: "Part 1"
     body: fake_flag_value_1
     difficulty: veryeasy
   - name: flag2
+    label: "Part 2"
     body: fake_flag_value_2
     difficulty: veryeasy
   - name: flag3
+    label: "Part 3"
     body: fake_flag_value_3
     difficulty: easy
   containers:

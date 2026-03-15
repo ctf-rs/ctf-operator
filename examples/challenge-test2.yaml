@@ -17,6 +17,7 @@ files:
   - challenge-test/file.txt
 flags:
   - name: flag
+    label: "Solve the puzzle"
     body: fake_flag
 containers:
   - name: test1

@@ -28,6 +28,16 @@ where
     writer: reflector::store::Writer<K>,
 }
 
+impl<K> std::fmt::Debug for Watcher<K>
+where
+    K: 'static + Resource + Clone + Debug + DeserializeOwned,
+    K::DynamicType: Default + Eq + Hash + Clone + Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Watcher").finish()
+    }
+}
+
 impl<K> Watcher<K>
 where
     K: 'static + Resource<DynamicType = ()> + Clone + Debug + DeserializeOwned + Send + Sync,

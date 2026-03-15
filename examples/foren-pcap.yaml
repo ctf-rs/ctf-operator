@@ -23,6 +23,7 @@ spec:
   - network
   flags:
   - name: flag
+    label: "Analyze the evidence"
     body: fake_flag_value
   containers:
   - name: test

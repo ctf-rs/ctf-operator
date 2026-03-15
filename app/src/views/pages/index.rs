@@ -18,14 +18,14 @@ pub fn IndexPage(
     view! {
         <PageShell title=ctf_title.clone()>
             <header class="topbar">
-                <div>
-                    <h1>{ctf_title}</h1>
-                    <p class="muted">"Logged in as " {user_label}</p>
+                <div class="nav-buttons">
+                    <span class="ctf-title">{ctf_title}</span>
                 </div>
                 <div class="nav-buttons">
                     <a class="btn secondary" href="/scoreboard">"Scoreboard"</a>
+                    <span class="muted">{user_label}</span>
                     <form method="post" action="/logout" style="display:inline-block;">
-                        <button class="btn secondary" type="submit">"Logout"</button>
+                        <button class="btn secondary small" type="submit">"Logout"</button>
                     </form>
                 </div>
             </header>

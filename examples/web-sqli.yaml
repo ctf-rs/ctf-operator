@@ -24,9 +24,11 @@ spec:
   - authentication
   flags:
   - name: flag-user
+    label: "Stage User"
     body: fake_flag_user
     difficulty: easy
   - name: flag-admin
+    label: "Stage Admin"
     body: fake_flag_admin
     difficulty: easy
     random:

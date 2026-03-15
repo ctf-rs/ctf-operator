@@ -79,11 +79,19 @@ pub fn ChallengeCard(data: ChallengeCardData) -> impl IntoView {
         <article class={tile_class}>
             <div class="card-content">
                 <div class="tile-header">
-                    <span class="tile-title">{full_name}</span>
-                    {diff_badge}
-                    {timer_badge}
-                    <span class="points-badge">{points_display}</span>
-                    <span class={flag_progress_class}>{flag_progress}</span>
+                    <div class="title-row">
+                        <span class="tile-title">{full_name}</span>
+                        <div class="title-right">
+                            <span class="points-badge">{points_display}</span>
+                            <span class={flag_progress_class}>{flag_progress}</span>
+                            {timer_badge}
+                        </div>
+                    </div>
+                    <div class="meta-row">
+                        <div class="meta-center">
+                            {diff_badge}
+                        </div>
+                    </div>
                 </div>
                 {status_badge}
                 <p class="muted desc">{description}</p>

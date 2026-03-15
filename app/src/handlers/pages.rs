@@ -326,6 +326,16 @@ pub async fn challenge_page(
         scoreboard.get_challenge_points(&ctf_name, &challenge_name)
     };
 
+    // Per-flag points (current dynamic points from scoreboard cache)
+    let flag_points = {
+        let scoreboard = state.scoreboard.read().await;
+        challenge
+            .flags
+            .iter()
+            .map(|f| scoreboard.get_flag_points(&ctf_name, &challenge_name, &f.name))
+            .collect::<Vec<u32>>()
+    };
+
     let page_data = views::ChallengePageData {
         challenge,
         ctf_title: ctf_name.clone(),
@@ -343,6 +353,7 @@ pub async fn challenge_page(
         instance_base_domain,
         instance_phase_desc,
         points,
+        flag_points,
     };
 
     let html = views::render_to_html(move || {

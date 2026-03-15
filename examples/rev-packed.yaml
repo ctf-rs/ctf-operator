@@ -23,6 +23,7 @@ spec:
   - dynamic-analysis
   flags:
   - name: flag
+    label: "Reverse the binary"
     body: fake_flag_value
   containers:
   - name: test
