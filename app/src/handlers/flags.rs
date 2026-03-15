@@ -1,9 +1,6 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use axum::{
-    extract::ConnectInfo,
-    http::HeaderMap,
-};
+use axum::{extract::ConnectInfo, http::HeaderMap};
 use ctf_cli::k8s::Flag;
 use ctf_cli::models::Flag as CoreFlag;
 use kube::{ResourceExt, runtime::reflector::ObjectRef};
@@ -37,13 +34,16 @@ pub async fn submit_flag(
         return Ok(());
     };
 
-    let headers: HeaderMap = leptos_axum::extract().await
+    let headers: HeaderMap = leptos_axum::extract()
+        .await
         .map_err(|e| ServerFnError::new(format!("headers: {e}")))?;
-    let connect_info: ConnectInfo<SocketAddr> = leptos_axum::extract().await
-        .unwrap_or(ConnectInfo(SocketAddr::from(([0, 0, 0, 0], 0))));
+    let socket_addr = leptos_axum::extract::<ConnectInfo<SocketAddr>>()
+        .await
+        .ok()
+        .map(|ci| ci.0);
 
     let ctf_name = &state.config.ctf_name;
-    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(connect_info.0));
+    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, socket_addr);
 
     let submitted_flag_trimmed = submitted_flag.trim();
 

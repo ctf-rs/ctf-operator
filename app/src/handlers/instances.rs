@@ -64,13 +64,16 @@ pub async fn spawn_instance(challenge_name: String) -> Result<(), ServerFnError>
         return Ok(());
     };
 
-    let headers: HeaderMap = leptos_axum::extract().await
+    let headers: HeaderMap = leptos_axum::extract()
+        .await
         .map_err(|e| ServerFnError::new(format!("headers: {e}")))?;
-    let connect_info: ConnectInfo<SocketAddr> = leptos_axum::extract().await
-        .unwrap_or(ConnectInfo(SocketAddr::from(([0, 0, 0, 0], 0))));
+    let socket_addr = leptos_axum::extract::<ConnectInfo<SocketAddr>>()
+        .await
+        .ok()
+        .map(|ci| ci.0);
 
     let ctf_name = &state.config.ctf_name;
-    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(connect_info.0));
+    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, socket_addr);
 
     if db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, ctf_name)
         .await
@@ -86,7 +89,9 @@ pub async fn spawn_instance(challenge_name: String) -> Result<(), ServerFnError>
 
     let Some(challenge_namespace) = challenges::find_challenge_namespace(&state, &challenge_name)
     else {
-        return Err(ServerFnError::new("challenge not found in watched namespaces"));
+        return Err(ServerFnError::new(
+            "challenge not found in watched namespaces",
+        ));
     };
 
     // ---- Guard: one instance per user per challenge -------------------
@@ -202,13 +207,16 @@ pub async fn extend_instance(challenge_name: String) -> Result<(), ServerFnError
         return Ok(());
     };
 
-    let headers: HeaderMap = leptos_axum::extract().await
+    let headers: HeaderMap = leptos_axum::extract()
+        .await
         .map_err(|e| ServerFnError::new(format!("headers: {e}")))?;
-    let connect_info: ConnectInfo<SocketAddr> = leptos_axum::extract().await
-        .unwrap_or(ConnectInfo(SocketAddr::from(([0, 0, 0, 0], 0))));
+    let socket_addr = leptos_axum::extract::<ConnectInfo<SocketAddr>>()
+        .await
+        .ok()
+        .map(|ci| ci.0);
 
     let ctf_name = &state.config.ctf_name;
-    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(connect_info.0));
+    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, socket_addr);
 
     let redirect_with = |extend: &str, message: &str| {
         leptos_axum::redirect(&format!(
@@ -407,13 +415,16 @@ pub async fn stop_instance(challenge_name: String) -> Result<(), ServerFnError> 
         return Ok(());
     };
 
-    let headers: HeaderMap = leptos_axum::extract().await
+    let headers: HeaderMap = leptos_axum::extract()
+        .await
         .map_err(|e| ServerFnError::new(format!("headers: {e}")))?;
-    let connect_info: ConnectInfo<SocketAddr> = leptos_axum::extract().await
-        .unwrap_or(ConnectInfo(SocketAddr::from(([0, 0, 0, 0], 0))));
+    let socket_addr = leptos_axum::extract::<ConnectInfo<SocketAddr>>()
+        .await
+        .ok()
+        .map(|ci| ci.0);
 
     let ctf_name = &state.config.ctf_name;
-    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(connect_info.0));
+    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, socket_addr);
 
     let redirect_with = |kind: &str, message: &str| {
         leptos_axum::redirect(&format!(
