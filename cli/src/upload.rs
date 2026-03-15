@@ -153,6 +153,10 @@ async fn build_s3_client(
     Ok(Client::from_conf(builder.build()))
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "called once with owned values from CLI args"
+)]
 fn resolve_credentials(
     access_key_id: Option<String>,
     secret_access_key: Option<String>,

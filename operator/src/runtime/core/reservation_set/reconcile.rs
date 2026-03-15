@@ -7,6 +7,7 @@ use crate::{
 use ctf_cli::k8s::{ConditionStatus, ReservationSet, ReservationSetStatus};
 use kube::{runtime::controller::Action, runtime::reflector::ObjectRef, ResourceExt};
 
+#[derive(Debug)]
 pub struct ReservationSetReconciler;
 
 impl Reconciler for ReservationSetReconciler {
@@ -15,15 +16,15 @@ impl Reconciler for ReservationSetReconciler {
     type Ctx = CtfState;
     type Err = CtfError;
 
-    async fn reconcile(obj: Arc<ReservationSet>, state: Arc<CtfState>) -> Result<Action, CtfError> {
-        let namespace = obj.namespace().unwrap_or_default();
-        if !state.manages_namespace(&namespace) {
+    async fn reconcile(resource: Arc<ReservationSet>, ctx: Arc<CtfState>) -> Result<Action, CtfError> {
+        let namespace = resource.namespace().unwrap_or_default();
+        if !ctx.manages_namespace(&namespace) {
             return Ok(Action::await_change());
         }
 
-        let mut status = obj.status.clone().unwrap_or_default();
-        validate_spec(&obj, &mut status);
-        refresh_claims(&obj, &state, &mut status);
+        let mut status = resource.status.clone().unwrap_or_default();
+        validate_spec(&resource, &mut status);
+        refresh_claims(&resource, &ctx, &mut status);
 
         if conditions_true_excluding_ready(&status.conditions) {
             status
@@ -37,8 +38,8 @@ impl Reconciler for ReservationSetReconciler {
 
         let ready = conditions_true_excluding_ready(&status.conditions);
 
-        if obj.status.as_ref() != Some(&status) {
-            Self::patch_status_namespaced(obj.as_ref(), state.client.clone(), status).await?;
+        if resource.status.as_ref() != Some(&status) {
+            Self::patch_status_namespaced(resource.as_ref(), ctx.client.clone(), status).await?;
         }
 
         if ready {

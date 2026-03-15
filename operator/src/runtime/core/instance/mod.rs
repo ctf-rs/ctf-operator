@@ -18,6 +18,11 @@ use kube::{
     Client,
 };
 
+#[must_use]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Client is cloned for each namespace API"
+)]
 pub fn watcher(client: Client, namespaces: &[String]) -> Watcher<Instance> {
     let apis = namespaces
         .iter()
@@ -37,9 +42,9 @@ pub fn controller(
     deployment_watcher: &Watcher<Deployment>,
     service_watcher: &Watcher<Service>,
 ) -> CtfResult<Controller<InstanceReconciler>> {
-    Ok(Controller::new(ctx.clone(), watcher)?
+    Ok(Controller::new(Arc::clone(&ctx), watcher)?
         .watches(ctf_watcher, {
-            let ctx = ctx.clone();
+            let ctx = Arc::clone(&ctx);
             move |ctf| map_instances_for_ctf(ctf.as_ref(), ctx.instances.state())
         })?
         .watches(challenge_watcher, {

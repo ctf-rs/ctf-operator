@@ -1,5 +1,6 @@
 use std::{
     ffi::OsStr,
+    fmt::Write,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -167,9 +168,10 @@ async fn create_kind_cluster(
     );
 
     for port in expose_port_start..=expose_port_end {
-        config.push_str(&format!(
+        let _ = write!(
+            config,
             "  - containerPort: {port}\n    hostPort: {port}\n    listenAddress: \"0.0.0.0\"\n    protocol: TCP\n"
-        ));
+        );
     }
 
     fs::write(&config_file, config).await?;
@@ -259,7 +261,6 @@ async fn pull_operator_chart() -> anyhow::Result<PathBuf> {
 
 fn kind_provider_command(provider: &str) -> &'static str {
     match provider {
-        "docker" => "docker",
         "podman" => "podman",
         "nerdctl" => "nerdctl",
         _ => "docker",
@@ -320,15 +321,16 @@ async fn install_operator_chart(
     );
     if let Some(image_pull_secret) = image_pull_secret {
         values.push_str("    imagePullSecrets:\n");
-        values.push_str(&format!("      - name: {image_pull_secret}\n"));
+        let _ = writeln!(values, "      - name: {image_pull_secret}");
     }
     values.push_str("watchNamespaces:\n");
     for namespace in namespaces {
-        values.push_str(&format!("  - {namespace}\n"));
+        let _ = writeln!(values, "  - {namespace}");
     }
-    values.push_str(&format!(
-        "instanceNamespacePrefix: {instance_namespace_prefix}\n"
-    ));
+    let _ = writeln!(
+        values,
+        "instanceNamespacePrefix: {instance_namespace_prefix}"
+    );
 
     fs::write(&values_path, values).await?;
 

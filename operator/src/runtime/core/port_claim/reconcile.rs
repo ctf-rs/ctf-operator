@@ -8,6 +8,7 @@ use ctf_cli::k8s::{ConditionStatus, PortClaim, PortClaimStatus, ReservationSet};
 use kube::{runtime::controller::Action, runtime::reflector::ObjectRef, ResourceExt};
 use rand::RngExt;
 
+#[derive(Debug)]
 pub struct PortClaimReconciler;
 
 impl Reconciler for PortClaimReconciler {
@@ -16,18 +17,18 @@ impl Reconciler for PortClaimReconciler {
     type Ctx = CtfState;
     type Err = CtfError;
 
-    async fn reconcile(obj: Arc<PortClaim>, state: Arc<CtfState>) -> Result<Action, CtfError> {
-        let namespace = obj.namespace().unwrap_or_default();
-        if !state.manages_namespace(&namespace) {
+    async fn reconcile(resource: Arc<PortClaim>, ctx: Arc<CtfState>) -> Result<Action, CtfError> {
+        let namespace = resource.namespace().unwrap_or_default();
+        if !ctx.manages_namespace(&namespace) {
             return Ok(Action::await_change());
         }
 
-        let mut status = obj.status.clone().unwrap_or_default();
+        let mut status = resource.status.clone().unwrap_or_default();
 
-        if !validate_spec(&obj, &mut status) {
+        if !validate_spec(&resource, &mut status) {
             status.port = None;
-        } else if let Some(reservation_set) = find_reservation_set(&obj, &state, &mut status) {
-            allocate_port(&obj, &reservation_set, &state, &mut status);
+        } else if let Some(reservation_set) = find_reservation_set(&resource, &ctx, &mut status) {
+            allocate_port(&resource, &reservation_set, &ctx, &mut status);
         } else {
             status.port = None;
         }
@@ -44,8 +45,8 @@ impl Reconciler for PortClaimReconciler {
 
         let ready = conditions_true_excluding_ready(&status.conditions);
 
-        if obj.status.as_ref() != Some(&status) {
-            Self::patch_status_namespaced(obj.as_ref(), state.client.clone(), status).await?;
+        if resource.status.as_ref() != Some(&status) {
+            Self::patch_status_namespaced(resource.as_ref(), ctx.client.clone(), status).await?;
         }
 
         if ready {

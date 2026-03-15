@@ -13,6 +13,7 @@ use kube::{
 };
 use std::sync::Arc;
 
+#[must_use]
 pub fn watcher(client: Client, namespaces: &[String]) -> Watcher<ReservationSet> {
     let _ = namespaces;
     Watcher::new(

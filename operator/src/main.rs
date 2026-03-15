@@ -28,7 +28,7 @@ async fn start_operator(args: OperatorArgs) -> anyhow::Result<()> {
 }
 
 fn gen_crd(_args: CrdArgs) -> anyhow::Result<()> {
-    std::fs::remove_dir_all("crd").ok();
+    let _ = std::fs::remove_dir_all("crd");
     std::fs::create_dir_all("crd")?;
 
     std::fs::write("crd/ctfs.yaml", serde_saphyr::to_string(&Ctf::crd())?)?;

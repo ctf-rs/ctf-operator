@@ -35,10 +35,16 @@ pub enum ValidationError {
 }
 
 impl ValidationError {
+    #[must_use]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "garde::Report is consumed by to_string()"
+    )]
     pub fn from_garde(report: garde::Report) -> Self {
         Self::Garde(report.to_string())
     }
 
+    #[must_use]
     pub fn message(&self) -> String {
         self.to_string()
     }

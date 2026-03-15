@@ -16,6 +16,7 @@ use kube::{
 };
 use std::sync::Arc;
 
+#[must_use]
 pub fn watcher(client: Client, namespaces: &[String]) -> Watcher<PortClaim> {
     let _ = namespaces;
     Watcher::new(
@@ -31,7 +32,7 @@ pub fn controller(
     reservation_set_watcher: &Watcher<ReservationSet>,
 ) -> CtfResult<Controller<PortClaimReconciler>> {
     Ok(
-        Controller::new(ctx.clone(), watcher)?.watches(reservation_set_watcher, move |rs| {
+        Controller::new(Arc::clone(&ctx), watcher)?.watches(reservation_set_watcher, move |rs| {
             map_port_claims_for_reservation_set(rs.as_ref(), ctx.port_claims.state())
         })?,
     )

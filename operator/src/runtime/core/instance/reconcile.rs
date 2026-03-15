@@ -12,7 +12,8 @@ use crate::{
     util::Reconciler,
 };
 use ctf_cli::k8s::{
-    Challenge, ConditionStatus, Ctf, Flag, FlagSpec, Instance, InstancePhase, InstanceStatus,
+    Challenge, ConditionStatus, Conditions, Ctf, Flag, FlagSpec, Instance, InstancePhase,
+    InstanceStatus,
 };
 use ctf_cli::k8s::{PortClaim, PortClaimSpec, ReservationRef, ReservationSet, ReservationSetSpec};
 use jiff::Timestamp;
@@ -32,6 +33,7 @@ use kube::{
 };
 use serde_json::json;
 
+#[derive(Debug)]
 pub struct InstanceReconciler;
 
 impl Reconciler for InstanceReconciler {
@@ -40,23 +42,23 @@ impl Reconciler for InstanceReconciler {
     type Ctx = CtfState;
     type Err = CtfError;
 
-    async fn reconcile(obj: Arc<Instance>, state: Arc<CtfState>) -> Result<Action, CtfError> {
-        let namespace = obj.namespace().unwrap_or_default();
-        if !state.watches_namespace(&namespace) {
+    async fn reconcile(resource: Arc<Instance>, ctx: Arc<CtfState>) -> Result<Action, CtfError> {
+        let namespace = resource.namespace().unwrap_or_default();
+        if !ctx.watches_namespace(&namespace) {
             return Ok(Action::await_change());
         }
 
-        let api: Api<Instance> = Api::namespaced(state.client.clone(), &namespace);
-        let name = obj.name_any();
+        let api: Api<Instance> = Api::namespaced(ctx.client.clone(), &namespace);
+        let name = resource.name_any();
 
         // Check if being deleted
-        if obj.metadata.deletion_timestamp.is_some() {
+        if resource.metadata.deletion_timestamp.is_some() {
             // Cleanup phase - wait for resources to be deleted before removing finalizer
-            return reconcile_cleanup(obj, state, &api).await;
+            return reconcile_cleanup(resource, ctx, &api).await;
         }
 
         // Not being deleted - ensure finalizer is present and do normal reconciliation
-        let finalizers = obj.metadata.finalizers.as_ref();
+        let finalizers = resource.metadata.finalizers.as_ref();
         let has_finalizer = finalizers.is_some_and(|f| f.contains(&FINALIZER_NAME.to_string()));
 
         if !has_finalizer {
@@ -71,7 +73,7 @@ impl Reconciler for InstanceReconciler {
             return Ok(Action::requeue(Duration::from_millis(100)));
         }
 
-        reconcile_apply(obj, state).await
+        reconcile_apply(resource, ctx).await
     }
 }
 
@@ -797,7 +799,7 @@ async fn ensure_flags(
                     || ctf.spec.flag.options.ignore_random,
             },
             scoring: challenge_flag.scoring.clone(),
-            conditions: Default::default(),
+            conditions: Conditions::default(),
         };
 
         let resource = Flag {
@@ -1005,7 +1007,7 @@ async fn ensure_reservation_set(
         spec: ReservationSetSpec {
             start: ctf.spec.network.ports.start,
             end: ctf.spec.network.ports.end,
-            conditions: Default::default(),
+            conditions: Conditions::default(),
         },
         status: None,
     };
@@ -1088,7 +1090,7 @@ async fn ensure_port_claims(
                         name: reservation_name.to_owned(),
                         namespace: None,
                     },
-                    conditions: Default::default(),
+                    conditions: Conditions::default(),
                 },
                 status: None,
             };

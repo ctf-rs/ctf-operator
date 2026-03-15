@@ -8,6 +8,7 @@ use ctf_cli::k8s::{Challenge, ChallengeStatus, ConditionStatus};
 use ctf_cli::models::{ChallengeContainer, ChallengeFlag, ContainerImage};
 use kube::{runtime::controller::Action, ResourceExt};
 
+#[derive(Debug)]
 pub struct ChallengeReconciler;
 
 impl Reconciler for ChallengeReconciler {
@@ -16,19 +17,19 @@ impl Reconciler for ChallengeReconciler {
     type Ctx = CtfState;
     type Err = CtfError;
 
-    async fn reconcile(obj: Arc<Challenge>, state: Arc<CtfState>) -> Result<Action, CtfError> {
-        let namespace = obj.namespace().unwrap_or_default();
-        if !state.watches_namespace(&namespace) {
+    async fn reconcile(resource: Arc<Challenge>, ctx: Arc<CtfState>) -> Result<Action, CtfError> {
+        let namespace = resource.namespace().unwrap_or_default();
+        if !ctx.watches_namespace(&namespace) {
             return Ok(Action::await_change());
         }
 
-        let mut status = obj.status.clone().unwrap_or_default();
-        validate_spec(&obj, &mut status);
+        let mut status = resource.status.clone().unwrap_or_default();
+        validate_spec(&resource, &mut status);
 
         let ready = status.conditions.all_true();
 
-        if obj.status.as_ref() != Some(&status) {
-            Self::patch_status_namespaced(obj.as_ref(), state.client.clone(), status).await?;
+        if resource.status.as_ref() != Some(&status) {
+            Self::patch_status_namespaced(resource.as_ref(), ctx.client.clone(), status).await?;
         }
 
         if ready {

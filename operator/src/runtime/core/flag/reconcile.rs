@@ -7,6 +7,7 @@ use crate::{
 use ctf_cli::k8s::{ConditionStatus, Flag, FlagStatus};
 use kube::{runtime::controller::Action, ResourceExt};
 
+#[derive(Debug)]
 pub struct FlagReconciler;
 
 impl Reconciler for FlagReconciler {
@@ -15,19 +16,19 @@ impl Reconciler for FlagReconciler {
     type Ctx = CtfState;
     type Err = CtfError;
 
-    async fn reconcile(obj: Arc<Flag>, state: Arc<CtfState>) -> Result<Action, CtfError> {
-        let namespace = obj.namespace().unwrap_or_default();
-        if !state.manages_namespace(&namespace) {
+    async fn reconcile(resource: Arc<Flag>, ctx: Arc<CtfState>) -> Result<Action, CtfError> {
+        let namespace = resource.namespace().unwrap_or_default();
+        if !ctx.manages_namespace(&namespace) {
             return Ok(Action::await_change());
         }
 
-        let mut status = obj.status.clone().unwrap_or_default();
-        validate_and_generate(&obj, &mut status);
+        let mut status = resource.status.clone().unwrap_or_default();
+        validate_and_generate(&resource, &mut status);
 
         let ready = conditions_true_excluding_ready(&status.conditions);
 
-        if obj.status.as_ref() != Some(&status) {
-            Self::patch_status_namespaced(obj.as_ref(), state.client.clone(), status).await?;
+        if resource.status.as_ref() != Some(&status) {
+            Self::patch_status_namespaced(resource.as_ref(), ctx.client.clone(), status).await?;
         }
 
         if ready {

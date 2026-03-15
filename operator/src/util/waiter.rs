@@ -17,6 +17,7 @@ pub enum WaitReadyError {
     WriterDropped(#[from] WriterDropped),
 }
 
+#[expect(missing_debug_implementations, reason = "JoinSet and BoxFuture don't impl Debug")]
 pub struct Waiter {
     ready_tasks: JoinSet<Result<(), WriterDropped>>,
     tasks: JoinSet<()>,
@@ -25,6 +26,7 @@ pub struct Waiter {
 }
 
 impl Waiter {
+    #[must_use]
     pub fn builder() -> Self {
         Self {
             ready_tasks: JoinSet::new(),
@@ -73,6 +75,7 @@ impl Waiter {
         Ok(())
     }
 
+    #[must_use]
     pub fn watcher<K: KubeObject>(mut self, watcher: Watcher<K>) -> Self {
         let store = watcher.store();
         self.ready_tasks
@@ -90,6 +93,7 @@ impl Waiter {
         self
     }
 
+    #[must_use]
     pub fn index_watcher<K: KubeObject, I: 'static + Index<K> + Send + Sync>(
         mut self,
         watcher: Watcher<K>,
@@ -111,6 +115,7 @@ impl Waiter {
         self
     }
 
+    #[must_use]
     pub fn controller<R: Reconciler>(mut self, controller: Controller<R>) -> Self {
         self.pending_controllers.push(Box::pin(async move {
             controller.run().await;

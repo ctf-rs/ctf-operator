@@ -10,6 +10,7 @@ use ctf_cli::k8s::Flag;
 use kube::{runtime::watcher::Config, Client};
 use std::sync::Arc;
 
+#[must_use]
 pub fn watcher(client: Client, namespaces: &[String]) -> Watcher<Flag> {
     let _ = namespaces;
     Watcher::new(kube::Api::<Flag>::all(client), Config::default(), 0xFFFF)

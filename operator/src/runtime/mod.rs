@@ -109,16 +109,16 @@ pub async fn run(
         service_watcher.store(),
     ));
 
-    let ctf_controller = core::ctf::controller(state.clone(), &ctf_watcher)?;
-    let challenge_controller = core::challenge::controller(state.clone(), &challenge_watcher)?;
-    let flag_controller = core::flag::controller(state.clone(), &flag_watcher)?;
+    let ctf_controller = core::ctf::controller(Arc::clone(&state), &ctf_watcher)?;
+    let challenge_controller = core::challenge::controller(Arc::clone(&state), &challenge_watcher)?;
+    let flag_controller = core::flag::controller(Arc::clone(&state), &flag_watcher)?;
     let reservation_set_controller = core::reservation_set::controller(
-        state.clone(),
+        Arc::clone(&state),
         &reservation_set_watcher,
         &port_claim_watcher,
     )?;
     let port_claim_controller =
-        core::port_claim::controller(state.clone(), &port_claim_watcher, &reservation_set_watcher)?;
+        core::port_claim::controller(Arc::clone(&state), &port_claim_watcher, &reservation_set_watcher)?;
     let instance_controller = core::instance::controller(
         state,
         &instance_watcher,

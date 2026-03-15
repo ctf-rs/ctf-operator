@@ -10,6 +10,7 @@ pub enum ControllerError {
     SubscribeFailed,
 }
 
+#[expect(missing_debug_implementations, reason = "kube::runtime::Controller doesn't impl Debug")]
 pub struct Controller<R: Reconciler> {
     controller: kube::runtime::Controller<R::K>,
     ctx: Arc<R::Ctx>,

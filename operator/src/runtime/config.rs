@@ -72,6 +72,7 @@ pub enum InstanceServiceType {
 }
 
 impl InstanceServiceType {
+    #[must_use] 
     pub const fn as_k8s_str(&self) -> &'static str {
         match self {
             Self::ClusterIp => "ClusterIP",

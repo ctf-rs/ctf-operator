@@ -19,6 +19,7 @@ use crate::util::{KubeObject, SharedIndex};
 
 use super::indexer::{Index, WatchStreamIndexExt};
 
+#[expect(missing_debug_implementations, reason = "kube Store/Writer don't impl Debug")]
 pub struct Watcher<K: 'static + Resource + Clone + Debug + DeserializeOwned>
 where
     K::DynamicType: Default + Eq + Hash + Clone + Debug,
@@ -30,10 +31,12 @@ where
 }
 
 impl<K: KubeObject> Watcher<K> {
+    #[must_use]
     pub fn new(api: Api<K>, config: watcher::Config, store_buf_size: usize) -> Self {
         Self::new_many(vec![api], config, store_buf_size)
     }
 
+    #[must_use]
     pub fn new_many(apis: Vec<Api<K>>, config: watcher::Config, store_buf_size: usize) -> Self {
         assert!(
             !apis.is_empty(),
@@ -49,6 +52,7 @@ impl<K: KubeObject> Watcher<K> {
         }
     }
 
+    #[must_use]
     pub fn subscribe(&self) -> Option<ReflectHandle<K>> {
         self.writer.subscribe()
     }
@@ -72,6 +76,7 @@ impl<K: KubeObject> Watcher<K> {
         })
     }
 
+    #[must_use]
     pub fn store(&self) -> Store<K> {
         self.store.clone()
     }
@@ -87,17 +92,17 @@ impl<K: KubeObject> Watcher<K> {
         select_all(streams).reflect_shared(self.writer)
     }
 
-    pub fn to_index_stream<I: Index<K>>(
+    pub fn to_index_stream<I>(
         self,
         index: SharedIndex<I>,
     ) -> impl Stream<Item = Result<Event<K>, kube::runtime::watcher::Error>>
     where
         K: Send,
-        I: Send + Sync + 'static,
+        I: Index<K> + Send + Sync + 'static,
     {
         let streams = self.apis.into_iter().map(|api| {
             kube::runtime::watcher(api, self.config.clone())
-                .index(index.clone())
+                .index(Arc::clone(&index))
                 .boxed()
         });
         select_all(streams).reflect_shared(self.writer)

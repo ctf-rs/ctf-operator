@@ -28,6 +28,11 @@ pub enum InstancePhase {
 
 impl InstancePhase {
     /// Human-readable description of the phase
+    #[must_use]
+    #[expect(
+        clippy::trivially_copy_pass_by_ref,
+        reason = "consistent with other enum methods taking &self"
+    )]
     pub const fn description(&self) -> &'static str {
         match self {
             Self::Initializing => "Initializing...",

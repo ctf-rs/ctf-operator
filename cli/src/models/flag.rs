@@ -104,11 +104,18 @@ impl Default for FlagScoring {
 impl FlagScoring {
     /// Calculate points for this flag given the number of solves.
     /// Uses formula: `max(min_points`, `base_points` / (1 + (solves / decay)))
+    #[must_use]
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "points are always positive and within u32 range"
+    )]
     pub fn calculate_points(&self, solves: u32) -> u32 {
         if solves == 0 {
             return self.base_points;
         }
-        let points = f64::from(self.base_points) / (1.0 + (f64::from(solves) / f64::from(self.decay)));
+        let points =
+            f64::from(self.base_points) / (1.0 + (f64::from(solves) / f64::from(self.decay)));
         points.round().max(f64::from(self.min_points)) as u32
     }
 }
@@ -125,6 +132,10 @@ const fn default_decay() -> u32 {
     6
 }
 
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "garde custom validator signature requirement"
+)]
 fn validate_unique_chars(value: &str, _: &()) -> garde::Result {
     let mut seen = HashSet::new();
     for c in value.chars() {
@@ -137,27 +148,22 @@ fn validate_unique_chars(value: &str, _: &()) -> garde::Result {
     Ok(())
 }
 
-#[allow(dead_code)]
 const fn default_random_len() -> u8 {
     8
 }
 
-#[allow(dead_code)]
 const fn default_random_upper() -> bool {
     true
 }
 
-#[allow(dead_code)]
 const fn default_random_lower() -> bool {
     true
 }
 
-#[allow(dead_code)]
 const fn default_random_digits() -> bool {
     true
 }
 
-#[allow(dead_code)]
 fn default_random_special_chars() -> String {
     String::new()
 }
@@ -167,6 +173,7 @@ impl Flag {
         garde::Validate::validate(self).map_err(ValidationError::from_garde)
     }
 
+    #[must_use]
     pub fn verify(&self, flag: &str) -> bool {
         let prefix = &self.prefix;
         let body = &self.body;
@@ -221,6 +228,7 @@ impl Flag {
         true
     }
 
+    #[must_use]
     pub fn generate(&self) -> String {
         let prefix = &self.prefix;
         let mut body = self.body.clone();
@@ -238,6 +246,7 @@ impl Flag {
 }
 
 impl FlagRandomRules {
+    #[must_use]
     pub fn generate(&self) -> String {
         let mut body = String::new();
         let alphabet = self.alphabet();
@@ -253,6 +262,7 @@ impl FlagRandomRules {
         body
     }
 
+    #[must_use]
     pub fn verify(&self, text: &str, options: &FlagMatchOptions) -> bool {
         let alphabet = if options.ignore_case {
             self.alphabet().to_lowercase()
@@ -274,6 +284,7 @@ impl FlagRandomRules {
         true
     }
 
+    #[must_use]
     pub fn alphabet(&self) -> String {
         let mut alphabet = String::new();
         if self.digits {

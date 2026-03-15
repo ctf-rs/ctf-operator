@@ -47,7 +47,9 @@ pub struct Challenge {
     pub containers: Vec<ChallengeContainer>,
 }
 
-#[derive(Debug, Clone, Copy, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum ChallengeCategory {
     #[serde(alias = "reverse")]
@@ -65,6 +67,7 @@ pub enum ChallengeCategory {
 }
 
 impl ChallengeCategory {
+    #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
             Self::Web => "Web",
@@ -79,6 +82,7 @@ impl ChallengeCategory {
     }
 
     /// Canonical display order for categories.
+    #[must_use]
     pub const fn sort_key(self) -> u8 {
         match self {
             Self::Web => 0,
@@ -93,7 +97,9 @@ impl ChallengeCategory {
     }
 }
 
-#[derive(Debug, Clone, Copy, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum ChallengeDifficulty {
     #[serde(alias = "very_easy", alias = "very-easy")]
@@ -106,6 +112,7 @@ pub enum ChallengeDifficulty {
 
 impl ChallengeDifficulty {
     /// Returns a sort key (lower = easier).
+    #[must_use]
     pub const fn sort_key(self) -> u8 {
         match self {
             Self::Veryeasy => 0,
@@ -116,6 +123,7 @@ impl ChallengeDifficulty {
         }
     }
 
+    #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
             Self::Veryeasy => "Very Easy",
@@ -126,6 +134,7 @@ impl ChallengeDifficulty {
         }
     }
 
+    #[must_use]
     pub const fn css_class(self) -> &'static str {
         match self {
             Self::Veryeasy => "veryeasy",
@@ -203,6 +212,10 @@ pub struct ContainerFlag {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, Eq, garde::Validate)]
+#[expect(
+    clippy::struct_field_names,
+    reason = "container_port is clearer than just 'port' in ContainerPort"
+)]
 pub struct ContainerPort {
     #[garde(length(min = 1, max = 63))]
     #[garde(pattern(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"))]
@@ -220,6 +233,10 @@ pub struct ContainerPort {
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
+#[expect(
+    clippy::upper_case_acronyms,
+    reason = "protocol names are conventionally uppercase"
+)]
 pub enum ChallengePortType {
     HTTP,
     HTTPS,
@@ -229,6 +246,7 @@ pub enum ChallengePortType {
 }
 
 impl ChallengeFlag {
+    #[must_use]
     pub fn flag(&self, ctf: &Ctf) -> Flag {
         let body = self.body.clone();
         let prefix = self
@@ -263,8 +281,10 @@ impl Challenge {
 
         let mut file_names = HashSet::<String>::new();
         for file in &self.files {
-            let name = file
-                .file_name().map_or_else(|| file.to_string_lossy().to_string(), |value| value.to_string_lossy().to_string());
+            let name = file.file_name().map_or_else(
+                || file.to_string_lossy().to_string(),
+                |value| value.to_string_lossy().to_string(),
+            );
 
             if !file_names.insert(name) {
                 return Err(ValidationError::DuplicateChallengeFileName);

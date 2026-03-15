@@ -12,6 +12,7 @@ pub struct OperatorConfig {
     pub runtime_config: OperatorRuntimeConfig,
 }
 
+#[expect(missing_debug_implementations, reason = "kube Client and Store don't impl Debug")]
 pub struct CtfState {
     pub client: Client,
     pub config: OperatorConfig,
@@ -26,7 +27,11 @@ pub struct CtfState {
 }
 
 impl CtfState {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "constructor needs all store references"
+    )]
+    #[must_use]
     pub const fn new(
         client: Client,
         config: OperatorConfig,
@@ -53,10 +58,12 @@ impl CtfState {
         }
     }
 
+    #[must_use]
     pub fn watches_namespace(&self, namespace: &str) -> bool {
         self.config.watched_namespaces.contains(namespace)
     }
 
+    #[must_use]
     pub fn manages_namespace(&self, namespace: &str) -> bool {
         self.watches_namespace(namespace)
             || namespace.starts_with(&self.config.instance_namespace_prefix)

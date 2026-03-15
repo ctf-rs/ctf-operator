@@ -1,7 +1,7 @@
 use crate::models::{Challenge as CoreChallenge, Ctf as CoreCtf, CtfStorageKind};
 
 use crate::k8s::{
-    Challenge, ChallengeContainer, ChallengeFileRef, ChallengeSpec, ConversionError,
+    Challenge, ChallengeContainer, ChallengeFileRef, ChallengeSpec, Conditions, ConversionError,
     ConversionResult, Ctf, CtfSpec, Instance, InstanceSpec,
 };
 
@@ -67,7 +67,7 @@ pub fn challenge_from_core(
             difficulty: challenge.difficulty,
             tags: challenge.tags.clone(),
             authors: challenge.authors.clone(),
-            conditions: Default::default(),
+            conditions: Conditions::default(),
             flags: challenge.flags.clone(),
             containers,
             files,
@@ -78,6 +78,7 @@ pub fn challenge_from_core(
     Ok(resource)
 }
 
+#[must_use]
 pub fn ctf_from_core(
     ctf: &CoreCtf,
     challenges: &[CoreChallenge],
@@ -95,7 +96,7 @@ pub fn ctf_from_core(
             description: ctf.description.clone(),
             public: ctf.public,
             instance_duration_seconds: ctf.instance_duration_seconds,
-            conditions: Default::default(),
+            conditions: Conditions::default(),
             challenges: challenge_refs,
             flag: ctf.flag.clone(),
             network: ctf.network.clone(),
@@ -105,6 +106,7 @@ pub fn ctf_from_core(
     resource
 }
 
+#[must_use]
 pub fn instance_from_refs(
     instance_name: &str,
     ctf_name: &str,
@@ -116,7 +118,7 @@ pub fn instance_from_refs(
         InstanceSpec {
             ctf: ctf_name.to_owned(),
             challenge: challenge_name.to_owned(),
-            conditions: Default::default(),
+            conditions: Conditions::default(),
         },
     );
     resource.metadata.namespace = namespace;
