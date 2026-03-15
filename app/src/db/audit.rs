@@ -1,9 +1,11 @@
 use anyhow::Result;
-use sqlx::PgPool;
+use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, EntityTrait, Set, Statement};
+
+use super::entity::{downloads, instance_actions, instance_flags};
 
 /// Record a generated flag from K8s Flag resource
 pub async fn log_flag_generation(
-    db: &PgPool,
+    db: &DatabaseConnection,
     instance_name: &str,
     user_id: Option<i64>,
     challenge_name: &str,
@@ -11,20 +13,20 @@ pub async fn log_flag_generation(
     flag_name: &str,
     generated_flag: &str,
 ) -> Result<()> {
-    sqlx::query(
-        r#"INSERT INTO instance_flags(
-            instance_name, user_id, challenge_name, ctf_name, flag_name, generated_flag
-        ) VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT DO NOTHING"#,
-    )
-    .bind(instance_name)
-    .bind(user_id)
-    .bind(challenge_name)
-    .bind(ctf_name)
-    .bind(flag_name)
-    .bind(generated_flag)
-    .execute(db)
-    .await?;
+    let model = instance_flags::ActiveModel {
+        instance_name: Set(instance_name.to_owned()),
+        user_id: Set(user_id),
+        challenge_name: Set(challenge_name.to_owned()),
+        ctf_name: Set(ctf_name.to_owned()),
+        flag_name: Set(flag_name.to_owned()),
+        generated_flag: Set(generated_flag.to_owned()),
+        ..Default::default()
+    };
+
+    let _ = instance_flags::Entity::insert(model)
+        .on_conflict_do_nothing()
+        .exec(db)
+        .await;
 
     Ok(())
 }
@@ -32,35 +34,42 @@ pub async fn log_flag_generation(
 /// Check if a submitted flag was generated for a different user (cheat detection)
 /// Returns (flag_gen_id, cheated_from_user_id) if the flag belongs to another user
 pub async fn check_flag_cheated(
-    db: &PgPool,
+    db: &DatabaseConnection,
     submitted_flag: &str,
     ctf_name: &str,
     submitting_user_id: i64,
 ) -> Result<Option<(i64, i64)>> {
-    let result = sqlx::query_as::<_, (i64, Option<i64>)>(
-        r#"SELECT id, user_id
-           FROM instance_flags
-           WHERE generated_flag = $1
-             AND ctf_name = $2
-             AND (user_id IS NULL OR user_id != $3)
-           LIMIT 1"#,
-    )
-    .bind(submitted_flag)
-    .bind(ctf_name)
-    .bind(submitting_user_id)
-    .fetch_optional(db)
-    .await?;
+    let result = db
+        .query_one_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            r#"SELECT id, user_id
+               FROM instance_flags
+               WHERE generated_flag = $1
+                 AND ctf_name = $2
+                 AND (user_id IS NULL OR user_id != $3)
+               LIMIT 1"#,
+            [
+                submitted_flag.into(),
+                ctf_name.into(),
+                submitting_user_id.into(),
+            ],
+        ))
+        .await?;
 
-    if let Some((flag_gen_id, Some(owner_user_id))) = result {
-        Ok(Some((flag_gen_id, owner_user_id)))
-    } else {
-        Ok(None)
+    if let Some(row) = result {
+        let flag_gen_id: i64 = row.try_get_by_index(0)?;
+        let user_id: Option<i64> = row.try_get_by_index(1)?;
+        if let Some(owner_user_id) = user_id {
+            return Ok(Some((flag_gen_id, owner_user_id)));
+        }
     }
+
+    Ok(None)
 }
 
 /// Log an instance action (spawn/stop/extend)
 pub async fn log_instance_action(
-    db: &PgPool,
+    db: &DatabaseConnection,
     user_id: i64,
     instance_name: &str,
     challenge_name: &str,
@@ -68,44 +77,38 @@ pub async fn log_instance_action(
     action: &str,
     ip_address: Option<&str>,
 ) -> Result<()> {
-    sqlx::query(
-        r#"INSERT INTO instance_actions(
-            user_id, instance_name, challenge_name, ctf_name, action, ip_address
-        ) VALUES ($1, $2, $3, $4, $5, $6)"#,
-    )
-    .bind(user_id)
-    .bind(instance_name)
-    .bind(challenge_name)
-    .bind(ctf_name)
-    .bind(action)
-    .bind(ip_address)
-    .execute(db)
-    .await?;
+    let model = instance_actions::ActiveModel {
+        user_id: Set(user_id),
+        instance_name: Set(instance_name.to_owned()),
+        challenge_name: Set(challenge_name.to_owned()),
+        ctf_name: Set(ctf_name.to_owned()),
+        action: Set(action.to_owned()),
+        ip_address: Set(ip_address.map(ToOwned::to_owned)),
+        ..Default::default()
+    };
 
+    instance_actions::Entity::insert(model).exec(db).await?;
     Ok(())
 }
 
 /// Log a file download
 pub async fn log_download(
-    db: &PgPool,
+    db: &DatabaseConnection,
     user_id: i64,
     challenge_name: &str,
     ctf_name: &str,
     file_url: &str,
     ip_address: Option<&str>,
 ) -> Result<()> {
-    sqlx::query(
-        r#"INSERT INTO downloads(
-            user_id, challenge_name, ctf_name, file_url, ip_address
-        ) VALUES ($1, $2, $3, $4, $5)"#,
-    )
-    .bind(user_id)
-    .bind(challenge_name)
-    .bind(ctf_name)
-    .bind(file_url)
-    .bind(ip_address)
-    .execute(db)
-    .await?;
+    let model = downloads::ActiveModel {
+        user_id: Set(user_id),
+        challenge_name: Set(challenge_name.to_owned()),
+        ctf_name: Set(ctf_name.to_owned()),
+        file_url: Set(file_url.to_owned()),
+        ip_address: Set(ip_address.map(ToOwned::to_owned)),
+        ..Default::default()
+    };
 
+    downloads::Entity::insert(model).exec(db).await?;
     Ok(())
 }

@@ -92,7 +92,10 @@ fn redirect_to_login() -> Response<Body> {
         .expect("building redirect response should not fail")
 }
 
-pub(crate) fn extract_session_cookie(headers: &http::HeaderMap, cookie_name: &str) -> Option<String> {
+pub(crate) fn extract_session_cookie(
+    headers: &http::HeaderMap,
+    cookie_name: &str,
+) -> Option<String> {
     headers
         .get(header::COOKIE)
         .and_then(|v| v.to_str().ok())

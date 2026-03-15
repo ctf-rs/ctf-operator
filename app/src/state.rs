@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use ctf_cli::k8s::{Challenge, Ctf, Flag, Instance};
 use kube::{Client, runtime::reflector::Store};
-use sqlx::PgPool;
+use sea_orm::DatabaseConnection;
 use tokio::sync::RwLock;
 
 use crate::{config::AppConfig, oauth, scoreboard::Scoreboard};
@@ -14,7 +14,7 @@ use crate::{config::AppConfig, oauth, scoreboard::Scoreboard};
 )]
 pub struct AppState {
     pub config: Arc<AppConfig>,
-    pub db: PgPool,
+    pub db: DatabaseConnection,
     pub kube: Client,
     pub oidc_client: oauth::OidcClient,
     pub pending_oauth: Arc<RwLock<HashMap<String, oauth::PendingAuth>>>,

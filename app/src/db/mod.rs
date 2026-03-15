@@ -1,4 +1,5 @@
 mod audit;
+pub mod entity;
 mod flags;
 pub mod models;
 mod users;
@@ -14,17 +15,16 @@ pub use models::{ChallengeView, FlagView, PortView, SolvedKey, User};
 pub use users::{create_session, delete_session, get_user_by_session, upsert_user};
 
 use anyhow::Result;
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use sea_orm::{ConnectOptions, ConnectionTrait, Database, DatabaseConnection};
 
-pub async fn connect(database_url: &str) -> Result<PgPool> {
-    Ok(PgPoolOptions::new()
-        .max_connections(10)
-        .connect(database_url)
-        .await?)
+pub async fn connect(database_url: &str) -> Result<DatabaseConnection> {
+    let mut opt = ConnectOptions::new(database_url);
+    opt.max_connections(10);
+    Ok(Database::connect(opt).await?)
 }
 
-pub async fn migrate(db: &PgPool) -> Result<()> {
-    sqlx::query(
+pub async fn migrate(db: &DatabaseConnection) -> Result<()> {
+    db.execute_unprepared(
         r#"CREATE TABLE IF NOT EXISTS users (
             id BIGSERIAL PRIMARY KEY,
             sub TEXT NOT NULL UNIQUE,
@@ -33,10 +33,9 @@ pub async fn migrate(db: &PgPool) -> Result<()> {
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )"#,
     )
-    .execute(db)
     .await?;
 
-    sqlx::query(
+    db.execute_unprepared(
         r#"CREATE TABLE IF NOT EXISTS sessions (
             token TEXT PRIMARY KEY,
             user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -44,11 +43,10 @@ pub async fn migrate(db: &PgPool) -> Result<()> {
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )"#,
     )
-    .execute(db)
     .await?;
 
     // Tracks per-instance generated flags (for cheat detection)
-    sqlx::query(
+    db.execute_unprepared(
         r#"CREATE TABLE IF NOT EXISTS instance_flags (
             id BIGSERIAL PRIMARY KEY,
             instance_name TEXT NOT NULL,
@@ -60,19 +58,17 @@ pub async fn migrate(db: &PgPool) -> Result<()> {
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )"#,
     )
-    .execute(db)
     .await?;
 
     // Index for efficient cheat detection lookup
-    sqlx::query(
+    db.execute_unprepared(
         r#"CREATE INDEX IF NOT EXISTS idx_instance_flags_lookup
            ON instance_flags(generated_flag, ctf_name)"#,
     )
-    .execute(db)
     .await?;
 
     // All flag submissions (merged with cheat detection)
-    sqlx::query(
+    db.execute_unprepared(
         r#"CREATE TABLE IF NOT EXISTS flag_submissions (
             id BIGSERIAL PRIMARY KEY,
             user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -88,10 +84,9 @@ pub async fn migrate(db: &PgPool) -> Result<()> {
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )"#,
     )
-    .execute(db)
     .await?;
 
-    sqlx::query(
+    db.execute_unprepared(
         r#"CREATE TABLE IF NOT EXISTS solved_challenges (
             user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             challenge_name TEXT NOT NULL,
@@ -100,11 +95,10 @@ pub async fn migrate(db: &PgPool) -> Result<()> {
             PRIMARY KEY(user_id, challenge_name, ctf_name)
         )"#,
     )
-    .execute(db)
     .await?;
 
     // Instance actions (spawn/stop/extend)
-    sqlx::query(
+    db.execute_unprepared(
         r#"CREATE TABLE IF NOT EXISTS instance_actions (
             id BIGSERIAL PRIMARY KEY,
             user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -116,11 +110,10 @@ pub async fn migrate(db: &PgPool) -> Result<()> {
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )"#,
     )
-    .execute(db)
     .await?;
 
     // File downloads
-    sqlx::query(
+    db.execute_unprepared(
         r#"CREATE TABLE IF NOT EXISTS downloads (
             id BIGSERIAL PRIMARY KEY,
             user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -131,7 +124,6 @@ pub async fn migrate(db: &PgPool) -> Result<()> {
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )"#,
     )
-    .execute(db)
     .await?;
 
     Ok(())

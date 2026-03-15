@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
+use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, Statement};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use tracing::{error, info};
 
 use crate::state::AppState;
@@ -177,55 +177,66 @@ async fn get_flag_configs(state: &AppState) -> HashMap<(String, String), (u32, u
 
 /// Get solve counts per flag from database
 async fn get_flag_solve_counts(
-    db: &PgPool,
+    db: &DatabaseConnection,
     ctf_name: &str,
 ) -> anyhow::Result<HashMap<(String, String), u32>> {
-    let rows = sqlx::query_as::<_, (String, String, i64)>(
-        r#"
-        SELECT challenge_name, flag_name, COUNT(DISTINCT user_id) as solve_count
-        FROM flag_submissions
-        WHERE ctf_name = $1 AND accepted = true
-        GROUP BY challenge_name, flag_name
-        "#,
-    )
-    .bind(ctf_name)
-    .fetch_all(db)
-    .await?;
+    let rows = db
+        .query_all_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            r#"
+            SELECT challenge_name, flag_name, COUNT(DISTINCT user_id) as solve_count
+            FROM flag_submissions
+            WHERE ctf_name = $1 AND accepted = true
+            GROUP BY challenge_name, flag_name
+            "#,
+            [ctf_name.into()],
+        ))
+        .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|(ch, fl, cnt)| ((ch, fl), cnt as u32))
-        .collect())
+    let mut map = HashMap::new();
+    for row in &rows {
+        let ch: String = row.try_get_by_index(0)?;
+        let fl: String = row.try_get_by_index(1)?;
+        let cnt: i64 = row.try_get_by_index(2)?;
+        map.insert((ch, fl), cnt as u32);
+    }
+    Ok(map)
 }
 
 /// Calculate user scores based on their solves
 async fn calculate_user_scores(
-    db: &PgPool,
+    db: &DatabaseConnection,
     ctf_name: &str,
     flag_scores: &HashMap<FlagKey, FlagScore>,
 ) -> anyhow::Result<HashMap<UserScoreKey, UserScore>> {
     // Get all accepted submissions with user info
-    let rows = sqlx::query_as::<_, (i64, String, String, String, chrono::DateTime<chrono::Utc>)>(
-        r#"
-        SELECT DISTINCT ON (s.user_id, s.challenge_name, s.flag_name)
-            s.user_id, 
-            COALESCE(u.name, u.sub) as username,
-            s.challenge_name, 
-            s.flag_name,
-            s.created_at
-        FROM flag_submissions s
-        JOIN users u ON u.id = s.user_id
-        WHERE s.ctf_name = $1 AND s.accepted = true
-        ORDER BY s.user_id, s.challenge_name, s.flag_name, s.created_at
-        "#,
-    )
-    .bind(ctf_name)
-    .fetch_all(db)
-    .await?;
+    let rows = db
+        .query_all_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            r#"
+            SELECT DISTINCT ON (s.user_id, s.challenge_name, s.flag_name)
+                s.user_id,
+                COALESCE(u.name, u.sub) as username,
+                s.challenge_name,
+                s.flag_name,
+                s.created_at
+            FROM flag_submissions s
+            JOIN users u ON u.id = s.user_id
+            WHERE s.ctf_name = $1 AND s.accepted = true
+            ORDER BY s.user_id, s.challenge_name, s.flag_name, s.created_at
+            "#,
+            [ctf_name.into()],
+        ))
+        .await?;
 
     let mut user_scores: HashMap<UserScoreKey, UserScore> = HashMap::new();
 
-    for (user_id, username, challenge_name, flag_name, solved_at) in rows {
+    for row in &rows {
+        let user_id: i64 = row.try_get_by_index(0)?;
+        let username: String = row.try_get_by_index(1)?;
+        let challenge_name: String = row.try_get_by_index(2)?;
+        let flag_name: String = row.try_get_by_index(3)?;
+        let solved_at: chrono::DateTime<chrono::Utc> = row.try_get_by_index(4)?;
         let key = (ctf_name.to_string(), user_id);
         let flag_key = (ctf_name.to_string(), challenge_name, flag_name);
 

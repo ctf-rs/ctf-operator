@@ -1,6 +1,5 @@
 use ctf_cli::{ChallengeCategory, ChallengeDifficulty};
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
 
 // ---- Public models ----
 
@@ -71,26 +70,4 @@ pub struct ChallengeView {
 pub struct SolvedKey {
     pub challenge_name: String,
     pub ctf_name: String,
-}
-
-// ---- Internal row types ----
-
-#[derive(Debug, FromRow)]
-pub(super) struct UserRow {
-    pub(super) id: i64,
-    pub(super) sub: String,
-    pub(super) email: Option<String>,
-    pub(super) name: Option<String>,
-}
-
-// ---- Row → model converters ----
-
-pub(super) fn user_from_row(row: UserRow) -> User {
-    User {
-        id: row.id,
-        sub: row.sub,
-        email: row.email,
-        name: row.name,
-        roles: Vec::new(),
-    }
 }

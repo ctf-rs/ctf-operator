@@ -1,86 +1,94 @@
 use anyhow::Result;
-use sqlx::PgPool;
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
+    sea_query::OnConflict,
+};
 
-use super::models::{User, UserRow, user_from_row};
+use super::entity::{sessions, users};
+use super::models::User;
 
 pub async fn upsert_user(
-    db: &PgPool,
+    db: &DatabaseConnection,
     sub: &str,
     email: Option<&str>,
     name: Option<&str>,
 ) -> Result<User> {
-    let row = sqlx::query_as::<_, UserRow>(
-        r#"INSERT INTO users(sub, email, name)
-           VALUES ($1, $2, $3)
-           ON CONFLICT(sub) DO UPDATE
-             SET email = EXCLUDED.email,
-                 name = EXCLUDED.name
-           RETURNING id, sub, email, name"#,
-    )
-    .bind(sub)
-    .bind(email)
-    .bind(name)
-    .fetch_one(db)
-    .await?;
+    let model = users::ActiveModel {
+        sub: Set(sub.to_owned()),
+        email: Set(email.map(ToOwned::to_owned)),
+        name: Set(name.map(ToOwned::to_owned)),
+        ..Default::default()
+    };
 
-    Ok(user_from_row(row))
+    let result = users::Entity::insert(model)
+        .on_conflict(
+            OnConflict::column(users::Column::Sub)
+                .update_columns([users::Column::Email, users::Column::Name])
+                .to_owned(),
+        )
+        .exec_with_returning(db)
+        .await?;
+
+    Ok(User {
+        id: result.id,
+        sub: result.sub,
+        email: result.email,
+        name: result.name,
+        roles: Vec::new(),
+    })
 }
 
 pub async fn create_session(
-    db: &PgPool,
+    db: &DatabaseConnection,
     token: &str,
     user_id: i64,
     roles: &[String],
 ) -> Result<()> {
-    sqlx::query(
-        r#"INSERT INTO sessions(token, user_id, roles_json)
-           VALUES ($1, $2, $3)
-           ON CONFLICT(token) DO UPDATE
-             SET user_id = EXCLUDED.user_id,
-                 roles_json = EXCLUDED.roles_json"#,
-    )
-    .bind(token)
-    .bind(user_id)
-    .bind(sqlx::types::Json(roles.to_vec()))
-    .execute(db)
-    .await?;
+    let model = sessions::ActiveModel {
+        token: Set(token.to_owned()),
+        user_id: Set(user_id),
+        roles_json: Set(serde_json::json!(roles)),
+        ..Default::default()
+    };
+
+    sessions::Entity::insert(model)
+        .on_conflict(
+            OnConflict::column(sessions::Column::Token)
+                .update_columns([sessions::Column::UserId, sessions::Column::RolesJson])
+                .to_owned(),
+        )
+        .exec(db)
+        .await?;
 
     Ok(())
 }
 
-pub async fn delete_session(db: &PgPool, token: &str) -> Result<()> {
-    sqlx::query("DELETE FROM sessions WHERE token = $1")
-        .bind(token)
-        .execute(db)
+pub async fn delete_session(db: &DatabaseConnection, token: &str) -> Result<()> {
+    sessions::Entity::delete_many()
+        .filter(sessions::Column::Token.eq(token))
+        .exec(db)
         .await?;
     Ok(())
 }
 
-pub async fn get_user_by_session(db: &PgPool, token: &str) -> Result<Option<User>> {
-    let row = sqlx::query_as::<
-        _,
-        (
-            i64,
-            String,
-            Option<String>,
-            Option<String>,
-            sqlx::types::Json<Vec<String>>,
-        ),
-    >(
-        r#"SELECT u.id, u.sub, u.email, u.name, s.roles_json
-           FROM users u
-           INNER JOIN sessions s ON s.user_id = u.id
-           WHERE s.token = $1"#,
-    )
-    .bind(token)
-    .fetch_optional(db)
-    .await?;
+pub async fn get_user_by_session(db: &DatabaseConnection, token: &str) -> Result<Option<User>> {
+    let result = sessions::Entity::find()
+        .filter(sessions::Column::Token.eq(token))
+        .find_also_related(users::Entity)
+        .one(db)
+        .await?;
 
-    Ok(row.map(|(id, sub, email, name, roles_json)| User {
-        id,
-        sub,
-        email,
-        name,
-        roles: roles_json.0,
-    }))
+    match result {
+        Some((session, Some(user))) => {
+            let roles: Vec<String> = serde_json::from_value(session.roles_json).unwrap_or_default();
+            Ok(Some(User {
+                id: user.id,
+                sub: user.sub,
+                email: user.email,
+                name: user.name,
+                roles,
+            }))
+        }
+        _ => Ok(None),
+    }
 }
