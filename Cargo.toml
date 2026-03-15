@@ -3,44 +3,79 @@ resolver = "2"
 members = ["app","cli", "operator"]
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
-rust_2018_idioms = { level = "warn", priority = -1 }
-# Allow drop order warnings for now - code is correct, just informational about 2024 edition
-tail_expr_drop_order = "allow"
+ambiguous_negative_literals = "warn"
+missing_debug_implementations = "warn"
+# missing_docs = "warn"  # Enable before release
+redundant_imports = "warn"
+redundant_lifetimes = "warn"
+trivial_numeric_casts = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+unused_lifetimes = "warn"
+
+# Allow our special-purpose nonstandard cfg attributes.
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(coverage,coverage_nightly)',
+] }
 
 [workspace.lints.clippy]
-all = { level = "warn", priority = -1 }
-pedantic = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+correctness = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
-# Allow common patterns
-module_name_repetitions = "allow"
-must_use_candidate = "allow"
-missing_errors_doc = "allow"
-missing_panics_doc = "allow"
-redundant_pub_crate = "allow"
-significant_drop_tightening = "allow"
-future_not_send = "allow"
-# Allow these for practical reasons
-too_many_lines = "allow"
-too_many_arguments = "allow"
-needless_pass_by_value = "allow"
-struct_field_names = "allow"
-multiple_bound_locations = "allow"
-type_repetition_in_bounds = "allow"
-default_trait_access = "allow"
-struct_excessive_bools = "allow"
-cast_possible_truncation = "allow"
-cast_sign_loss = "allow"
-unnecessary_wraps = "allow"
-trivially_copy_pass_by_ref = "allow"
-missing_const_for_fn = "allow"
-or_fun_call = "allow"
-use_self = "allow"
-match_same_arms = "allow"
+pedantic = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+
+# Lints from the `restriction` group that are not enabled by categories above but are still useful.
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+as_pointer_underscore = "warn"
+assertions_on_result_states = "warn"
+clone_on_ref_ptr = "warn"
+deref_by_slicing = "warn"
+disallowed_script_idents = "warn"
+empty_drop = "warn"
+empty_enum_variants_with_brackets = "warn"
+empty_structs_with_brackets = "warn"
+fn_to_numeric_cast_any = "warn"
+if_then_some_else_none = "warn"
+map_err_ignore = "warn"
+multiple_unsafe_ops_per_block = "warn"
+panic = "warn"
+redundant_type_annotations = "warn"
+renamed_function_params = "warn"
+semicolon_outside_block = "warn"
+undocumented_unsafe_blocks = "warn"
+unnecessary_safety_comment = "warn"
+unnecessary_safety_doc = "warn"
+unneeded_field_pattern = "warn"
+unused_result_ok = "warn"
+unwrap_used = "warn"
+#
+# Below are undesirable lint rules that are enabled by the categories above but are not useful.
+#
+
+# This lint in many cases produces less readable code and is not worth the trouble.
 option_if_let_else = "allow"
-format_push_string = "allow"
-assigning_clones = "allow"
-return_self_not_must_use = "allow"
+# Just because a fn can be const does not mean it should be const. Const is a promise, part of the
+# API contract, and removing it is a breaking change so we need to be careful where we commit to const.
+missing_const_for_fn = "allow"
+# This sometimes prevents marking crate-scoped items as pub(crate), so is not welcome.
+redundant_pub_crate = "allow"
+# Testing panic messages is not universally applicable - panic messages are not an API contract.
+should_panic_without_expect = "allow"
+# This just misfires a lot and claims we can drop values that actually need to remain borrowed.
+# It also often results in much less readable code for no benefit.
+significant_drop_tightening = "allow"
+# Blocked by Clippy bug: https://github.com/rust-lang/rust-clippy/issues/15036
+wildcard_imports = "allow"
+# In a large workspace, duplicate dependencies are inevitable; this lint causes more maintenance burden than practical benefit.
+multiple_crate_versions = "allow"
+
+# [workspace.lints.rustdoc]
+# missing_crate_level_docs = "warn"
+# unescaped_backticks = "warn"
 
 [[workspace.metadata.leptos]]
 name = "app"
