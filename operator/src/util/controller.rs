@@ -11,6 +11,7 @@ pub enum ControllerError {
 }
 
 #[expect(missing_debug_implementations, reason = "kube::runtime::Controller doesn't impl Debug")]
+#[expect(clippy::struct_field_names, reason = "controller field name mirrors wrapper type name")]
 pub struct Controller<R: Reconciler> {
     controller: kube::runtime::Controller<R::K>,
     ctx: Arc<R::Ctx>,

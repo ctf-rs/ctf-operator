@@ -31,6 +31,10 @@ pub fn watcher(client: Client, namespaces: &[String]) -> Watcher<Instance> {
     Watcher::new_many(apis, Config::default(), 0xFFFF)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "instance controller needs all related watchers for reconciliation"
+)]
 pub fn controller(
     ctx: Arc<CtfState>,
     watcher: &Watcher<Instance>,

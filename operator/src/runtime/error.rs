@@ -3,6 +3,7 @@ use thiserror::Error;
 use crate::util::{ControllerError, WaitReadyError};
 
 #[derive(Error, Debug)]
+#[expect(clippy::enum_variant_names, reason = "Error suffix in error enum variants is conventional")]
 pub enum CtfError {
     #[error("Configuration Error: {0}")]
     ConfigError(String),

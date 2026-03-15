@@ -8,6 +8,7 @@ use crate::{
     read_challenge, read_ctf,
 };
 
+#[expect(clippy::too_many_lines, reason = "build orchestration logic is inherently linear")]
 pub async fn build(args: BuildArgs) -> anyhow::Result<()> {
     let BuildArgs {
         ctf,

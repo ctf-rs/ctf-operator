@@ -22,25 +22,26 @@ pub const LABEL_CHALLENGE: &str = "operators.ctf.rs/challenge";
 pub const LABEL_INSTANCE: &str = "operators.ctf.rs/instance";
 pub const LABEL_NAMESPACE: &str = "operators.ctf.rs/namespace";
 
-pub async fn run(
+/// Builds and validates the operator configuration from command-line arguments
+fn build_operator_config(
     namespaces: Vec<String>,
-    instance_namespace_prefix: String,
-    config_path: Option<PathBuf>,
-) -> CtfResult<()> {
+    instance_namespace_prefix: &str,
+    config_path: Option<&PathBuf>,
+) -> CtfResult<OperatorConfig> {
     let watched_namespaces = namespaces
         .into_iter()
         .filter(|ns| !ns.trim().is_empty())
         .collect::<HashSet<_>>();
+
     if watched_namespaces.is_empty() {
         return Err(CtfError::ConfigError(
             "watchNamespaces cannot be empty; provide at least one namespace".to_owned(),
         ));
     }
 
-    let runtime_config = load_operator_runtime_config(config_path.as_deref())?;
+    let runtime_config = load_operator_runtime_config(config_path.map(PathBuf::as_path))?;
     info!(
-        config_path = %config_path
-            .as_deref().map_or_else(|| "<not set>".to_owned(), |path| path.display().to_string()),
+        config_path = %config_path.map_or_else(|| "<not set>".to_owned(), |p| p.display().to_string()),
         registry_configs = runtime_config.registry.len(),
         s3_configs = runtime_config.storage.s3.len(),
         "loaded operator runtime config"
@@ -49,99 +50,134 @@ pub async fn run(
     let instance_namespace_prefix = {
         let trimmed = instance_namespace_prefix.trim();
         if trimmed.is_empty() {
-            "ctf-inst-".to_owned()
+            "ctf-inst-"
         } else {
-            trimmed.to_owned()
+            trimmed
         }
+        .to_owned()
     };
-    let operator_config = OperatorConfig {
+
+    Ok(OperatorConfig {
         watched_namespaces,
         instance_namespace_prefix,
         runtime_config,
-    };
+    })
+}
 
+/// CRD watchers for custom resources managed by the operator
+struct CrdWatchers {
+    ctf: Watcher<ctf_cli::k8s::Ctf>,
+    challenge: Watcher<ctf_cli::k8s::Challenge>,
+    flag: Watcher<ctf_cli::k8s::Flag>,
+    instance: Watcher<ctf_cli::k8s::Instance>,
+    reservation_set: Watcher<ReservationSet>,
+    port_claim: Watcher<PortClaim>,
+}
+
+/// Creates watchers for all CRD types
+fn create_crd_watchers(client: &Client, namespaces: &[String]) -> CrdWatchers {
+    CrdWatchers {
+        ctf: core::ctf::watcher(client.clone(), namespaces),
+        challenge: core::challenge::watcher(client.clone(), namespaces),
+        flag: core::flag::watcher(client.clone(), namespaces),
+        instance: core::instance::watcher(client.clone(), namespaces),
+        reservation_set: core::reservation_set::watcher(client.clone(), namespaces),
+        port_claim: core::port_claim::watcher(client.clone(), namespaces),
+    }
+}
+
+/// Resource watchers for managed Kubernetes resources
+struct ResourceWatchers {
+    deployment: Watcher<Deployment>,
+    service: Watcher<Service>,
+    reservation_set_store: Watcher<ReservationSet>,
+    port_claim_store: Watcher<PortClaim>,
+}
+
+/// Creates watchers for managed Kubernetes resources
+fn create_resource_watchers(client: &Client) -> ResourceWatchers {
+    let managed_selector = format!("{MANAGED_BY_LABEL}={MANAGED_BY_VALUE}");
+
+    ResourceWatchers {
+        deployment: Watcher::new(
+            kube::Api::all(client.clone()),
+            Config::default().labels(&managed_selector),
+            0xFFFF,
+        ),
+        service: Watcher::new(
+            kube::Api::all(client.clone()),
+            Config::default().labels(&managed_selector),
+            0xFFFF,
+        ),
+        reservation_set_store: Watcher::new(
+            kube::Api::all(client.clone()),
+            Config::default(),
+            0xFFFF,
+        ),
+        port_claim_store: Watcher::new(kube::Api::all(client.clone()), Config::default(), 0xFFFF),
+    }
+}
+
+pub async fn run(
+    namespaces: Vec<String>,
+    instance_namespace_prefix: String,
+    config_path: Option<PathBuf>,
+) -> CtfResult<()> {
+    let operator_config =
+        build_operator_config(namespaces, &instance_namespace_prefix, config_path.as_ref())?;
     let client = Client::try_default().await?;
 
-    let watched_namespace_vec = operator_config
-        .watched_namespaces
-        .iter()
-        .cloned()
-        .collect::<Vec<_>>();
-
-    let ctf_watcher = core::ctf::watcher(client.clone(), &watched_namespace_vec);
-    let challenge_watcher = core::challenge::watcher(client.clone(), &watched_namespace_vec);
-    let flag_watcher = core::flag::watcher(client.clone(), &watched_namespace_vec);
-    let instance_watcher = core::instance::watcher(client.clone(), &watched_namespace_vec);
-    let reservation_set_watcher =
-        core::reservation_set::watcher(client.clone(), &watched_namespace_vec);
-    let port_claim_watcher = core::port_claim::watcher(client.clone(), &watched_namespace_vec);
-
-    let managed_selector = format!("{MANAGED_BY_LABEL}={MANAGED_BY_VALUE}");
-    let deployment_api: kube::Api<Deployment> = kube::Api::all(client.clone());
-    let service_api: kube::Api<Service> = kube::Api::all(client.clone());
-    let reservation_set_api: kube::Api<ReservationSet> = kube::Api::all(client.clone());
-    let port_claim_api: kube::Api<PortClaim> = kube::Api::all(client.clone());
-
-    let deployment_watcher = Watcher::new(
-        deployment_api,
-        Config::default().labels(&managed_selector),
-        0xFFFF,
-    );
-    let service_watcher = Watcher::new(
-        service_api,
-        Config::default().labels(&managed_selector),
-        0xFFFF,
-    );
-    let reservation_set_store_watcher =
-        Watcher::new(reservation_set_api, Config::default(), 0xFFFF);
-    let port_claim_store_watcher = Watcher::new(port_claim_api, Config::default(), 0xFFFF);
+    let watched_namespace_vec: Vec<_> =
+        operator_config.watched_namespaces.iter().cloned().collect();
+    let crd = create_crd_watchers(&client, &watched_namespace_vec);
+    let res = create_resource_watchers(&client);
 
     let state = Arc::new(CtfState::new(
         client,
         operator_config,
-        ctf_watcher.store(),
-        challenge_watcher.store(),
-        instance_watcher.store(),
-        flag_watcher.store(),
-        reservation_set_store_watcher.store(),
-        port_claim_store_watcher.store(),
-        deployment_watcher.store(),
-        service_watcher.store(),
+        crd.ctf.store(),
+        crd.challenge.store(),
+        crd.instance.store(),
+        crd.flag.store(),
+        res.reservation_set_store.store(),
+        res.port_claim_store.store(),
+        res.deployment.store(),
+        res.service.store(),
     ));
 
-    let ctf_controller = core::ctf::controller(Arc::clone(&state), &ctf_watcher)?;
-    let challenge_controller = core::challenge::controller(Arc::clone(&state), &challenge_watcher)?;
-    let flag_controller = core::flag::controller(Arc::clone(&state), &flag_watcher)?;
+    let ctf_controller = core::ctf::controller(Arc::clone(&state), &crd.ctf)?;
+    let challenge_controller = core::challenge::controller(Arc::clone(&state), &crd.challenge)?;
+    let flag_controller = core::flag::controller(Arc::clone(&state), &crd.flag)?;
     let reservation_set_controller = core::reservation_set::controller(
         Arc::clone(&state),
-        &reservation_set_watcher,
-        &port_claim_watcher,
+        &crd.reservation_set,
+        &crd.port_claim,
     )?;
     let port_claim_controller =
-        core::port_claim::controller(Arc::clone(&state), &port_claim_watcher, &reservation_set_watcher)?;
+        core::port_claim::controller(Arc::clone(&state), &crd.port_claim, &crd.reservation_set)?;
     let instance_controller = core::instance::controller(
         state,
-        &instance_watcher,
-        &ctf_watcher,
-        &challenge_watcher,
-        &flag_watcher,
-        &reservation_set_watcher,
-        &port_claim_watcher,
-        &deployment_watcher,
-        &service_watcher,
+        &crd.instance,
+        &crd.ctf,
+        &crd.challenge,
+        &crd.flag,
+        &crd.reservation_set,
+        &crd.port_claim,
+        &res.deployment,
+        &res.service,
     )?;
 
     Waiter::builder()
-        .watcher(ctf_watcher)
-        .watcher(challenge_watcher)
-        .watcher(flag_watcher)
-        .watcher(instance_watcher)
-        .watcher(reservation_set_watcher)
-        .watcher(port_claim_watcher)
-        .watcher(reservation_set_store_watcher)
-        .watcher(port_claim_store_watcher)
-        .watcher(deployment_watcher)
-        .watcher(service_watcher)
+        .watcher(crd.ctf)
+        .watcher(crd.challenge)
+        .watcher(crd.flag)
+        .watcher(crd.instance)
+        .watcher(crd.reservation_set)
+        .watcher(crd.port_claim)
+        .watcher(res.reservation_set_store)
+        .watcher(res.port_claim_store)
+        .watcher(res.deployment)
+        .watcher(res.service)
         .controller(ctf_controller)
         .controller(challenge_controller)
         .controller(flag_controller)

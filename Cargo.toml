@@ -72,6 +72,7 @@ significant_drop_tightening = "allow"
 wildcard_imports = "allow"
 # In a large workspace, duplicate dependencies are inevitable; this lint causes more maintenance burden than practical benefit.
 multiple_crate_versions = "allow"
+missing_errors_doc = "allow"
 
 # [workspace.lints.rustdoc]
 # missing_crate_level_docs = "warn"

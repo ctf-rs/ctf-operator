@@ -19,7 +19,10 @@ use crate::util::{KubeObject, SharedIndex};
 
 use super::indexer::{Index, WatchStreamIndexExt};
 
-#[expect(missing_debug_implementations, reason = "kube Store/Writer don't impl Debug")]
+#[expect(
+    missing_debug_implementations,
+    reason = "kube Store/Writer don't impl Debug"
+)]
 pub struct Watcher<K: 'static + Resource + Clone + Debug + DeserializeOwned>
 where
     K::DynamicType: Default + Eq + Hash + Clone + Debug,
@@ -36,6 +39,11 @@ impl<K: KubeObject> Watcher<K> {
         Self::new_many(vec![api], config, store_buf_size)
     }
 
+    /// Creates a new watcher that watches multiple APIs.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `apis` is empty.
     #[must_use]
     pub fn new_many(apis: Vec<Api<K>>, config: watcher::Config, store_buf_size: usize) -> Self {
         assert!(
@@ -81,6 +89,10 @@ impl<K: KubeObject> Watcher<K> {
         self.store.clone()
     }
 
+    #[expect(
+        clippy::wrong_self_convention,
+        reason = "to_stream consumes self to start the stream"
+    )]
     pub fn to_stream(self) -> impl Stream<Item = Result<Event<K>, kube::runtime::watcher::Error>>
     where
         K: Send,
@@ -92,6 +104,14 @@ impl<K: KubeObject> Watcher<K> {
         select_all(streams).reflect_shared(self.writer)
     }
 
+    #[expect(
+        clippy::wrong_self_convention,
+        reason = "to_index_stream consumes self to start the stream"
+    )]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "Arc parameter is cloned inside iterations"
+    )]
     pub fn to_index_stream<I>(
         self,
         index: SharedIndex<I>,

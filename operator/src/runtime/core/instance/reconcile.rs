@@ -77,6 +77,160 @@ impl Reconciler for InstanceReconciler {
     }
 }
 
+/// Validated references from the instance spec
+struct ValidatedRefs {
+    ctf: Arc<Ctf>,
+    challenge: Arc<Challenge>,
+    duration_seconds: u64,
+}
+
+/// Result of reference validation
+enum RefValidationResult {
+    Valid(ValidatedRefs),
+    NotReady(Action),
+}
+
+/// Validates that the instance's referenced Ctf and Challenge exist and are ready
+async fn validate_references(
+    instance: &Instance,
+    state: &CtfState,
+    status: &mut InstanceStatus,
+) -> Result<RefValidationResult, CtfError> {
+    let namespace = instance.namespace().unwrap_or_default();
+    let ctf_ref = ObjectRef::<Ctf>::new(&instance.spec.ctf).within(&namespace);
+    let challenge_ref = ObjectRef::<Challenge>::new(&instance.spec.challenge).within(&namespace);
+
+    let Some(ctf) = state.ctfs.get(&ctf_ref) else {
+        set_not_ready(
+            status,
+            "References",
+            "MissingCtf",
+            "Referenced Ctf not found",
+        );
+        patch_status_if_needed(instance, state, status.clone()).await?;
+        return Ok(RefValidationResult::NotReady(Action::requeue(
+            Duration::from_secs(30),
+        )));
+    };
+
+    let Some(challenge) = state.challenges.get(&challenge_ref) else {
+        set_not_ready(
+            status,
+            "References",
+            "MissingChallenge",
+            "Referenced Challenge not found",
+        );
+        patch_status_if_needed(instance, state, status.clone()).await?;
+        return Ok(RefValidationResult::NotReady(Action::requeue(
+            Duration::from_secs(30),
+        )));
+    };
+
+    if !is_ready_ctf(ctf.as_ref()) {
+        set_not_ready(status, "References", "CtfNotReady", "Ctf is not ready");
+        patch_status_if_needed(instance, state, status.clone()).await?;
+        return Ok(RefValidationResult::NotReady(Action::requeue(
+            Duration::from_secs(30),
+        )));
+    }
+
+    if !is_ready_challenge(challenge.as_ref()) {
+        set_not_ready(
+            status,
+            "References",
+            "ChallengeNotReady",
+            "Challenge is not ready",
+        );
+        patch_status_if_needed(instance, state, status.clone()).await?;
+        return Ok(RefValidationResult::NotReady(Action::requeue(
+            Duration::from_secs(30),
+        )));
+    }
+
+    let duration_seconds = resolve_instance_duration_seconds(ctf.as_ref(), challenge.as_ref());
+    Ok(RefValidationResult::Valid(ValidatedRefs {
+        ctf,
+        challenge,
+        duration_seconds,
+    }))
+}
+
+/// Checks if the instance has expired and handles deletion if needed
+async fn check_and_handle_expiry(
+    instance: &Instance,
+    state: &CtfState,
+    status: &mut InstanceStatus,
+) -> Result<Option<Action>, CtfError> {
+    let namespace = instance.namespace().unwrap_or_default();
+    let now_unix = now_unix_seconds();
+
+    let Some(expires_at) = get_existing_expires_at(instance) else {
+        return Ok(None);
+    };
+
+    status.expires_at = unix_seconds_to_time(expires_at);
+    status.time_left = Some(humanize_duration(expires_at.saturating_sub(now_unix)));
+
+    if now_unix >= expires_at {
+        let api: Api<Instance> = Api::namespaced(state.client.clone(), &namespace);
+        match api
+            .delete(&instance.name_any(), &DeleteParams::default())
+            .await
+        {
+            Ok(_) => {}
+            Err(kube::Error::Api(ref ae)) if ae.code == 404 => {}
+            Err(err) => return Err(err.into()),
+        }
+        return Ok(Some(Action::await_change()));
+    }
+
+    Ok(None)
+}
+
+/// Updates all status conditions based on observed resources
+fn update_status_conditions(status: &mut InstanceStatus, observed: &ObservedInstanceResources) {
+    status
+        .conditions
+        .set("References", ConditionStatus::True, "Resolved", "");
+    set_resource_condition(
+        status,
+        "ReservationSet",
+        observed.reservation_ready,
+        "Ready",
+        "NotReady",
+    );
+    set_resource_condition(
+        status,
+        "PortClaims",
+        observed.port_claims_ready,
+        "Ready",
+        "NotReady",
+    );
+    set_resource_condition(status, "Flags", observed.flags_ready, "Ready", "NotReady");
+    set_resource_condition(
+        status,
+        "Deployments",
+        observed.deployments_ready,
+        "Ready",
+        "NotReady",
+    );
+    set_resource_condition(
+        status,
+        "Service",
+        observed.service_ready,
+        "Ready",
+        "NotReady",
+    );
+
+    let all_ready = all_conditions_true_except(status, "Ready");
+    set_resource_condition(status, "Ready", all_ready, "Reconciled", "NotReady");
+
+    status.phase = determine_phase(observed, all_ready);
+    if status.phase != InstancePhase::Error {
+        status.message = None;
+    }
+}
+
 async fn reconcile_apply(
     instance: Arc<Instance>,
     state: Arc<CtfState>,
@@ -85,78 +239,30 @@ async fn reconcile_apply(
     let target_namespace = target_namespace_for_instance(instance.as_ref(), &state)?;
     let mut status = instance.status.clone().unwrap_or_default();
 
-    let ctf_ref = ObjectRef::<Ctf>::new(&instance.spec.ctf).within(&namespace);
-    let challenge_ref = ObjectRef::<Challenge>::new(&instance.spec.challenge).within(&namespace);
-
-    let Some(ctf) = state.ctfs.get(&ctf_ref) else {
-        set_not_ready(
-            &mut status,
-            "References",
-            "MissingCtf",
-            "Referenced Ctf not found",
-        );
-        patch_status_if_needed(instance.as_ref(), &state, status).await?;
-        return Ok(Action::requeue(Duration::from_secs(30)));
+    // Validate references (Ctf and Challenge)
+    let refs = match validate_references(instance.as_ref(), &state, &mut status).await? {
+        RefValidationResult::Valid(refs) => refs,
+        RefValidationResult::NotReady(action) => return Ok(action),
     };
 
-    let Some(challenge) = state.challenges.get(&challenge_ref) else {
-        set_not_ready(
-            &mut status,
-            "References",
-            "MissingChallenge",
-            "Referenced Challenge not found",
-        );
-        patch_status_if_needed(instance.as_ref(), &state, status).await?;
-        return Ok(Action::requeue(Duration::from_secs(30)));
-    };
-
-    if !is_ready_ctf(ctf.as_ref()) {
-        set_not_ready(&mut status, "References", "CtfNotReady", "Ctf is not ready");
-        patch_status_if_needed(instance.as_ref(), &state, status).await?;
-        return Ok(Action::requeue(Duration::from_secs(30)));
+    // Check expiry and handle deletion if expired
+    if let Some(action) = check_and_handle_expiry(instance.as_ref(), &state, &mut status).await? {
+        return Ok(action);
     }
 
-    if !is_ready_challenge(challenge.as_ref()) {
-        set_not_ready(
-            &mut status,
-            "References",
-            "ChallengeNotReady",
-            "Challenge is not ready",
-        );
-        patch_status_if_needed(instance.as_ref(), &state, status).await?;
-        return Ok(Action::requeue(Duration::from_secs(30)));
-    }
-
-    let duration_seconds = resolve_instance_duration_seconds(ctf.as_ref(), challenge.as_ref());
-    let now_unix = now_unix_seconds();
-
-    // Only check expiry if instance was already ready (has expires_at annotation)
-    let existing_expires_at = get_existing_expires_at(instance.as_ref());
-    if let Some(expires_at) = existing_expires_at {
-        status.expires_at = unix_seconds_to_time(expires_at);
-        status.time_left = Some(humanize_duration(expires_at.saturating_sub(now_unix)));
-        if now_unix >= expires_at {
-            let api: Api<Instance> = Api::namespaced(state.client.clone(), &namespace);
-            match api
-                .delete(&instance.name_any(), &DeleteParams::default())
-                .await
-            {
-                Ok(_) => {}
-                Err(kube::Error::Api(ae)) if ae.code == 404 => {}
-                Err(err) => return Err(err.into()),
-            }
-            return Ok(Action::await_change());
-        }
-    }
-
+    // Ensure all resources exist
     ensure_target_namespace(instance.as_ref(), &target_namespace, &state).await?;
-
-    let reservation_name =
-        ensure_reservation_set(instance.as_ref(), ctf.as_ref(), &target_namespace, &state).await?;
+    let reservation_name = ensure_reservation_set(
+        instance.as_ref(),
+        refs.ctf.as_ref(),
+        &target_namespace,
+        &state,
+    )
+    .await?;
 
     ensure_port_claims(
         instance.as_ref(),
-        challenge.as_ref(),
+        refs.challenge.as_ref(),
         &reservation_name,
         &target_namespace,
         &state,
@@ -165,24 +271,26 @@ async fn reconcile_apply(
 
     ensure_flags(
         instance.as_ref(),
-        ctf.as_ref(),
-        challenge.as_ref(),
+        refs.ctf.as_ref(),
+        refs.challenge.as_ref(),
         &target_namespace,
         &state,
     )
     .await?;
+
     let observed = collect_instance_resources(
         instance.as_ref(),
-        challenge.as_ref(),
+        refs.challenge.as_ref(),
         &reservation_name,
         &target_namespace,
         &state,
     );
 
+    // Create deployment and service when dependencies are ready
     if observed.flags_ready {
         ensure_deployment(
             instance.as_ref(),
-            challenge.as_ref(),
+            refs.challenge.as_ref(),
             &observed.flag_values,
             &observed.allocated_ports,
             &target_namespace,
@@ -193,7 +301,7 @@ async fn reconcile_apply(
     if observed.port_claims_ready {
         ensure_service(
             instance.as_ref(),
-            challenge.as_ref(),
+            refs.challenge.as_ref(),
             &observed.allocated_ports,
             &target_namespace,
             &state,
@@ -201,72 +309,29 @@ async fn reconcile_apply(
         .await?;
     }
 
+    // Re-collect after creating deployment/service
     let observed = collect_instance_resources(
         instance.as_ref(),
-        challenge.as_ref(),
+        refs.challenge.as_ref(),
         &reservation_name,
         &target_namespace,
         &state,
     );
 
-    status
-        .conditions
-        .set("References", ConditionStatus::True, "Resolved", "");
-    set_resource_condition(
-        &mut status,
-        "ReservationSet",
-        observed.reservation_ready,
-        "Ready",
-        "NotReady",
-    );
-    set_resource_condition(
-        &mut status,
-        "PortClaims",
-        observed.port_claims_ready,
-        "Ready",
-        "NotReady",
-    );
-    set_resource_condition(
-        &mut status,
-        "Flags",
-        observed.flags_ready,
-        "Ready",
-        "NotReady",
-    );
-    set_resource_condition(
-        &mut status,
-        "Deployments",
-        observed.deployments_ready,
-        "Ready",
-        "NotReady",
-    );
-    set_resource_condition(
-        &mut status,
-        "Service",
-        observed.service_ready,
-        "Ready",
-        "NotReady",
-    );
-
+    // Update status conditions
+    update_status_conditions(&mut status, &observed);
     let all_ready = all_conditions_true_except(&status, "Ready");
-    set_resource_condition(&mut status, "Ready", all_ready, "Reconciled", "NotReady");
-
-    // Determine phase based on observed state
-    status.phase = determine_phase(&observed, all_ready);
-    // Clear message on success, keep it on error
-    if status.phase != InstancePhase::Error {
-        status.message = None;
-    }
 
     // Start timer only when instance becomes ready for the first time
-    if all_ready && existing_expires_at.is_none() {
-        let expires_at = now_unix.saturating_add(duration_seconds);
+    if all_ready && get_existing_expires_at(instance.as_ref()).is_none() {
+        let now_unix = now_unix_seconds();
+        let expires_at = now_unix.saturating_add(refs.duration_seconds);
         status.expires_at = unix_seconds_to_time(expires_at);
-        status.time_left = Some(humanize_duration(duration_seconds));
+        status.time_left = Some(humanize_duration(refs.duration_seconds));
         ensure_instance_expiry_annotations(
             instance.as_ref(),
             &namespace,
-            duration_seconds,
+            refs.duration_seconds,
             expires_at,
             &state,
         )
@@ -608,6 +673,10 @@ fn exposed_port_names(challenge: &Challenge) -> BTreeSet<String> {
 }
 
 #[derive(Default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "multiple boolean ready states are clearer than alternatives"
+)]
 struct ObservedInstanceResources {
     reservation_ready: bool,
     port_claims_ready: bool,
@@ -707,6 +776,10 @@ fn collect_instance_resources(
     }
 }
 
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "Result wrapper allows future error handling expansion"
+)]
 fn target_namespace_for_instance(
     instance: &Instance,
     state: &CtfState,
@@ -730,7 +803,7 @@ fn target_namespace_for_instance(
     }
 
     if ns.is_empty() {
-        ns = "ctf-inst-fallback".to_owned();
+        "ctf-inst-fallback".clone_into(&mut ns);
     }
 
     Ok(ns)
@@ -791,7 +864,7 @@ async fn ensure_flags(
             random: challenge_flag
                 .random
                 .clone()
-                .or(ctf.spec.flag.random.clone()),
+                .or_else(|| ctf.spec.flag.random.clone()),
             options: ctf_cli::models::FlagMatchOptions {
                 ignore_case: challenge_flag.options.ignore_case
                     || ctf.spec.flag.options.ignore_case,

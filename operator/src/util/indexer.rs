@@ -68,4 +68,5 @@ pub trait WatchStreamIndexExt: Stream {
     }
 }
 
+#[expect(clippy::type_repetition_in_bounds, reason = "trait bound clarifies stream requirement")]
 impl<St: ?Sized> WatchStreamIndexExt for St where St: Stream {}
