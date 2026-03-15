@@ -11,7 +11,7 @@ spec:
     random:
       len: 8
     options:
-      ignoreRandom: true
+      ignoreRandom: false
   network:
     ports:
       start: 12000

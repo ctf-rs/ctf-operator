@@ -1,7 +1,8 @@
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
-    extract::{Form, Path, State},
+    extract::{ConnectInfo, Form, Path, State},
+    http::HeaderMap,
     response::{IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::cookie::CookieJar;
@@ -13,7 +14,7 @@ use tracing::warn;
 
 use crate::{
     db,
-    helpers::{challenge_route, current_user},
+    helpers::{challenge_route, current_user, extract_client_ip},
     k8s::helpers::is_instance_owned_by_user,
     state::AppState,
 };
@@ -35,6 +36,8 @@ pub struct SubmitFlagForm {
 pub async fn submit_flag(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Path(challenge_name): Path<String>,
     Form(form): Form<SubmitFlagForm>,
 ) -> Response {
@@ -44,6 +47,7 @@ pub async fn submit_flag(
     };
 
     let ctf_name = &state.config.ctf_name;
+    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(addr));
 
     if db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, ctf_name)
         .await
@@ -75,13 +79,12 @@ pub async fn submit_flag(
         ))
     };
 
-    let Some(instance) =
-        db::get_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
-            .await
-            .ok()
-            .flatten()
+    let Some(instance) = db::get_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
+        .await
+        .ok()
+        .flatten()
     else {
-        persist_flag(
+        persist_flag_with_audit(
             &state,
             user.id,
             &challenge_name,
@@ -90,6 +93,7 @@ pub async fn submit_flag(
             &form.flag_name,
             submitted_flag,
             false,
+            client_ip.as_deref(),
         )
         .await;
         return redirect_with("bad", "spawn an instance first").into_response();
@@ -97,7 +101,7 @@ pub async fn submit_flag(
 
     let api: Api<Instance> = Api::namespaced(state.kube.clone(), &instance.namespace);
     let Ok(instance_obj) = api.get(&instance.instance_name).await else {
-        persist_flag(
+        persist_flag_with_audit(
             &state,
             user.id,
             &challenge_name,
@@ -106,13 +110,14 @@ pub async fn submit_flag(
             &form.flag_name,
             submitted_flag,
             false,
+            client_ip.as_deref(),
         )
         .await;
         return redirect_with("bad", "instance not found").into_response();
     };
 
     if !is_instance_owned_by_user(&instance_obj, &user) {
-        persist_flag(
+        persist_flag_with_audit(
             &state,
             user.id,
             &challenge_name,
@@ -121,13 +126,14 @@ pub async fn submit_flag(
             &form.flag_name,
             submitted_flag,
             false,
+            client_ip.as_deref(),
         )
         .await;
         return redirect_with("bad", "instance belongs to a different user").into_response();
-    }
+    };
 
     let Some(uid) = instance_obj.metadata.uid.clone() else {
-        persist_flag(
+        persist_flag_with_audit(
             &state,
             user.id,
             &challenge_name,
@@ -136,6 +142,7 @@ pub async fn submit_flag(
             &form.flag_name,
             submitted_flag,
             false,
+            client_ip.as_deref(),
         )
         .await;
         return redirect_with("bad", "instance is not ready yet").into_response();
@@ -160,7 +167,7 @@ pub async fn submit_flag(
         Err(_) => false,
     };
 
-    persist_flag(
+    persist_flag_with_audit(
         &state,
         user.id,
         &challenge_name,
@@ -169,19 +176,16 @@ pub async fn submit_flag(
         &form.flag_name,
         submitted_flag,
         accepted,
+        client_ip.as_deref(),
     )
     .await;
 
     if accepted {
         // Check if all flags are now solved
-        let solved_flag_count = db::count_solved_flags_for_user(
-            &state.db,
-            user.id,
-            &challenge_name,
-            ctf_name,
-        )
-        .await
-        .unwrap_or(0) as usize;
+        let solved_flag_count =
+            db::count_solved_flags_for_user(&state.db, user.id, &challenge_name, ctf_name)
+                .await
+                .unwrap_or(0) as usize;
 
         let total_flags = db::get_challenge(&state.db, ctf_name, &challenge_name)
             .await
@@ -235,7 +239,8 @@ pub async fn submit_flag(
 // Internal helper
 // ---------------------------------------------------------------------------
 
-async fn persist_flag(
+/// Persist flag submission and log to audit trail with cheat detection
+async fn persist_flag_with_audit(
     state: &Arc<AppState>,
     user_id: i64,
     challenge_name: &str,
@@ -244,7 +249,32 @@ async fn persist_flag(
     flag_name: &str,
     submitted_flag: &str,
     accepted: bool,
+    ip_address: Option<&str>,
 ) {
+    // Check for cheating: if flag is not accepted, check if it was generated for another user
+    let (cheated, cheated_from_user_id, cheated_flag_gen_id) = if !accepted {
+        match db::check_flag_cheated(&state.db, submitted_flag, ctf_name, user_id).await {
+            Ok(Some((flag_gen_id, from_user_id))) => {
+                warn!(
+                    user_id = user_id,
+                    cheated_from_user_id = from_user_id,
+                    flag_gen_id = flag_gen_id,
+                    submitted_flag = submitted_flag,
+                    "CHEAT DETECTED: user submitted flag belonging to another user"
+                );
+                (true, Some(from_user_id), Some(flag_gen_id))
+            }
+            Ok(None) => (false, None, None),
+            Err(err) => {
+                warn!(error = %err, "failed to check for cheated flag");
+                (false, None, None)
+            }
+        }
+    } else {
+        (false, None, None)
+    };
+
+    // Log to the existing submissions table
     if let Err(err) = db::add_flag_submission(
         &state.db,
         user_id,
@@ -258,5 +288,24 @@ async fn persist_flag(
     .await
     {
         warn!(error = %err, "failed to persist flag submission");
+    }
+
+    // Log to audit trail with full details
+    if let Err(err) = db::log_submission(
+        &state.db,
+        user_id,
+        challenge_name,
+        ctf_name,
+        flag_name,
+        submitted_flag,
+        accepted,
+        cheated,
+        cheated_from_user_id,
+        cheated_flag_gen_id,
+        ip_address,
+    )
+    .await
+    {
+        warn!(error = %err, "failed to log submission audit");
     }
 }

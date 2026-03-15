@@ -20,6 +20,9 @@ pub struct AppConfig {
     pub instance_base_domain: Option<String>,
     /// Prefix for instance namespaces (default: "ctf-inst-").
     pub instance_namespace_prefix: String,
+    /// If true, extract client IP from proxy headers (X-Forwarded-For, etc.).
+    /// If false, use the socket connection IP directly.
+    pub behind_reverse_proxy: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -96,6 +99,16 @@ impl AppConfig {
             .filter(|value| !value.is_empty());
         let instance_namespace_prefix =
             std::env::var("INSTANCE_NAMESPACE_PREFIX").unwrap_or_else(|_| "ctf-inst-".to_string());
+        let behind_reverse_proxy = std::env::var("BEHIND_REVERSE_PROXY")
+            .ok()
+            .as_deref()
+            .map(|value| {
+                matches!(
+                    value.to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+            .unwrap_or(false);
 
         Ok(Self {
             bind_addr,
@@ -120,6 +133,7 @@ impl AppConfig {
             challenge_files_s3_session_token,
             instance_base_domain,
             instance_namespace_prefix,
+            behind_reverse_proxy,
         })
     }
 }

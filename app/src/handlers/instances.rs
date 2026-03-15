@@ -1,12 +1,14 @@
 use std::{
     collections::BTreeMap,
+    net::SocketAddr,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{ConnectInfo, Path, State},
+    http::HeaderMap,
     response::{IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::cookie::CookieJar;
@@ -20,7 +22,10 @@ use tracing::warn;
 
 use crate::{
     db,
-    helpers::{challenge_route, current_user, has_ctf_access, now_unix_seconds, sanitize_k8s_name},
+    helpers::{
+        challenge_route, current_user, extract_client_ip, has_ctf_access, now_unix_seconds,
+        sanitize_k8s_name,
+    },
     k8s::helpers::{
         instance_ready_from_resource, instance_time_left_seconds, is_instance_deleting,
         is_instance_owned_by_user, resolve_instance_duration_seconds,
@@ -50,6 +55,8 @@ pub struct InstanceStateResponse {
 pub async fn spawn_instance(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Path(challenge_name): Path<String>,
 ) -> Response {
     let user = match current_user(&state, &jar).await {
@@ -58,6 +65,7 @@ pub async fn spawn_instance(
     };
 
     let ctf_name = &state.config.ctf_name;
+    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(addr));
 
     if db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, ctf_name)
         .await
@@ -101,8 +109,9 @@ pub async fn spawn_instance(
                     let _ = api
                         .delete(&existing.instance_name, &kube::api::DeleteParams::default())
                         .await;
-                    let _ = db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
-                        .await;
+                    let _ =
+                        db::clear_instance_for_user(&state.db, user.id, &challenge_name, ctf_name)
+                            .await;
                 } else {
                     // Instance still alive and not expired → redirect back.
                     return Redirect::to(&challenge_route(&challenge_name)).into_response();
@@ -198,6 +207,21 @@ pub async fn spawn_instance(
         warn!(error = %err, "failed to persist instance relation");
     }
 
+    // Audit log: instance spawned
+    if let Err(err) = db::log_instance_action(
+        &state.db,
+        user.id,
+        &instance_name,
+        &challenge_name,
+        ctf_name,
+        "spawn",
+        client_ip.as_deref(),
+    )
+    .await
+    {
+        warn!(error = %err, "failed to log instance spawn audit");
+    }
+
     Redirect::to(&challenge_route(&challenge_name)).into_response()
 }
 
@@ -208,6 +232,8 @@ pub async fn spawn_instance(
 pub async fn extend_instance(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Path(challenge_name): Path<String>,
 ) -> Response {
     let user = match current_user(&state, &jar).await {
@@ -216,6 +242,7 @@ pub async fn extend_instance(
     };
 
     let ctf_name = &state.config.ctf_name;
+    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(addr));
 
     if db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, ctf_name)
         .await
@@ -309,6 +336,21 @@ pub async fn extend_instance(
     {
         warn!(error = %err, "failed to extend instance ttl");
         return redirect_with("bad", "failed to extend instance").into_response();
+    }
+
+    // Audit log: instance extended
+    if let Err(err) = db::log_instance_action(
+        &state.db,
+        user.id,
+        &instance.instance_name,
+        &challenge_name,
+        ctf_name,
+        "extend",
+        client_ip.as_deref(),
+    )
+    .await
+    {
+        warn!(error = %err, "failed to log instance extend audit");
     }
 
     redirect_with("ok", "instance duration extended").into_response()
@@ -451,6 +493,8 @@ pub async fn instance_state(
 pub async fn stop_instance(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Path(challenge_name): Path<String>,
 ) -> Response {
     let user = match current_user(&state, &jar).await {
@@ -459,6 +503,7 @@ pub async fn stop_instance(
     };
 
     let ctf_name = &state.config.ctf_name;
+    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(addr));
 
     let redirect_with = |kind: &str, message: &str| {
         Redirect::to(&format!(
@@ -493,6 +538,21 @@ pub async fn stop_instance(
     {
         warn!(error = %err, "failed to stop instance");
         return redirect_with("bad", "failed to stop instance").into_response();
+    }
+
+    // Audit log: instance stopped
+    if let Err(err) = db::log_instance_action(
+        &state.db,
+        user.id,
+        &instance.instance_name,
+        &challenge_name,
+        ctf_name,
+        "stop",
+        client_ip.as_deref(),
+    )
+    .await
+    {
+        warn!(error = %err, "failed to log instance stop audit");
     }
 
     // Don't clear DB record here - keep it so UI shows "Stopping..." phase

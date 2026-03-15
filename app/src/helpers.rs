@@ -1,8 +1,10 @@
 use std::{
+    net::SocketAddr,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use axum::http::HeaderMap;
 use axum_extra::extract::cookie::CookieJar;
 
 use crate::{
@@ -66,13 +68,57 @@ pub fn has_ctf_access(user: &User, challenge: &ChallengeView) -> bool {
 }
 
 /// Resolve the currently-logged-in user from the session cookie, if any.
-pub async fn current_user(
-    state: &Arc<AppState>,
-    jar: &CookieJar,
-) -> anyhow::Result<Option<User>> {
+pub async fn current_user(state: &Arc<AppState>, jar: &CookieJar) -> anyhow::Result<Option<User>> {
     let Some(session_cookie) = jar.get(&state.config.session_cookie_name) else {
         return Ok(None);
     };
 
     db::get_user_by_session(&state.db, session_cookie.value()).await
+}
+
+/// Extract client IP address based on configuration.
+/// If behind a reverse proxy, checks X-Forwarded-For, X-Real-IP, CF-Connecting-IP headers.
+/// Otherwise, uses the socket connection IP directly.
+pub fn extract_client_ip(
+    behind_reverse_proxy: bool,
+    headers: &HeaderMap,
+    socket_addr: Option<SocketAddr>,
+) -> Option<String> {
+    if behind_reverse_proxy {
+        // Check X-Forwarded-For first (most common proxy header)
+        if let Some(forwarded_for) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+            // X-Forwarded-For can contain multiple IPs; take the first (original client)
+            if let Some(first_ip) = forwarded_for.split(',').next() {
+                let ip = first_ip.trim();
+                if !ip.is_empty() {
+                    return Some(ip.to_string());
+                }
+            }
+        }
+
+        // Check X-Real-IP (nginx commonly uses this)
+        if let Some(real_ip) = headers.get("x-real-ip").and_then(|v| v.to_str().ok()) {
+            let ip = real_ip.trim();
+            if !ip.is_empty() {
+                return Some(ip.to_string());
+            }
+        }
+
+        // Check CF-Connecting-IP (Cloudflare)
+        if let Some(cf_ip) = headers
+            .get("cf-connecting-ip")
+            .and_then(|v| v.to_str().ok())
+        {
+            let ip = cf_ip.trim();
+            if !ip.is_empty() {
+                return Some(ip.to_string());
+            }
+        }
+
+        // Fallback to socket address if no proxy headers found
+        socket_addr.map(|addr| addr.ip().to_string())
+    } else {
+        // Direct connection - use socket IP
+        socket_addr.map(|addr| addr.ip().to_string())
+    }
 }

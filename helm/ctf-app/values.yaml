@@ -32,7 +32,7 @@ ctf:
     random:
       length: 8
     options:
-      ignoreRandom: true
+      ignoreRandom: false
   network:
     ip: ""
     ports:

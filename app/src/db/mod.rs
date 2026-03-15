@@ -1,9 +1,13 @@
+mod audit;
 mod challenges;
 mod flags;
 mod instances;
 mod models;
 mod users;
 
+pub use audit::{
+    check_flag_cheated, log_download, log_flag_generation, log_instance_action, log_submission,
+};
 pub use challenges::{
     find_challenge_namespace, get_challenge, list_challenges_for_ctf,
     replace_challenges_for_namespace,
@@ -132,6 +136,83 @@ pub async fn migrate(db: &PgPool) -> Result<()> {
             ctf_name TEXT NOT NULL,
             solved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             PRIMARY KEY(user_id, challenge_namespace, challenge_name, ctf_name)
+        )"#,
+    )
+    .execute(db)
+    .await?;
+
+    // ---- Audit tables ----
+
+    // Audit log for generated flags (from K8s Flag resources)
+    sqlx::query(
+        r#"CREATE TABLE IF NOT EXISTS app_audit_flag_gen (
+            id BIGSERIAL PRIMARY KEY,
+            instance_name TEXT NOT NULL,
+            user_id BIGINT REFERENCES app_users(id) ON DELETE SET NULL,
+            challenge_name TEXT NOT NULL,
+            ctf_name TEXT NOT NULL,
+            flag_name TEXT NOT NULL,
+            generated_flag TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )"#,
+    )
+    .execute(db)
+    .await?;
+
+    // Index for efficient cheat detection lookup
+    sqlx::query(
+        r#"CREATE INDEX IF NOT EXISTS idx_audit_flag_gen_lookup
+           ON app_audit_flag_gen(generated_flag, ctf_name)"#,
+    )
+    .execute(db)
+    .await?;
+
+    // Audit log for instance actions (spawn/stop/extend)
+    sqlx::query(
+        r#"CREATE TABLE IF NOT EXISTS app_audit_instance (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+            instance_name TEXT NOT NULL,
+            challenge_name TEXT NOT NULL,
+            ctf_name TEXT NOT NULL,
+            action TEXT NOT NULL,
+            ip_address TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )"#,
+    )
+    .execute(db)
+    .await?;
+
+    // Audit log for flag submissions (extends existing submissions with cheat detection)
+    sqlx::query(
+        r#"CREATE TABLE IF NOT EXISTS app_audit_submission (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+            challenge_name TEXT NOT NULL,
+            ctf_name TEXT NOT NULL,
+            flag_name TEXT NOT NULL,
+            submitted_flag TEXT NOT NULL,
+            accepted BOOLEAN NOT NULL,
+            cheated BOOLEAN NOT NULL DEFAULT false,
+            cheated_from_user_id BIGINT REFERENCES app_users(id) ON DELETE SET NULL,
+            cheated_flag_gen_id BIGINT REFERENCES app_audit_flag_gen(id) ON DELETE SET NULL,
+            ip_address TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )"#,
+    )
+    .execute(db)
+    .await?;
+
+    // Audit log for file downloads
+    sqlx::query(
+        r#"CREATE TABLE IF NOT EXISTS app_audit_download (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+            challenge_name TEXT NOT NULL,
+            ctf_name TEXT NOT NULL,
+            file_url TEXT NOT NULL,
+            ip_address TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )"#,
     )
     .execute(db)

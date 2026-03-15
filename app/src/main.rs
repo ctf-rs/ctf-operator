@@ -2,7 +2,7 @@
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     use app::{config, db, handlers, k8s, oauth, scoreboard, state::AppState};
-    use std::{collections::HashMap, sync::Arc};
+    use std::{collections::HashMap, net::SocketAddr, sync::Arc};
     use tokio::sync::RwLock;
 
     let _ = rustls::crypto::ring::default_provider().install_default();
@@ -37,7 +37,11 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = tokio::net::TcpListener::bind(&config.bind_addr).await?;
     tracing::info!(addr = %config.bind_addr, "ctf app listening");
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }
 

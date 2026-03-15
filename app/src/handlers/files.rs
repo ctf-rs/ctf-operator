@@ -1,9 +1,10 @@
-use std::{sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use aws_credential_types::{Credentials, provider::SharedCredentialsProvider};
 use aws_sdk_s3::{Client as S3Client, config::Region, presigning::PresigningConfig};
 use axum::{
-    extract::{Path, State},
+    extract::{ConnectInfo, Path, State},
+    http::HeaderMap,
     response::{IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::cookie::CookieJar;
@@ -11,7 +12,7 @@ use tracing::warn;
 
 use crate::{
     db,
-    helpers::{current_user, has_ctf_access},
+    helpers::{current_user, extract_client_ip, has_ctf_access},
     s3::parse_s3_bucket_key,
     state::AppState,
 };
@@ -19,6 +20,8 @@ use crate::{
 pub async fn download_file(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Path((challenge_name, file_idx)): Path<(String, usize)>,
 ) -> Response {
     let user = match current_user(&state, &jar).await {
@@ -27,6 +30,7 @@ pub async fn download_file(
     };
 
     let ctf_name = &state.config.ctf_name;
+    let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, Some(addr));
 
     let Some(challenge) = db::get_challenge(&state.db, ctf_name, &challenge_name)
         .await
@@ -43,6 +47,20 @@ pub async fn download_file(
     let Some(file_url) = challenge.files.get(file_idx).cloned() else {
         return (axum::http::StatusCode::NOT_FOUND, "file not found").into_response();
     };
+
+    // Audit log: file download
+    if let Err(err) = db::log_download(
+        &state.db,
+        user.id,
+        &challenge_name,
+        ctf_name,
+        &file_url,
+        client_ip.as_deref(),
+    )
+    .await
+    {
+        warn!(error = %err, "failed to log download audit");
+    }
 
     let Some((bucket, key)) = parse_s3_bucket_key(
         &file_url,

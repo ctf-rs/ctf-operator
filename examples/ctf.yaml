@@ -7,7 +7,7 @@ flag:
   random:
     length: 8
   options:
-    ignoreRandom: true
+    ignoreRandom: false
 registry:
   url: registry.ctf.rs/playground
 network:

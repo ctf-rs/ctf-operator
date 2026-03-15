@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use ctf_cli::k8s::{Challenge, ChallengeFileRef, Ctf, Instance};
+use ctf_cli::k8s::{Challenge, ChallengeFileRef, Ctf, Flag, Instance};
 use kube::{Api, ResourceExt, runtime::watcher};
 use tokio::{sync::RwLock, task::JoinHandle};
 use tokio_stream::StreamExt;
@@ -180,8 +180,115 @@ async fn run_namespace_sync(state: Arc<AppState>, namespace: String, ctf_name: S
         })
     };
 
-    info!(namespace = %namespace, "started ctf/challenge/instance watchers");
-    let _ = tokio::join!(ctf_task, challenge_task, instance_task);
+    // Flag watcher - logs generated flags for audit trail and cheat detection
+    // Flags are created in per-instance namespaces, so we watch cluster-wide
+    // and filter by label to only process flags from this CTF
+    let flag_task = {
+        let state = Arc::clone(&state);
+        let source_namespace = namespace.clone();
+        let ctf_name = ctf_name.clone();
+        tokio::spawn(async move {
+            // Watch all flags cluster-wide
+            let api: Api<Flag> = Api::all(state.kube.clone());
+            loop {
+                let stream = watcher::watcher(api.clone(), watcher::Config::default());
+                tokio::pin!(stream);
+                while let Some(event) = stream.next().await {
+                    match event {
+                        Ok(watcher::Event::Apply(flag)) | Ok(watcher::Event::InitApply(flag)) => {
+                            let flag_k8s_name = flag.name_any();
+                            let labels = flag.metadata.labels.as_ref();
+
+                            // Only process flags from our CTF (check label)
+                            let flag_ctf = labels.and_then(|l| l.get("operators.ctf.rs/ctf"));
+                            if flag_ctf != Some(&ctf_name) {
+                                continue;
+                            }
+
+                            // Only log if the flag has been generated
+                            if let Some(generated_flag) =
+                                flag.status.as_ref().and_then(|s| s.flag.as_ref())
+                            {
+                                // Get instance name and challenge name from labels
+                                let Some(instance_name) =
+                                    labels.and_then(|l| l.get("operators.ctf.rs/instance"))
+                                else {
+                                    warn!(flag = %flag_k8s_name, "flag missing instance label");
+                                    continue;
+                                };
+                                let Some(challenge_name) =
+                                    labels.and_then(|l| l.get("operators.ctf.rs/challenge"))
+                                else {
+                                    warn!(flag = %flag_k8s_name, "flag missing challenge label");
+                                    continue;
+                                };
+                                let flag_ns = labels
+                                    .and_then(|l| l.get("operators.ctf.rs/namespace"))
+                                    .map(|s| s.as_str())
+                                    .unwrap_or(&source_namespace);
+
+                                // Extract flag part from the name (after instance name prefix)
+                                let flag_part = flag_k8s_name
+                                    .strip_prefix(&format!("{}-", instance_name))
+                                    .unwrap_or(&flag_k8s_name);
+
+                                // Look up the instance to get user_id
+                                let user_id = state
+                                    .instance_cache
+                                    .read()
+                                    .await
+                                    .get(&(flag_ns.to_string(), instance_name.to_string()))
+                                    .and_then(|inst| {
+                                        inst.metadata
+                                            .annotations
+                                            .as_ref()
+                                            .and_then(|a| a.get("app.ctf.rs/user-id"))
+                                            .and_then(|s| s.parse::<i64>().ok())
+                                    });
+
+                                if let Err(err) = db::log_flag_generation(
+                                    &state.db,
+                                    instance_name,
+                                    user_id,
+                                    challenge_name,
+                                    &ctf_name,
+                                    flag_part,
+                                    generated_flag,
+                                )
+                                .await
+                                {
+                                    warn!(
+                                        flag = %flag_k8s_name,
+                                        error = %err,
+                                        "failed to log flag generation"
+                                    );
+                                } else {
+                                    info!(
+                                        flag = %flag_k8s_name,
+                                        user_id = ?user_id,
+                                        challenge = %challenge_name,
+                                        "logged flag generation for audit"
+                                    );
+                                }
+                            }
+                        }
+                        Ok(watcher::Event::Delete(_)) => {
+                            // No action needed for deleted flags
+                        }
+                        Ok(watcher::Event::InitDone | watcher::Event::Init) => {}
+                        Err(err) => {
+                            error!(error = %err, "flag watcher error");
+                            tokio::time::sleep(Duration::from_secs(2)).await;
+                            break;
+                        }
+                    }
+                }
+            }
+        })
+    };
+
+    info!(namespace = %namespace, "started ctf/challenge/instance/flag watchers");
+    let _ = tokio::join!(ctf_task, challenge_task, instance_task, flag_task);
 }
 
 async fn flush_namespace(
