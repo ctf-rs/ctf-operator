@@ -14,7 +14,7 @@ use crate::{
 use ctf_cli::k8s::{
     Challenge, ConditionStatus, Ctf, Flag, FlagSpec, Instance, InstancePhase, InstanceStatus,
 };
-use ctf_cli::k8s::{PortClaim, PortClaimSpec, ReservationRef, ReservationSet, ReservationSetSpec};
+use ctf_cli::k8s::{PortClaim, PortClaimSpec, ReservationRef, ReservationSet};
 use jiff::Timestamp;
 use k8s_openapi::{
     api::{
@@ -99,29 +99,37 @@ async fn validate_references(
     let ctf_ref = ObjectRef::<Ctf>::new(&instance.spec.ctf).within(&namespace);
     let challenge_ref = ObjectRef::<Challenge>::new(&instance.spec.challenge).within(&namespace);
 
-    let Some(ctf) = state.ctfs.get(&ctf_ref) else {
+    let Some(ctf) = state
+        .ctfs
+        .get(&ctf_ref)
+        .filter(|r| r.metadata.deletion_timestamp.is_none())
+    else {
         set_not_ready(
             status,
             "References",
             "MissingCtf",
-            "Referenced Ctf not found",
+            "Referenced Ctf not found or being deleted",
         );
         patch_status_if_needed(instance, state, status.clone()).await?;
         return Ok(RefValidationResult::NotReady(Action::requeue(
-            Duration::from_secs(30),
+            Duration::from_secs(5),
         )));
     };
 
-    let Some(challenge) = state.challenges.get(&challenge_ref) else {
+    let Some(challenge) = state
+        .challenges
+        .get(&challenge_ref)
+        .filter(|r| r.metadata.deletion_timestamp.is_none())
+    else {
         set_not_ready(
             status,
             "References",
             "MissingChallenge",
-            "Referenced Challenge not found",
+            "Referenced Challenge not found or being deleted",
         );
         patch_status_if_needed(instance, state, status.clone()).await?;
         return Ok(RefValidationResult::NotReady(Action::requeue(
-            Duration::from_secs(30),
+            Duration::from_secs(5),
         )));
     };
 
@@ -156,6 +164,8 @@ async fn validate_references(
 
 /// Recomputes `expires_at` from `ready_since + duration_seconds` so that
 /// changes to `spec.duration_seconds` are immediately reflected in status.
+/// When `duration_seconds` is `None` and the instance is global (no user),
+/// `expires_at` is cleared — the instance never expires.
 fn recompute_expires_at(
     instance: &Instance,
     status: &mut InstanceStatus,
@@ -168,6 +178,12 @@ fn recompute_expires_at(
     else {
         return;
     };
+
+    // Global instances (user=None, duration=None) never expire.
+    if instance.spec.duration_seconds.is_none() && instance.spec.user.is_none() {
+        status.expires_at = None;
+        return;
+    }
 
     let ready_since_unix = u64::try_from(ready_since.0.as_second()).unwrap_or(0);
     let duration = instance
@@ -238,20 +254,18 @@ async fn reconcile_apply(
     // Recompute expires_at so spec.duration_seconds changes are reflected
     recompute_expires_at(instance.as_ref(), &mut status, refs.duration_seconds);
 
+    // The ReservationSet lives in the CTF namespace (created by the CTF reconciler).
+    let reservation_name = refs.ctf.name_any();
+    let reservation_namespace = refs.ctf.namespace().unwrap_or_default();
+
     // Ensure all resources exist
     ensure_target_namespace(instance.as_ref(), &target_namespace, &state).await?;
-    let reservation_name = ensure_reservation_set(
-        instance.as_ref(),
-        refs.ctf.as_ref(),
-        &target_namespace,
-        &state,
-    )
-    .await?;
 
     ensure_port_claims(
         instance.as_ref(),
         refs.challenge.as_ref(),
         &reservation_name,
+        &reservation_namespace,
         &target_namespace,
         &state,
     )
@@ -270,6 +284,7 @@ async fn reconcile_apply(
         instance.as_ref(),
         refs.challenge.as_ref(),
         &reservation_name,
+        &reservation_namespace,
         &target_namespace,
         &state,
     );
@@ -302,6 +317,7 @@ async fn reconcile_apply(
         instance.as_ref(),
         refs.challenge.as_ref(),
         &reservation_name,
+        &reservation_namespace,
         &target_namespace,
         &state,
     );
@@ -318,13 +334,19 @@ async fn reconcile_apply(
             .and_then(|s| s.ready_since.as_ref())
             .is_none()
     {
-        let duration = instance
-            .spec
-            .duration_seconds
-            .unwrap_or(refs.duration_seconds);
         let now_unix = now_unix_seconds();
         status.ready_since = unix_seconds_to_time(now_unix);
-        status.expires_at = unix_seconds_to_time(now_unix.saturating_add(duration));
+
+        // Global instances (user=None, duration=None) never expire.
+        if instance.spec.duration_seconds.is_none() && instance.spec.user.is_none() {
+            status.expires_at = None;
+        } else {
+            let duration = instance
+                .spec
+                .duration_seconds
+                .unwrap_or(refs.duration_seconds);
+            status.expires_at = unix_seconds_to_time(now_unix.saturating_add(duration));
+        }
     }
 
     // Always recompute expires_at so duration_seconds changes take effect
@@ -582,10 +604,6 @@ fn managed_resource_metadata(
     }
 }
 
-fn reservation_set_name(instance: &Instance) -> String {
-    format!("{}-ports", instance.name_any())
-}
-
 fn port_claim_name(instance: &Instance, port_name: &str) -> String {
     format!("{}-{}", instance.name_any(), port_name)
 }
@@ -621,14 +639,16 @@ fn collect_instance_resources(
     instance: &Instance,
     challenge: &Challenge,
     reservation_name: &str,
+    reservation_namespace: &str,
     target_namespace: &str,
     state: &CtfState,
 ) -> ObservedInstanceResources {
     let reservation_ref =
-        ObjectRef::<ReservationSet>::new(reservation_name).within(target_namespace);
+        ObjectRef::<ReservationSet>::new(reservation_name).within(reservation_namespace);
     let reservation_ready = state
         .reservation_sets
         .get(&reservation_ref)
+        .filter(|r| r.metadata.deletion_timestamp.is_none())
         .and_then(|resource| resource.status.clone())
         .is_some_and(|status| conditions_true_excluding_ready(&status.conditions));
 
@@ -637,7 +657,11 @@ fn collect_instance_resources(
     for challenge_flag in &challenge.spec.flags {
         let name = format!("{}-{}", instance.name_any(), challenge_flag.name);
         let flag_ref = ObjectRef::<Flag>::new(&name).within(target_namespace);
-        let Some(flag) = state.flags.get(&flag_ref) else {
+        let Some(flag) = state
+            .flags
+            .get(&flag_ref)
+            .filter(|r| r.metadata.deletion_timestamp.is_none())
+        else {
             flags_ready = false;
             continue;
         };
@@ -665,7 +689,11 @@ fn collect_instance_resources(
 
             let claim_name = port_claim_name(instance, &port.name);
             let claim_ref = ObjectRef::<PortClaim>::new(&claim_name).within(target_namespace);
-            let Some(port_claim) = state.port_claims.get(&claim_ref) else {
+            let Some(port_claim) = state
+                .port_claims
+                .get(&claim_ref)
+                .filter(|r| r.metadata.deletion_timestamp.is_none())
+            else {
                 port_claims_ready = false;
                 continue;
             };
@@ -689,11 +717,15 @@ fn collect_instance_resources(
     let deployments_ready = state
         .deployments
         .get(&deployment_ref)
+        .filter(|r| r.metadata.deletion_timestamp.is_none())
         .and_then(|resource| resource.status.clone())
         .is_some_and(|status| status.available_replicas.unwrap_or_default() > 0);
 
     let service_ref = ObjectRef::<Service>::new(&instance.name_any()).within(target_namespace);
-    let service_ready = state.services.get(&service_ref).is_some();
+    let service_ready = state
+        .services
+        .get(&service_ref)
+        .map_or(false, |r| r.metadata.deletion_timestamp.is_none());
 
     ObservedInstanceResources {
         reservation_ready,
@@ -774,6 +806,19 @@ async fn ensure_flags(
 
     for challenge_flag in &challenge.spec.flags {
         let name = format!("{}-{}", instance.name_any(), challenge_flag.name);
+
+        // For non-instanced (global) challenges, only use random rules
+        // explicitly set on the challenge flag. CTF-level random defaults
+        // are ignored so the flag stays static across all users.
+        let random = if challenge.spec.instancing {
+            challenge_flag
+                .random
+                .clone()
+                .or_else(|| ctf.spec.flag.random.clone())
+        } else {
+            challenge_flag.random.clone()
+        };
+
         let spec = FlagSpec {
             prefix: challenge_flag
                 .prefix
@@ -781,10 +826,7 @@ async fn ensure_flags(
                 .unwrap_or_else(|| ctf.spec.flag.prefix.clone()),
             format: challenge_flag.format.unwrap_or(ctf.spec.flag.format),
             body: challenge_flag.body.clone(),
-            random: challenge_flag
-                .random
-                .clone()
-                .or_else(|| ctf.spec.flag.random.clone()),
+            random,
             options: ctf_cli::models::FlagMatchOptions {
                 ignore_case: challenge_flag.options.ignore_case
                     || ctf.spec.flag.options.ignore_case,
@@ -984,40 +1026,11 @@ async fn ensure_service(
     Ok(())
 }
 
-async fn ensure_reservation_set(
-    instance: &Instance,
-    ctf: &Ctf,
-    target_namespace: &str,
-    state: &CtfState,
-) -> Result<String, CtfError> {
-    let name = reservation_set_name(instance);
-    let mut labels = base_labels(instance);
-    labels.insert("app.kubernetes.io/name".to_string(), name.clone());
-
-    let resource = ReservationSet {
-        metadata: managed_resource_metadata(name.clone(), target_namespace.to_owned(), labels),
-        spec: ReservationSetSpec {
-            start: ctf.spec.network.ports.start,
-            end: ctf.spec.network.ports.end,
-        },
-        status: None,
-    };
-
-    Api::<ReservationSet>::namespaced(state.client.clone(), target_namespace)
-        .patch(
-            &name,
-            &PatchParams::apply(InstanceReconciler::NAME).force(),
-            &Patch::Apply(&resource),
-        )
-        .await?;
-
-    Ok(name)
-}
-
 async fn ensure_port_claims(
     instance: &Instance,
     challenge: &Challenge,
     reservation_name: &str,
+    reservation_namespace: &str,
     target_namespace: &str,
     state: &CtfState,
 ) -> Result<(), CtfError> {
@@ -1036,6 +1049,7 @@ async fn ensure_port_claims(
         .port_claims
         .state()
         .into_iter()
+        .filter(|claim| claim.metadata.deletion_timestamp.is_none())
         .filter(|claim| claim.namespace().as_deref() == Some(target_namespace))
         .filter(|claim| {
             claim
@@ -1079,7 +1093,7 @@ async fn ensure_port_claims(
                 spec: PortClaimSpec {
                     reservation: ReservationRef {
                         name: reservation_name.to_owned(),
-                        namespace: None,
+                        namespace: Some(reservation_namespace.to_owned()),
                     },
                 },
                 status: None,
@@ -1149,6 +1163,7 @@ mod tests {
                 description: None,
                 difficulty: None,
                 instance_duration_seconds: None,
+                instancing: true,
                 categories: HashSet::new(),
                 tags: HashSet::new(),
                 authors: HashSet::new(),
@@ -1273,10 +1288,9 @@ mod tests {
     }
 
     #[test]
-    fn reservation_and_port_claim_names_are_stable() {
+    fn port_claim_name_is_stable() {
         let instance = make_instance();
 
-        assert_eq!(reservation_set_name(&instance), "inst-1-ports");
         assert_eq!(port_claim_name(&instance, "http"), "inst-1-http");
     }
 

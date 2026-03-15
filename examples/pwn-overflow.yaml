@@ -4,6 +4,7 @@ metadata:
   name: pwn-overflow
 spec:
   fullName: Buffer Overflow Basics
+  instancing: true
   description: 'A simple C program reads user input without bounds checking.
 
     Overflow the buffer to overwrite the return address and

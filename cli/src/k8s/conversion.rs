@@ -63,6 +63,7 @@ pub fn challenge_from_core(
             full_name: challenge.full_name.clone(),
             description: challenge.description.clone(),
             instance_duration_seconds: challenge.instance_duration_seconds,
+            instancing: challenge.instancing,
             categories: challenge.categories.clone(),
             difficulty: challenge.difficulty,
             tags: challenge.tags.clone(),

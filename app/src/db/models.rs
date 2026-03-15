@@ -62,6 +62,8 @@ pub struct ChallengeView {
     pub files: Vec<String>,
     pub flags: Vec<FlagView>,
     pub exposed_ports: Vec<PortView>,
+    /// Per-user instancing enabled for this challenge.
+    pub instancing: bool,
     /// Flag format hint like "SCC{...}" for placeholder
     pub flag_hint: String,
 }

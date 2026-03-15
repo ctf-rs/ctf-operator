@@ -4,6 +4,7 @@ metadata:
   name: web-xss
 spec:
   fullName: XSS Playground
+  instancing: true
   description: 'A social media platform has a vulnerability in its comment section.
 
     Craft a payload to exploit the cross-site scripting flaw and

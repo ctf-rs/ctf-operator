@@ -4,6 +4,7 @@ metadata:
   name: crypto-caesar
 spec:
   fullName: Caesar Cipher
+  instancing: false
   description: 'The ancient Romans knew a thing or two about secret messages.
 
     A flag has been encrypted using a simple substitution cipher.

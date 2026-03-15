@@ -4,6 +4,7 @@ metadata:
   name: misc-quantum
 spec:
   fullName: Quantum Computing
+  instancing: true
   description: 'A quantum key distribution protocol has a flaw in its implementation.
 
     Exploit the weakness in the BB84 protocol simulation to intercept

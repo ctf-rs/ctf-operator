@@ -4,6 +4,7 @@ metadata:
   name: rev-strings
 spec:
   fullName: Strings
+  instancing: false
   description: 'A binary contains the flag hidden somewhere in its data sections.
 
     Use basic reverse engineering tools to extract readable strings

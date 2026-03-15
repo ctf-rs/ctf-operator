@@ -226,6 +226,8 @@ pub async fn challenge_page(
         return (axum::http::StatusCode::FORBIDDEN, "forbidden").into_response();
     }
 
+    let instancing = challenge.instancing;
+
     // Mark which flags are already solved by this user
     let solved_flags = db::get_solved_flags_for_user(&state.db, user.id, &challenge_name, ctf_name)
         .await
@@ -239,8 +241,12 @@ pub async fn challenge_page(
         .await
         .unwrap_or(false);
 
-    let instance =
-        crate::k8s::instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name);
+    let instance = crate::k8s::instances::get_instance_for_challenge(
+        &state,
+        user.id,
+        &challenge_name,
+        ctf_name,
+    );
 
     let mut ready = false;
     let mut time_left_seconds: Option<u64> = None;
@@ -318,6 +324,7 @@ pub async fn challenge_page(
         challenge,
         ctf_title: ctf_name.clone(),
         user_label,
+        instancing,
         has_instance,
         ready,
         time_left_seconds,

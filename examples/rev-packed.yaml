@@ -4,6 +4,7 @@ metadata:
   name: rev-packed
 spec:
   fullName: Packed Binary
+  instancing: false
   description: 'This binary has been compressed with a custom packer that decrypts
 
     the code at runtime. Unpack the binary to reveal the original logic,

@@ -4,6 +4,7 @@ metadata:
   name: crypto-lattice
 spec:
   fullName: Lattice Based Crypto
+  instancing: false
   description: 'A post-quantum cryptographic scheme based on the Learning With Errors
     problem
 

@@ -4,6 +4,7 @@ metadata:
   name: rev-vm
 spec:
   fullName: Custom VM
+  instancing: false
   description: 'A custom virtual machine executes bytecode that validates the flag.
 
     Reverse engineer the VM''s instruction set architecture and write

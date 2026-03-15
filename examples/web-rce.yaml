@@ -4,6 +4,7 @@ metadata:
   name: web-rce
 spec:
   fullName: Remote Code Execution
+  instancing: true
   description: 'A file upload service seems to have robust validation, but appearances
 
     can be deceiving. Chain multiple vulnerabilities together to achieve

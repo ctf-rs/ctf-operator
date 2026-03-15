@@ -146,7 +146,8 @@ pub async fn run(
     ));
 
     let ctf_controller = core::ctf::controller(Arc::clone(&state), &crd.ctf)?;
-    let challenge_controller = core::challenge::controller(Arc::clone(&state), &crd.challenge)?;
+    let challenge_controller =
+        core::challenge::controller(Arc::clone(&state), &crd.challenge, &crd.instance)?;
     let flag_controller = core::flag::controller(Arc::clone(&state), &crd.flag)?;
     let reservation_set_controller = core::reservation_set::controller(
         Arc::clone(&state),

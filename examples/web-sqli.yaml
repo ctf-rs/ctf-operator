@@ -4,6 +4,7 @@ metadata:
   name: web-sqli
 spec:
   fullName: SQL Injection 101
+  instancing: true
   description: 'A classic login form stands between you and the flag.
 
     The developer forgot to sanitize user inputs.

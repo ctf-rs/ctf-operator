@@ -176,6 +176,7 @@ fn build_challenge_view(
         files,
         flags,
         exposed_ports,
+        instancing: challenge.spec.instancing,
         flag_hint: String::new(), // TODO: add to CRD
     })
 }

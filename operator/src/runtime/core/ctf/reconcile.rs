@@ -1,11 +1,15 @@
 use std::{sync::Arc, time::Duration};
 
 use crate::{
-    runtime::{CtfError, CtfState},
+    runtime::{CtfError, CtfState, MANAGED_BY_LABEL, MANAGED_BY_VALUE},
     util::Reconciler,
 };
-use ctf_cli::k8s::{ConditionStatus, Ctf, CtfStatus};
-use kube::{runtime::controller::Action, ResourceExt};
+use ctf_cli::k8s::{ConditionStatus, Ctf, CtfStatus, ReservationSet, ReservationSetSpec};
+use kube::{
+    api::{ObjectMeta, Patch, PatchParams},
+    runtime::controller::Action,
+    Api, ResourceExt,
+};
 
 #[derive(Debug)]
 pub struct CtfReconciler;
@@ -27,6 +31,11 @@ impl Reconciler for CtfReconciler {
 
         let ready = status.conditions.all_true();
 
+        // Create / update the per-CTF ReservationSet (shared by all instances).
+        if ready {
+            ensure_reservation_set(&resource, &namespace, &ctx).await?;
+        }
+
         if resource.status.as_ref() != Some(&status) {
             Self::patch_status_namespaced(resource.as_ref(), ctx.client.clone(), status).await?;
         }
@@ -39,6 +48,44 @@ impl Reconciler for CtfReconciler {
             )))
         }
     }
+}
+
+/// Creates or updates the single ReservationSet that all instances under
+/// this CTF share for port allocation.
+async fn ensure_reservation_set(
+    ctf: &Ctf,
+    namespace: &str,
+    state: &CtfState,
+) -> Result<(), CtfError> {
+    let name = ctf.name_any();
+    let labels = std::collections::BTreeMap::from([
+        (MANAGED_BY_LABEL.to_string(), MANAGED_BY_VALUE.to_string()),
+        ("app.kubernetes.io/name".to_string(), name.clone()),
+    ]);
+
+    let resource = ReservationSet {
+        metadata: ObjectMeta {
+            name: Some(name.clone()),
+            namespace: Some(namespace.to_owned()),
+            labels: Some(labels),
+            ..Default::default()
+        },
+        spec: ReservationSetSpec {
+            start: ctf.spec.network.ports.start,
+            end: ctf.spec.network.ports.end,
+        },
+        status: None,
+    };
+
+    Api::<ReservationSet>::namespaced(state.client.clone(), namespace)
+        .patch(
+            &name,
+            &PatchParams::apply(CtfReconciler::NAME).force(),
+            &Patch::Apply(&resource),
+        )
+        .await?;
+
+    Ok(())
 }
 
 fn validate_spec(resource: &Ctf, status: &mut CtfStatus) {

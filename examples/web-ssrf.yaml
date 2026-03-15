@@ -4,6 +4,7 @@ metadata:
   name: web-ssrf
 spec:
   fullName: Server Side Request Forgery
+  instancing: true
   description: 'An internal service is protected behind a firewall, but the web application
 
     has a URL fetching feature that can be abused. Exploit the SSRF vulnerability

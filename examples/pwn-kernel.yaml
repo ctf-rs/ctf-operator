@@ -4,6 +4,7 @@ metadata:
   name: pwn-kernel
 spec:
   fullName: Kernel Pwn
+  instancing: true
   description: 'A custom kernel module contains a vulnerability in its ioctl handler.
 
     Exploit the race condition to escalate privileges from an unprivileged

@@ -4,6 +4,7 @@ metadata:
   name: pwn-heap
 spec:
   fullName: Heap Exploitation
+  instancing: true
   description: 'A note-taking application allocates and frees heap chunks carelessly.
 
     Exploit a use-after-free vulnerability combined with tcache poisoning

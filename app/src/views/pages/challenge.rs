@@ -44,8 +44,23 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
         .map(|(i, f)| (file_route(&ch.name, i), display_file_name(f)))
         .collect();
 
+    let instancing = data.instancing;
+
     let status_text = if data.solved {
         "Solved".to_string()
+    } else if !instancing {
+        // Global challenge
+        if data.has_instance && data.ready {
+            "Always On".to_string()
+        } else if data.has_instance {
+            if let Some(ref phase_desc) = data.instance_phase_desc {
+                phase_desc.clone()
+            } else {
+                "Starting...".to_string()
+            }
+        } else {
+            "Provisioning...".to_string()
+        }
     } else if !data.has_instance {
         "No instance".to_string()
     } else if !data.ready {
@@ -60,8 +75,8 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
         "Ready".to_string()
     };
 
-    // Only show timer when instance is ready and has time left
-    let show_timer = data.ready && data.time_left_seconds.is_some();
+    // Only show timer when instanced, instance is ready and has time left
+    let show_timer = instancing && data.ready && data.time_left_seconds.is_some();
     let timer_text = data
         .time_left_seconds
         .map(|s| format_countdown(s))
@@ -141,19 +156,19 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                     <div class="instance-header">
                         <h2>"Instance"</h2>
                         <div class="instance-actions" id="instance-controls">
-                            {(!data.solved && !data.deleting && (!data.has_instance || data.time_left_seconds == Some(0))).then(|| view! {
+                            {(instancing && !data.solved && !data.deleting && (!data.has_instance || data.time_left_seconds == Some(0))).then(|| view! {
                                 <form method="post" action={spawn_action} id="spawn-form">
                                     <input type="hidden" name="challenge_name" value={challenge_name.clone()}/>
                                     <button class="btn primary small" type="submit" id="spawn-btn">"Spawn"</button>
                                 </form>
                             })}
-                            {(!data.solved && data.has_instance && !data.deleting).then(|| view! {
+                            {(instancing && !data.solved && data.has_instance && !data.deleting).then(|| view! {
                                 <form method="post" action={stop_action} id="stop-form">
                                     <input type="hidden" name="challenge_name" value={challenge_name.clone()}/>
                                     <button class="btn danger small" type="submit" id="stop-btn">"Stop"</button>
                                 </form>
                             })}
-                            {(!data.solved && data.has_instance && !data.deleting).then(|| {
+                            {(instancing && !data.solved && data.has_instance && !data.deleting).then(|| {
                                 let extend_style = if data.can_extend { "" } else { "display:none" };
                                 view! {
                                     <form method="post" action={extend_action} id="extend-form" style={extend_style}>

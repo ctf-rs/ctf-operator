@@ -85,9 +85,17 @@ pub async fn spawn_instance(challenge_name: String) -> Result<(), ServerFnError>
         ));
     };
 
-    // ---- Guard: one instance per user per challenge -------------------
+    let challenge = challenges::get_challenge(&state, &challenge_name);
+    let instancing = challenge.as_ref().map(|c| c.instancing).unwrap_or(true);
+
+    // Global challenges: instances are managed by the operator, not users
+    if !instancing {
+        leptos_axum::redirect(&challenge_route(&challenge_name));
+        return Ok(());
+    }
+
+    // ---- Guard: instance already exists --------------------------------
     if k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name).is_some() {
-        // Instance already exists — redirect (operator handles expired cleanup)
         leptos_axum::redirect(&challenge_route(&challenge_name));
         return Ok(());
     }
@@ -181,11 +189,20 @@ pub async fn extend_instance(challenge_name: String) -> Result<(), ServerFnError
     let ctf_name = &state.config.ctf_name;
     let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, socket_addr);
 
-    let redirect_with = |extend: &str, message: &str| {
+    // Global challenges cannot be extended by users
+    let instancing = challenges::get_challenge(&state, &challenge_name)
+        .map(|c| c.instancing)
+        .unwrap_or(true);
+    if !instancing {
+        leptos_axum::redirect(&challenge_route(&challenge_name));
+        return Ok(());
+    }
+
+    let redirect_with = |kind: &str, message: &str| {
         leptos_axum::redirect(&format!(
             "{}?extend={}&message={}",
             challenge_route(&challenge_name),
-            extend,
+            kind,
             urlencoding::encode(message)
         ));
     };
@@ -199,7 +216,7 @@ pub async fn extend_instance(challenge_name: String) -> Result<(), ServerFnError
     }
 
     let Some(instance) =
-        k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name)
+        k8s_instances::get_instance_for_challenge(&state, user.id, &challenge_name, ctf_name)
     else {
         redirect_with("bad", "spawn an instance first");
         return Ok(());
@@ -311,7 +328,7 @@ pub async fn instance_state(
     }
 
     let Some(instance) =
-        k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name)
+        k8s_instances::get_instance_for_challenge(&state, user.id, &challenge_name, ctf_name)
     else {
         return Json(InstanceStateResponse {
             has_instance: false,
@@ -382,6 +399,15 @@ pub async fn stop_instance(challenge_name: String) -> Result<(), ServerFnError> 
     let ctf_name = &state.config.ctf_name;
     let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, socket_addr);
 
+    // Global challenges cannot be stopped by users
+    let instancing = challenges::get_challenge(&state, &challenge_name)
+        .map(|c| c.instancing)
+        .unwrap_or(true);
+    if !instancing {
+        leptos_axum::redirect(&challenge_route(&challenge_name));
+        return Ok(());
+    }
+
     let redirect_with = |kind: &str, message: &str| {
         leptos_axum::redirect(&format!(
             "{}?stop={}&message={}",
@@ -392,7 +418,7 @@ pub async fn stop_instance(challenge_name: String) -> Result<(), ServerFnError> 
     };
 
     let Some(instance) =
-        k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name)
+        k8s_instances::get_instance_for_challenge(&state, user.id, &challenge_name, ctf_name)
     else {
         redirect_with("bad", "no instance to stop");
         return Ok(());

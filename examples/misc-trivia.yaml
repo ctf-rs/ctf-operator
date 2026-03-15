@@ -4,6 +4,7 @@ metadata:
   name: misc-trivia
 spec:
   fullName: CTF Trivia
+  instancing: false
   description: 'Test your cybersecurity knowledge with a series of trivia questions.
 
     Answer all questions correctly to prove your expertise

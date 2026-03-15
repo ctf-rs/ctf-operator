@@ -51,7 +51,10 @@ impl Reconciler for InstanceCleanerReconciler {
         let ready_since_unix = u64::try_from(ready_since.0.as_second()).unwrap_or(0);
 
         // Resolve effective duration: spec override → default from CTF/Challenge.
-        let duration = resolve_effective_duration(&resource, &ctx);
+        // If the instance has no duration (global / always-on), never expire it.
+        let Some(duration) = resolve_effective_duration(&resource, &ctx) else {
+            return Ok(Action::await_change());
+        };
         let expires_at = ready_since_unix.saturating_add(duration);
         let now_unix = now_unix_seconds();
 
@@ -77,11 +80,20 @@ impl Reconciler for InstanceCleanerReconciler {
 
 /// Resolves the effective lifetime for this instance by looking at
 /// `spec.duration_seconds`, then the Challenge default, then the CTF default.
-fn resolve_effective_duration(instance: &Instance, state: &CtfState) -> u64 {
+/// Returns `None` when the instance has no duration (global / always-on).
+fn resolve_effective_duration(instance: &Instance, state: &CtfState) -> Option<u64> {
     use kube::runtime::reflector::ObjectRef;
 
-    if let Some(d) = instance.spec.duration_seconds {
-        return d;
+    // An explicit duration_seconds on the spec always wins.
+    // If the spec field is present, use it; if the spec field is absent
+    // (None) that means "no duration" — the instance should live forever.
+    if instance.spec.duration_seconds.is_some() {
+        return instance.spec.duration_seconds;
+    }
+
+    // No user field means this is a global / always-on instance — no expiry.
+    if instance.spec.user.is_none() {
+        return None;
     }
 
     let namespace = instance.namespace().unwrap_or_default();
@@ -91,18 +103,18 @@ fn resolve_effective_duration(instance: &Instance, state: &CtfState) -> u64 {
         ObjectRef::<ctf_cli::k8s::Challenge>::new(&instance.spec.challenge).within(&namespace);
     if let Some(challenge) = state.challenges.get(&challenge_ref) {
         if let Some(d) = challenge.spec.instance_duration_seconds {
-            return u64::from(d);
+            return Some(u64::from(d));
         }
     }
 
     // Fall back to CTF-level default.
     let ctf_ref = ObjectRef::<ctf_cli::k8s::Ctf>::new(&instance.spec.ctf).within(&namespace);
     if let Some(ctf) = state.ctfs.get(&ctf_ref) {
-        return u64::from(ctf.spec.instance_duration_seconds);
+        return Some(u64::from(ctf.spec.instance_duration_seconds));
     }
 
     // Absolute fallback (15 minutes).
-    15 * 60
+    Some(15 * 60)
 }
 
 fn now_unix_seconds() -> u64 {

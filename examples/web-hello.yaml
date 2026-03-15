@@ -4,6 +4,7 @@ metadata:
   name: web-hello
 spec:
   fullName: Hello Web
+  instancing: true
   description: 'Welcome to the world of web exploitation!
 
     This beginner-friendly challenge will introduce you to basic web concepts.

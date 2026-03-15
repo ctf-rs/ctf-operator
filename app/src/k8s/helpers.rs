@@ -51,13 +51,12 @@ pub fn instance_time_left_seconds(instance: &Instance) -> Option<u64> {
 }
 
 /// Does the instance belong to the given user (by spec)?
+/// Global instances (user = None) are considered accessible by everyone.
 pub fn is_instance_owned_by_user(instance: &Instance, user: &User) -> bool {
-    instance
-        .spec
-        .user
-        .as_ref()
-        .map(|u| u.id == user.id)
-        .unwrap_or(false)
+    match &instance.spec.user {
+        Some(u) => u.id == user.id,
+        None => true, // global instance — shared by all users
+    }
 }
 
 /// Resolve the instance lifetime in seconds by checking the Challenge first,

@@ -4,6 +4,7 @@ metadata:
   name: crypto-rsa
 spec:
   fullName: RSA Basics
+  instancing: false
   description: 'You intercepted an RSA-encrypted message along with the public key.
 
     The key was generated with suspiciously small primes.

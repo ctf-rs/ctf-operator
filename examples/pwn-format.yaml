@@ -4,6 +4,7 @@ metadata:
   name: pwn-format
 spec:
   fullName: Format String Exploits
+  instancing: true
   description: 'The program uses printf with user-controlled format strings.
 
     Leverage format string vulnerabilities to leak stack data and

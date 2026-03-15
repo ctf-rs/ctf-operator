@@ -4,6 +4,7 @@ metadata:
   name: foren-pcap
 spec:
   fullName: Packet Capture Analysis
+  instancing: false
   description: 'We captured network traffic from a suspicious host on our network.
 
     Analyze the PCAP file to find credentials being transmitted in

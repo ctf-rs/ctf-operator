@@ -4,6 +4,7 @@ metadata:
   name: misc-jail
 spec:
   fullName: Python Jail
+  instancing: true
   description: 'You have access to a restricted Python interpreter that blocks most
 
     builtins and imports. Escape the sandbox by finding creative ways

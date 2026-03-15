@@ -4,6 +4,7 @@ metadata:
   name: foren-stego
 spec:
   fullName: Steganography
+  instancing: false
   description: 'An innocent-looking image was posted on a forum by a known threat
     actor.
 

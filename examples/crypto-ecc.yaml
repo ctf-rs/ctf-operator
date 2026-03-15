@@ -4,6 +4,7 @@ metadata:
   name: crypto-ecc
 spec:
   fullName: Elliptic Curve Cryptography
+  instancing: false
   description: 'A custom elliptic curve implementation uses non-standard parameters.
 
     The curve order has a smooth factor that makes it vulnerable to

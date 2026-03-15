@@ -43,6 +43,7 @@ pub struct ChallengePageData {
     pub challenge: ChallengeView,
     pub ctf_title: String,
     pub user_label: String,
+    pub instancing: bool,
     pub has_instance: bool,
     pub ready: bool,
     pub time_left_seconds: Option<u64>,

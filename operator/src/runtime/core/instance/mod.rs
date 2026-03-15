@@ -168,6 +168,7 @@ mod tests {
                 description: None,
                 difficulty: None,
                 instance_duration_seconds: None,
+                instancing: true,
                 categories: HashSet::new(),
                 tags: HashSet::new(),
                 authors: HashSet::new(),

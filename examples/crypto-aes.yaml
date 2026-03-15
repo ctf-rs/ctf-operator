@@ -4,6 +4,7 @@ metadata:
   name: crypto-aes
 spec:
   fullName: AES Challenge
+  instancing: false
   description: 'An encryption oracle allows you to encrypt arbitrary plaintexts using
     AES-CBC.
 

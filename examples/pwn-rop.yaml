@@ -4,6 +4,7 @@ metadata:
   name: pwn-rop
 spec:
   fullName: Return Oriented Programming
+  instancing: true
   description: 'NX is enabled and you can no longer execute shellcode on the stack.
 
     Build a ROP chain using gadgets found in the binary to call system("/bin/sh")

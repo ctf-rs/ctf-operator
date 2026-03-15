@@ -83,6 +83,30 @@ pub fn get_instance_for_user(
     })
 }
 
+/// Find the global (shared) instance for a challenge — no specific user.
+pub fn get_global_instance(
+    state: &AppState,
+    challenge_name: &str,
+    ctf_name: &str,
+) -> Option<Arc<Instance>> {
+    state.instances.state().into_iter().find(|instance| {
+        instance.spec.user.is_none()
+            && instance.spec.challenge == challenge_name
+            && instance.spec.ctf == ctf_name
+    })
+}
+
+/// Find the active instance for a user+challenge, falling back to a global instance.
+pub fn get_instance_for_challenge(
+    state: &AppState,
+    user_id: i64,
+    challenge_name: &str,
+    ctf_name: &str,
+) -> Option<Arc<Instance>> {
+    get_instance_for_user(state, user_id, challenge_name, ctf_name)
+        .or_else(|| get_global_instance(state, challenge_name, ctf_name))
+}
+
 /// List all active instances owned by a user (from Store).
 pub fn list_instances_for_user(state: &AppState, user_id: i64) -> Vec<Arc<Instance>> {
     state

@@ -113,12 +113,16 @@ fn find_reservation_set(
         return None;
     };
 
-    let Some(reservation_set) = state.reservation_sets.get(&reservation_ref) else {
+    let Some(reservation_set) = state
+        .reservation_sets
+        .get(&reservation_ref)
+        .filter(|r| r.metadata.deletion_timestamp.is_none())
+    else {
         status.conditions.set(
             "ReservationSet",
             ConditionStatus::False,
             "NotFound",
-            "referenced reservation set not found",
+            "referenced reservation set not found or being deleted",
         );
         return None;
     };
@@ -161,6 +165,7 @@ fn allocate_port(
         .port_claims
         .state()
         .into_iter()
+        .filter(|claim| claim.metadata.deletion_timestamp.is_none())
         .filter(|claim| {
             claim.name_any() != port_claim.name_any()
                 || claim.namespace().as_deref() != port_claim.namespace().as_deref()

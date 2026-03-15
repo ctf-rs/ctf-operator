@@ -38,6 +38,11 @@ pub struct Challenge {
     #[serde(default, rename = "instanceDurationSeconds")]
     #[garde(range(min = 1))]
     pub instance_duration_seconds: Option<u32>,
+    /// When true, each user gets their own instance with per-user flags.
+    /// When false (default), a single shared instance is created for all users.
+    #[serde(default)]
+    #[garde(skip)]
+    pub instancing: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[garde(skip)]
     pub files: Vec<PathBuf>,

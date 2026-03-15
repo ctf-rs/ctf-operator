@@ -240,6 +240,12 @@ spec:
                   minimum: 0.0
                   nullable: true
                   type: integer
+                instancing:
+                  default: false
+                  description: |-
+                    When true, each user gets their own instance with randomised flags.
+                    When false (default), a single shared instance is created.
+                  type: boolean
                 tags:
                   default: []
                   items:

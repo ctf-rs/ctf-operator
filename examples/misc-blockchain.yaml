@@ -4,6 +4,7 @@ metadata:
   name: misc-blockchain
 spec:
   fullName: Blockchain
+  instancing: true
   description: 'A vulnerable smart contract has been deployed on a local testnet.
 
     Analyze the Solidity source code to find the reentrancy vulnerability

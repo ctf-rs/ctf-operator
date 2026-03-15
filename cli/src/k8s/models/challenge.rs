@@ -30,6 +30,10 @@ pub struct ChallengeSpec {
     pub description: Option<String>,
     #[serde(default, rename = "instanceDurationSeconds")]
     pub instance_duration_seconds: Option<u32>,
+    /// When true, each user gets their own instance with randomised flags.
+    /// When false (default), a single shared instance is created.
+    #[serde(default)]
+    pub instancing: bool,
     pub categories: HashSet<crate::models::ChallengeCategory>,
     #[serde(default)]
     pub difficulty: Option<crate::models::ChallengeDifficulty>,

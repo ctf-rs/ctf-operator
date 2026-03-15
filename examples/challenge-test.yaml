@@ -4,6 +4,7 @@ metadata:
   name: challenge-test
 spec:
   fullName: Challenge Test
+  instancing: true
   description: |
     This is Test Challenge - socat exposing bash shell
   authors:

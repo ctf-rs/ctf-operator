@@ -67,7 +67,7 @@ pub async fn submit_flag(
     }
 
     let Some(instance) =
-        k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name)
+        k8s_instances::get_instance_for_challenge(&state, user.id, &challenge_name, ctf_name)
     else {
         persist_flag_submission(
             &state,
@@ -138,10 +138,17 @@ pub async fn submit_flag(
         None => false,
     };
 
-    // ---- Cross-instance / cheat detection when flag didn't match ------
-    let (accepted, cheated, cheated_instance_flag_id) = if accepted {
-        // Matched current instance — genuine solve
-        (true, false, None)
+    // ---- Cross-instance / cheat detection --------------------------------
+    // Skip cheat detection for non-instanced (global) challenges — all
+    // users share the same instance and flags, so cross-instance checks
+    // are meaningless.
+    let instancing = challenges::get_challenge(&state, &challenge_name)
+        .map(|c| c.instancing)
+        .unwrap_or(true);
+
+    let (accepted, cheated, cheated_instance_flag_id) = if accepted || !instancing {
+        // Matched current instance, or non-instanced challenge (no cheat check)
+        (accepted, false, None)
     } else {
         // Check if the submitted value matches any previously generated flag
         match db::check_flag_origin(&state.db, submitted_flag_trimmed, ctf_name).await {

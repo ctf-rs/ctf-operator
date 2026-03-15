@@ -4,6 +4,7 @@ metadata:
   name: foren-disk
 spec:
   fullName: Disk Forensics
+  instancing: false
   description: 'A disk image from a compromised workstation has been provided.
 
     Recover deleted files and analyze the filesystem metadata

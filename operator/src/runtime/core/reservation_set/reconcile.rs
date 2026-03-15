@@ -108,6 +108,7 @@ fn refresh_claims(resource: &ReservationSet, state: &CtfState, status: &mut Rese
         .port_claims
         .state()
         .into_iter()
+        .filter(|claim| claim.metadata.deletion_timestamp.is_none())
         .filter(|claim| {
             claim.spec.reservation.name == reservation_ref.name
                 && claim

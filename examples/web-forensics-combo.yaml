@@ -4,6 +4,7 @@ metadata:
   name: web-foren-combo
 spec:
   fullName: Web Forensics Combo
+  instancing: true
   description: |
     This hybrid challenge combines web exploitation with forensic analysis!
     

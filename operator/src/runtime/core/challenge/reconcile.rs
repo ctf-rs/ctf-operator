@@ -4,9 +4,14 @@ use crate::{
     runtime::{CtfError, CtfState},
     util::Reconciler,
 };
-use ctf_cli::k8s::{Challenge, ChallengeStatus, ConditionStatus};
+use ctf_cli::k8s::{Challenge, ChallengeStatus, ConditionStatus, Instance, InstanceSpec};
 use ctf_cli::models::{ChallengeContainer, ChallengeFlag, ContainerImage};
-use kube::{runtime::controller::Action, ResourceExt};
+use kube::{
+    api::{ObjectMeta, Patch, PatchParams},
+    runtime::controller::Action,
+    Api, ResourceExt,
+};
+use tracing::info;
 
 #[derive(Debug)]
 pub struct ChallengeReconciler;
@@ -33,12 +38,126 @@ impl Reconciler for ChallengeReconciler {
         }
 
         if ready {
+            // Auto-create global instance for non-instanced challenges
+            if !resource.spec.instancing {
+                match ensure_global_instance(&resource, &namespace, &ctx).await {
+                    Ok(Some(requeue)) => return Ok(Action::requeue(requeue)),
+                    Ok(None) => {}
+                    Err(err) => {
+                        tracing::warn!(error = %err, challenge = %resource.name_any(), "failed to ensure global instance");
+                        return Ok(Action::requeue(Duration::from_secs(15)));
+                    }
+                }
+            }
             Ok(Action::await_change())
         } else {
             Ok(Action::requeue(Duration::from_secs(
                 Self::ERROR_RECONCILE_REQUEUE_TIME,
             )))
         }
+    }
+}
+
+/// Ensure a global (shared) Instance exists for a non-instanced challenge.
+/// The instance has user=None and duration_seconds=None (infinite).
+///
+/// Returns `Ok(Some(duration))` when the caller should requeue after that
+/// duration (e.g. the cached instance is being deleted), or `Ok(None)` when
+/// nothing further is needed.
+async fn ensure_global_instance(
+    challenge: &Challenge,
+    namespace: &str,
+    state: &CtfState,
+) -> Result<Option<Duration>, CtfError> {
+    // Find the CTF that references this challenge
+    let ctf = state.ctfs.state().into_iter().find(|c| {
+        c.namespace().as_deref() == Some(namespace)
+            && c.spec
+                .challenges
+                .iter()
+                .any(|ch| ch == &challenge.name_any())
+    });
+    let Some(ctf) = ctf else {
+        // Challenge not yet referenced by any CTF — skip
+        return Ok(None);
+    };
+
+    let ctf_name = ctf.name_any();
+    let challenge_name = challenge.name_any();
+
+    // Deterministic name: same format as the app uses
+    let instance_name = format!(
+        "{}-{}-{}",
+        state.config.instance_namespace_prefix.trim_end_matches('-'),
+        sanitize_k8s_name(&ctf_name),
+        sanitize_k8s_name(&challenge_name),
+    );
+    let instance_name: String = instance_name.chars().take(63).collect();
+
+    // Check if instance already exists in the reflector store
+    let cached = state.instances.state().into_iter().find(|inst| {
+        inst.name_any() == instance_name && inst.namespace().as_deref() == Some(namespace)
+    });
+    if let Some(inst) = cached {
+        if inst.metadata.deletion_timestamp.is_some() {
+            // Instance is being deleted — requeue so we recreate once it's gone
+            info!(
+                challenge = %challenge_name,
+                instance = %instance_name,
+                "global instance is being deleted, will requeue"
+            );
+            return Ok(Some(Duration::from_secs(5)));
+        }
+        // Instance exists and is not being deleted
+        return Ok(None);
+    }
+
+    info!(
+        challenge = %challenge_name,
+        instance = %instance_name,
+        "auto-creating global instance for non-instanced challenge"
+    );
+
+    let instance = Instance {
+        metadata: ObjectMeta {
+            name: Some(instance_name.clone()),
+            namespace: Some(namespace.to_owned()),
+            ..Default::default()
+        },
+        spec: InstanceSpec {
+            ctf: ctf_name,
+            challenge: challenge_name,
+            user: None,
+            duration_seconds: None,
+        },
+        status: None,
+    };
+
+    let api: Api<Instance> = Api::namespaced(state.client.clone(), namespace);
+    api.patch(
+        &instance.metadata.name.as_deref().unwrap_or_default(),
+        &PatchParams::apply(ChallengeReconciler::NAME).force(),
+        &Patch::Apply(&instance),
+    )
+    .await?;
+
+    Ok(None)
+}
+
+fn sanitize_k8s_name(name: &str) -> String {
+    let mut out = String::new();
+    for ch in name.chars() {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch.to_ascii_lowercase());
+        } else if !out.ends_with('-') {
+            out.push('-');
+        }
+    }
+    let out = out.trim_matches('-').to_string();
+    if out.is_empty() {
+        "challenge".to_string()
+    } else {
+        out
     }
 }
 
@@ -52,6 +171,7 @@ fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
         tags: resource.spec.tags.clone(),
         authors: resource.spec.authors.clone(),
         instance_duration_seconds: resource.spec.instance_duration_seconds,
+        instancing: resource.spec.instancing,
         files: resource
             .spec
             .files
@@ -131,6 +251,7 @@ mod tests {
                 description: Some("desc".to_string()),
                 difficulty: None,
                 instance_duration_seconds: None,
+                instancing: true,
                 categories: HashSet::new(),
                 tags: HashSet::new(),
                 authors: HashSet::new(),

@@ -4,6 +4,7 @@ metadata:
   name: misc-sanity
 spec:
   fullName: Sanity Check
+  instancing: false
   description: 'Welcome to the CTF! This is a sanity check challenge to make sure
 
     your environment is set up correctly. Connect to the service
