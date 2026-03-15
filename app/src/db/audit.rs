@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, EntityTrait, Set, Statement};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 
 use super::entity::{downloads, instance_actions, instance_flags};
 
@@ -27,37 +27,37 @@ pub async fn log_flag_generation(
     Ok(())
 }
 
-/// Check if a submitted flag was generated for a different user (cheat detection)
-/// Returns the instance_flag id if the flag belongs to another user
-pub async fn check_flag_cheated(
+/// Information about a matching generated flag found in the database.
+#[derive(Debug)]
+pub struct FlagOrigin {
+    /// Primary key of the `instance_flags` row.
+    pub id: i64,
+    /// The user who owned the instance that generated this flag (if known).
+    pub user_id: Option<i64>,
+    /// The challenge the flag was generated for.
+    pub challenge_name: String,
+}
+
+/// Look up a submitted flag value in `instance_flags` to determine its origin.
+///
+/// Returns [`FlagOrigin`] if the value matches any previously generated flag
+/// for the given CTF, regardless of which user or challenge it belongs to.
+pub async fn check_flag_origin(
     db: &DatabaseConnection,
     submitted_flag: &str,
     ctf_name: &str,
-    submitting_user_id: i64,
-) -> Result<Option<i64>> {
-    let result = db
-        .query_one_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            r#"SELECT id
-               FROM instance_flags
-               WHERE generated_flag = $1
-                 AND ctf_name = $2
-                 AND (user_id IS NULL OR user_id != $3)
-               LIMIT 1"#,
-            [
-                submitted_flag.into(),
-                ctf_name.into(),
-                submitting_user_id.into(),
-            ],
-        ))
+) -> Result<Option<FlagOrigin>> {
+    let row = instance_flags::Entity::find()
+        .filter(instance_flags::Column::GeneratedFlag.eq(submitted_flag))
+        .filter(instance_flags::Column::CtfName.eq(ctf_name))
+        .one(db)
         .await?;
 
-    if let Some(row) = result {
-        let flag_gen_id: i64 = row.try_get_by_index(0)?;
-        return Ok(Some(flag_gen_id));
-    }
-
-    Ok(None)
+    Ok(row.map(|m| FlagOrigin {
+        id: m.id,
+        user_id: m.user_id,
+        challenge_name: m.challenge_name,
+    }))
 }
 
 /// Log an instance action (spawn/stop/extend)

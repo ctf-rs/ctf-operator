@@ -92,10 +92,11 @@ pub async fn spawn_instance(challenge_name: String) -> Result<(), ServerFnError>
         return Ok(());
     }
 
-    // ---- Deterministic name: prefix-challenge-userId ------------------
+    // ---- Deterministic name: prefix-ctf-challenge-userId --------------
     let instance_name: String = format!(
-        "{}-{}-u{}",
+        "{}-{}-{}-u{}",
         state.config.instance_name_prefix,
+        sanitize_k8s_name(ctf_name),
         sanitize_k8s_name(&challenge_name),
         user.id,
     )

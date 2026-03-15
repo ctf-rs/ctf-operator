@@ -69,7 +69,7 @@ pub async fn submit_flag(
     let Some(instance) =
         k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name)
     else {
-        persist_flag_with_audit(
+        persist_flag_submission(
             &state,
             user.id,
             &challenge_name,
@@ -88,7 +88,7 @@ pub async fn submit_flag(
     let instance_name = instance.name_any();
 
     if !is_instance_owned_by_user(&instance, &user) {
-        persist_flag_with_audit(
+        persist_flag_submission(
             &state,
             user.id,
             &challenge_name,
@@ -104,7 +104,7 @@ pub async fn submit_flag(
     };
 
     if instance.metadata.uid.is_none() {
-        persist_flag_with_audit(
+        persist_flag_submission(
             &state,
             user.id,
             &challenge_name,
@@ -141,21 +141,84 @@ pub async fn submit_flag(
         None => false,
     };
 
-    persist_flag_with_audit(
-        &state,
+    // ---- Cross-instance / cheat detection when flag didn't match ------
+    let (accepted, cheated, cheated_instance_flag_id) = if accepted {
+        // Matched current instance — genuine solve
+        (true, false, None)
+    } else {
+        // Check if the submitted value matches any previously generated flag
+        match db::check_flag_origin(&state.db, submitted_flag_trimmed, ctf_name).await {
+            Ok(Some(origin)) => {
+                let same_user = origin.user_id == Some(user.id);
+                let same_challenge = origin.challenge_name == challenge_name;
+
+                match (same_user, same_challenge) {
+                    // Own flag from an older instance, same challenge → accept
+                    (true, true) => (true, false, Some(origin.id)),
+                    // Own flag from a different challenge → just wrong input
+                    (true, false) => (false, false, None),
+                    // Another user's flag, same challenge → accept + cheated
+                    (false, true) => {
+                        warn!(
+                            user_id = user.id,
+                            origin_user_id = ?origin.user_id,
+                            instance_flag_id = origin.id,
+                            "CHEAT DETECTED: flag from another user's instance"
+                        );
+                        (true, true, Some(origin.id))
+                    }
+                    // Another user's flag, different challenge → reject + cheated
+                    (false, false) => {
+                        warn!(
+                            user_id = user.id,
+                            origin_user_id = ?origin.user_id,
+                            instance_flag_id = origin.id,
+                            "CHEAT DETECTED: flag from another user's different challenge"
+                        );
+                        (false, true, Some(origin.id))
+                    }
+                }
+            }
+            Ok(None) => (false, false, None),
+            Err(err) => {
+                warn!(error = %err, "failed to check flag origin");
+                (false, false, None)
+            }
+        }
+    };
+
+    // ---- Persist submission + metrics ----------------------------------
+    if let Err(err) = db::add_flag_submission(
+        &state.db,
         user.id,
         &challenge_name,
         ctf_name,
         &flag_name,
         submitted_flag_trimmed,
         accepted,
+        cheated,
+        cheated_instance_flag_id,
         client_ip.as_deref(),
     )
-    .await;
+    .await
+    {
+        warn!(error = %err, "failed to persist flag submission");
+    }
+
+    let m = metrics::get();
+    if cheated {
+        m.cheats_detected
+            .add(1, &m.attrs(&[metrics::challenge_kv(&challenge_name)]));
+        m.flag_submissions.add(
+            1,
+            &m.attrs(&[
+                metrics::challenge_kv(&challenge_name),
+                opentelemetry::KeyValue::new("result", "cheated"),
+            ]),
+        );
+    }
 
     if accepted {
-        // Record correct submission metric
-        let m = metrics::get();
         m.flag_submissions.add(
             1,
             &m.attrs(&[
@@ -174,10 +237,7 @@ pub async fn submit_flag(
             .map(|ch| ch.flags.len())
             .unwrap_or(1);
 
-        let all_flags_solved = solved_flag_count >= total_flags;
-
-        if all_flags_solved {
-            // Record challenge solved metric
+        if solved_flag_count >= total_flags {
             m.challenges_solved
                 .add(1, &m.attrs(&[metrics::challenge_kv(&challenge_name)]));
             if let Err(err) =
@@ -194,23 +254,28 @@ pub async fn submit_flag(
             return Ok(());
         }
 
-        // Flag accepted but more flags remain
-        redirect_with("good", "flag accepted");
+        redirect_with(
+            "good",
+            if cheated {
+                "flag accepted (flagged for review)"
+            } else {
+                "flag accepted"
+            },
+        );
         return Ok(());
     }
 
+    if !cheated {
+        m.flag_submissions.add(
+            1,
+            &m.attrs(&[
+                metrics::challenge_kv(&challenge_name),
+                opentelemetry::KeyValue::new("result", "incorrect"),
+            ]),
+        );
+    }
+
     redirect_with("bad", "flag is not correct");
-
-    // Record incorrect submission metric
-    let m = metrics::get();
-    m.flag_submissions.add(
-        1,
-        &m.attrs(&[
-            metrics::challenge_kv(&challenge_name),
-            opentelemetry::KeyValue::new("result", "incorrect"),
-        ]),
-    );
-
     Ok(())
 }
 
@@ -218,8 +283,8 @@ pub async fn submit_flag(
 // Internal helper
 // ---------------------------------------------------------------------------
 
-/// Persist flag submission with cheat detection
-async fn persist_flag_with_audit(
+/// Persist a flag submission (no cheat logic — that lives in `submit_flag`).
+async fn persist_flag_submission(
     state: &Arc<AppState>,
     user_id: i64,
     challenge_name: &str,
@@ -229,38 +294,6 @@ async fn persist_flag_with_audit(
     accepted: bool,
     ip_address: Option<&str>,
 ) {
-    // Check for cheating: if flag is not accepted, check if it was generated for another user
-    let (cheated, cheated_instance_flag_id) = if !accepted {
-        match db::check_flag_cheated(&state.db, submitted_flag, ctf_name, user_id).await {
-            Ok(Some(instance_flag_id)) => {
-                warn!(
-                    user_id = user_id,
-                    cheated_instance_flag_id = instance_flag_id,
-                    submitted_flag = submitted_flag,
-                    "CHEAT DETECTED: user submitted flag belonging to another user"
-                );
-                let m = metrics::get();
-                m.cheats_detected
-                    .add(1, &m.attrs(&[metrics::challenge_kv(challenge_name)]));
-                m.flag_submissions.add(
-                    1,
-                    &m.attrs(&[
-                        metrics::challenge_kv(challenge_name),
-                        opentelemetry::KeyValue::new("result", "cheated"),
-                    ]),
-                );
-                (true, Some(instance_flag_id))
-            }
-            Ok(None) => (false, None),
-            Err(err) => {
-                warn!(error = %err, "failed to check for cheated flag");
-                (false, None)
-            }
-        }
-    } else {
-        (false, None)
-    };
-
     if let Err(err) = db::add_flag_submission(
         &state.db,
         user_id,
@@ -269,8 +302,8 @@ async fn persist_flag_with_audit(
         flag_name,
         submitted_flag,
         accepted,
-        cheated,
-        cheated_instance_flag_id,
+        false,
+        None,
         ip_address,
     )
     .await

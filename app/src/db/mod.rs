@@ -4,7 +4,9 @@ mod flags;
 pub mod models;
 mod users;
 
-pub use audit::{check_flag_cheated, log_download, log_flag_generation, log_instance_action};
+pub use audit::{
+    FlagOrigin, check_flag_origin, log_download, log_flag_generation, log_instance_action,
+};
 pub use flags::{
     add_flag_submission, count_solved_flags_for_user, get_partial_solve_counts_for_user,
     get_solved_flags_for_user, is_challenge_solved_for_user, list_solved_challenges_for_user,
