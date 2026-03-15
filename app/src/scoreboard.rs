@@ -128,11 +128,7 @@ async fn refresh_scoreboard(state: &AppState) -> anyhow::Result<()> {
             .unwrap_or(0);
 
         let score = FlagScore::new(*base_points, *min_points, *decay, solves);
-        let key = (
-            ctf_name.clone(),
-            challenge_name.clone(),
-            flag_name.clone(),
-        );
+        let key = (ctf_name.clone(), challenge_name.clone(), flag_name.clone());
         flag_scores.insert(key, score.clone());
 
         // Accumulate challenge points
@@ -162,9 +158,7 @@ async fn refresh_scoreboard(state: &AppState) -> anyhow::Result<()> {
 }
 
 /// Get flag configurations from the sync cache
-async fn get_flag_configs(
-    state: &AppState,
-) -> HashMap<(String, String), (u32, u32, u32)> {
+async fn get_flag_configs(state: &AppState) -> HashMap<(String, String), (u32, u32, u32)> {
     // Read from challenges table which has flag info
     let mut configs = HashMap::new();
 

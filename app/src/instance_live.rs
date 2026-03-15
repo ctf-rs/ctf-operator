@@ -3,12 +3,12 @@
 //! This module is only compiled for the `hydrate` feature and provides
 //! reactive updates for instance status and countdown timer.
 
+use serde::Deserialize;
 use std::cell::RefCell;
 use std::rc::Rc;
-use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{Request, RequestInit, RequestMode, Response, window, console};
+use web_sys::{Request, RequestInit, RequestMode, Response, console, window};
 
 fn log(msg: &str) {
     console::log_1(&JsValue::from_str(msg));
@@ -57,27 +57,32 @@ fn state_key(state: &InstanceState) -> String {
 
 async fn fetch_instance_state(endpoint: &str) -> Option<InstanceState> {
     let window = window()?;
-    
+
     let opts = RequestInit::new();
     opts.set_method("GET");
     opts.set_mode(RequestMode::SameOrigin);
-    
+
     let request = Request::new_with_str_and_init(endpoint, &opts).ok()?;
     request.headers().set("Cache-Control", "no-store").ok()?;
-    
-    let resp_value = JsFuture::from(window.fetch_with_request(&request)).await.ok()?;
+
+    let resp_value = JsFuture::from(window.fetch_with_request(&request))
+        .await
+        .ok()?;
     let resp: Response = resp_value.dyn_into().ok()?;
-    
+
     if !resp.ok() {
         return None;
     }
-    
+
     let json = JsFuture::from(resp.json().ok()?).await.ok()?;
     serde_wasm_bindgen::from_value(json).ok()
 }
 
 fn update_timer_display(secs: Option<i64>) {
-    log(&format!("[instance_live] update_timer_display called with {:?}", secs));
+    log(&format!(
+        "[instance_live] update_timer_display called with {:?}",
+        secs
+    ));
     if let Some(window) = window() {
         if let Some(document) = window.document() {
             if let Some(el) = document.get_element_by_id("instance-timer") {
@@ -106,7 +111,7 @@ fn update_status_display(state: &InstanceState) {
         if let Some(document) = window.document() {
             if let Some(status_el) = document.get_element_by_id("instance-status") {
                 status_el.class_list().remove_1("ready").ok();
-                
+
                 let text = if state.solved {
                     "Solved"
                 } else if !state.has_instance {
@@ -123,7 +128,7 @@ fn update_status_display(state: &InstanceState) {
                 };
                 status_el.set_text_content(Some(text));
             }
-            
+
             // Show/hide extend button
             if let Some(extend_el) = document.get_element_by_id("extend-form") {
                 if state.can_extend {
@@ -154,19 +159,22 @@ struct LiveState {
 /// This is called on page load when there's an instance panel.
 #[wasm_bindgen]
 pub fn init_instance_live(challenge_name: String) {
-    log(&format!("[instance_live] init_instance_live called for: {}", challenge_name));
-    
+    log(&format!(
+        "[instance_live] init_instance_live called for: {}",
+        challenge_name
+    ));
+
     let endpoint = format!(
         "/challenge/{}/instance-state",
         urlencoding::encode(&challenge_name)
     );
-    
+
     let state = Rc::new(RefCell::new(LiveState {
         local_seconds: None,
         last_state_key: None,
         endpoint,
     }));
-    
+
     // Countdown tick every second
     let tick_state = Rc::clone(&state);
     let tick_closure = Closure::wrap(Box::new(move || {
@@ -175,7 +183,7 @@ pub fn init_instance_live(challenge_name: String) {
             *secs = (*secs - 1).max(0);
             log(&format!("[instance_live] tick: {}s", secs));
             update_timer_display(Some(*secs));
-            
+
             // Show extend button when less than 5 minutes remaining
             if *secs <= 300 && *secs > 0 {
                 if let Some(window) = window() {
@@ -188,7 +196,7 @@ pub fn init_instance_live(challenge_name: String) {
             }
         }
     }) as Box<dyn FnMut()>);
-    
+
     if let Some(window) = window() {
         log("[instance_live] setting up tick interval");
         let _ = window.set_interval_with_callback_and_timeout_and_arguments_0(
@@ -197,7 +205,7 @@ pub fn init_instance_live(challenge_name: String) {
         );
     }
     tick_closure.forget();
-    
+
     // Poll server every 5 seconds
     let poll_state = Rc::clone(&state);
     let poll_closure = Closure::wrap(Box::new(move || {
@@ -207,10 +215,12 @@ pub fn init_instance_live(challenge_name: String) {
             let endpoint = poll_state_inner.borrow().endpoint.clone();
             log(&format!("[instance_live] fetching: {}", endpoint));
             if let Some(new_state) = fetch_instance_state(&endpoint).await {
-                log(&format!("[instance_live] got state: has_instance={}, ready={}, time_left={:?}", 
-                    new_state.has_instance, new_state.ready, new_state.time_left_seconds));
+                log(&format!(
+                    "[instance_live] got state: has_instance={}, ready={}, time_left={:?}",
+                    new_state.has_instance, new_state.ready, new_state.time_left_seconds
+                ));
                 update_status_display(&new_state);
-                
+
                 // Check for state change - reload page if significant change
                 let key = state_key(&new_state);
                 {
@@ -224,16 +234,19 @@ pub fn init_instance_live(challenge_name: String) {
                         }
                     }
                 }
-                
+
                 // Update state
                 let mut s = poll_state_inner.borrow_mut();
                 s.last_state_key = Some(key);
-                
+
                 if new_state.solved || !new_state.has_instance || !new_state.ready {
                     s.local_seconds = None;
                     update_timer_display(None);
                 } else if let Some(secs) = new_state.time_left_seconds {
-                    log(&format!("[instance_live] setting local_seconds to {}", secs));
+                    log(&format!(
+                        "[instance_live] setting local_seconds to {}",
+                        secs
+                    ));
                     s.local_seconds = Some(secs as i64);
                     update_timer_display(Some(secs as i64));
                 } else {
@@ -245,7 +258,7 @@ pub fn init_instance_live(challenge_name: String) {
             }
         });
     }) as Box<dyn FnMut()>);
-    
+
     if let Some(window) = window() {
         log("[instance_live] setting up poll interval");
         let _ = window.set_interval_with_callback_and_timeout_and_arguments_0(
@@ -254,7 +267,7 @@ pub fn init_instance_live(challenge_name: String) {
         );
     }
     poll_closure.forget();
-    
+
     // Initial poll
     log("[instance_live] starting initial poll");
     let init_state = Rc::clone(&state);
@@ -262,15 +275,20 @@ pub fn init_instance_live(challenge_name: String) {
         let endpoint = init_state.borrow().endpoint.clone();
         log(&format!("[instance_live] initial fetch: {}", endpoint));
         if let Some(new_state) = fetch_instance_state(&endpoint).await {
-            log(&format!("[instance_live] initial state: has_instance={}, ready={}, time_left={:?}", 
-                new_state.has_instance, new_state.ready, new_state.time_left_seconds));
+            log(&format!(
+                "[instance_live] initial state: has_instance={}, ready={}, time_left={:?}",
+                new_state.has_instance, new_state.ready, new_state.time_left_seconds
+            ));
             update_status_display(&new_state);
-            
+
             let mut s = init_state.borrow_mut();
             s.last_state_key = Some(state_key(&new_state));
             if new_state.ready {
                 if let Some(secs) = new_state.time_left_seconds {
-                    log(&format!("[instance_live] initial: setting local_seconds to {}", secs));
+                    log(&format!(
+                        "[instance_live] initial: setting local_seconds to {}",
+                        secs
+                    ));
                     s.local_seconds = Some(secs as i64);
                     update_timer_display(Some(secs as i64));
                 }

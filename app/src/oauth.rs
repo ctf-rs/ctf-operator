@@ -48,7 +48,9 @@ pub async fn build_client(config: &OidcConfig) -> Result<OidcClient> {
     let public_issuer = config.public_issuer_url.trim_end_matches('/');
     let auth_url = Url::parse(&format!("{public_issuer}/protocol/openid-connect/auth"))?;
     let token_url = Url::parse(&format!("{internal_issuer}/protocol/openid-connect/token"))?;
-    let userinfo_url = Url::parse(&format!("{internal_issuer}/protocol/openid-connect/userinfo"))?;
+    let userinfo_url = Url::parse(&format!(
+        "{internal_issuer}/protocol/openid-connect/userinfo"
+    ))?;
 
     Ok(OidcClient {
         client_id: config.client_id.clone(),
