@@ -320,6 +320,7 @@ mod tests {
             body: "body".to_string(),
             random: None,
             options: FlagMatchOptions::default(),
+            scoring: FlagScoring::default(),
         }
     }
 

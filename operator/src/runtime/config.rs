@@ -72,7 +72,7 @@ pub enum InstanceServiceType {
 }
 
 impl InstanceServiceType {
-    #[must_use] 
+    #[must_use]
     pub const fn as_k8s_str(&self) -> &'static str {
         match self {
             Self::ClusterIp => "ClusterIP",
@@ -177,8 +177,7 @@ instance:
         replicas: 2
         imagePullPolicy: IfNotPresent
     service:
-        type: NodePort
-        nodePortMode: Allocated
+        type: LoadBalancer
 "#;
 
         let config: OperatorRuntimeConfig =
@@ -194,10 +193,9 @@ instance:
             config.instance.deployment.image_pull_policy.as_deref(),
             Some("IfNotPresent")
         );
-        assert_eq!(config.instance.service.type_, InstanceServiceType::NodePort);
         assert_eq!(
-            config.instance.service.node_port_mode,
-            InstanceServiceNodePortMode::Allocated
+            config.instance.service.type_,
+            InstanceServiceType::LoadBalancer
         );
     }
 }

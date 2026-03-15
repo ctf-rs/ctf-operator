@@ -1245,6 +1245,7 @@ mod tests {
                     random: None,
                     label: None,
                     options: Default::default(),
+                    scoring: Default::default(),
                 }],
                 containers: vec![ctf_cli::k8s::ChallengeContainer {
                     name: "svc".to_string(),

@@ -138,6 +138,16 @@ spec:
                 description:
                   nullable: true
                   type: string
+                difficulty:
+                  enum:
+                    - veryeasy
+                    - easy
+                    - mid
+                    - hard
+                    - insane
+                    - null
+                  nullable: true
+                  type: string
                 files:
                   items:
                     oneOf:
@@ -177,6 +187,10 @@ spec:
                           - angle
                           - underscore
                           - null
+                        nullable: true
+                        type: string
+                      label:
+                        description: Optional human-readable label for the flag (e.g., "Web Flag", "Forensics Flag").
                         nullable: true
                         type: string
                       name:

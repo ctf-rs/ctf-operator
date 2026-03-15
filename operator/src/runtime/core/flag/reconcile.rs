@@ -111,6 +111,7 @@ mod tests {
                 body: "hello".to_string(),
                 random: None,
                 options: Default::default(),
+                scoring: Default::default(),
                 conditions: Default::default(),
             },
         );

@@ -143,6 +143,7 @@ mod tests {
                     random: None,
                     label: None,
                     options: Default::default(),
+                    scoring: Default::default(),
                 }],
                 containers: vec![ChallengeContainer {
                     name: "svc".to_string(),
@@ -191,6 +192,7 @@ mod tests {
             random: None,
             label: None,
             options: Default::default(),
+            scoring: Default::default(),
         });
 
         let mut status = ChallengeStatus::default();
