@@ -154,6 +154,16 @@ spec:
                         description: Optional human-readable label for the flag (e.g., "Web Flag", "Forensics Flag").
                         nullable: true
                         type: string
+                      difficulty:
+                        enum:
+                          - veryeasy
+                          - easy
+                          - mid
+                          - hard
+                          - insane
+                          - null
+                        nullable: true
+                        type: string
                       name:
                         maxLength: 63
                         minLength: 1

@@ -38,8 +38,10 @@ impl Reconciler for ChallengeReconciler {
         }
 
         if ready {
-            // Auto-create global instance for non-instanced challenges
-            if !resource.spec.instancing {
+            // Auto-create global instance for non-instanced challenges that
+            // actually provide containers. If a challenge has no containers
+            // we never create an instance (e.g., informational challenges).
+            if !resource.spec.instancing && !resource.spec.containers.is_empty() {
                 match ensure_global_instance(&resource, &namespace, &ctx).await {
                     Ok(Some(requeue)) => return Ok(Action::requeue(requeue)),
                     Ok(None) => {}
@@ -58,8 +60,8 @@ impl Reconciler for ChallengeReconciler {
     }
 }
 
-/// Ensure a global (shared) Instance exists for a non-instanced challenge.
-/// The instance has user=None and duration_seconds=None (infinite).
+/// Ensure a global (shared) `Instance` exists for a non-instanced challenge.
+/// The instance has `user=None` and `duration_seconds=None` (infinite).
 ///
 /// Returns `Ok(Some(duration))` when the caller should requeue after that
 /// duration (e.g. the cached instance is being deleted), or `Ok(None)` when
@@ -135,7 +137,7 @@ async fn ensure_global_instance(
 
     let api: Api<Instance> = Api::namespaced(state.client.clone(), namespace);
     api.patch(
-        &instance.metadata.name.as_deref().unwrap_or_default(),
+        instance.metadata.name.as_deref().unwrap_or_default(),
         &PatchParams::apply(ChallengeReconciler::NAME).force(),
         &Patch::Apply(&instance),
     )
@@ -167,7 +169,9 @@ fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
         full_name: resource.spec.full_name.clone(),
         description: resource.spec.description.clone(),
         categories: resource.spec.categories.clone(),
-        difficulty: resource.spec.difficulty,
+        // Difficulty is handled per-flag now; leave challenge-level difficulty
+        // unset here to avoid duplicating semantics.
+        difficulty: None,
         tags: resource.spec.tags.clone(),
         authors: resource.spec.authors.clone(),
         instance_duration_seconds: resource.spec.instance_duration_seconds,
@@ -193,6 +197,7 @@ fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
                 random: flag.random.clone(),
                 options: flag.options.clone(),
                 scoring: flag.scoring.clone(),
+                difficulty: flag.difficulty,
             })
             .collect(),
         containers: resource

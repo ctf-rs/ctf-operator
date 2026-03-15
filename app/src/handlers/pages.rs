@@ -160,12 +160,18 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         }
     }
 
-    // Sort cards within each category by difficulty (veryeasy → insane)
+    // Sort cards within each category by easiest flag difficulty (veryeasy → insane).
+    // If a challenge has no flagged difficulties, fall back to challenge-level difficulty,
+    // then to a max key to push unknowns to the end.
     for cards in category_map.values_mut() {
         cards.sort_by_key(|card| {
             card.challenge
-                .difficulty
+                .flags
+                .iter()
+                .filter_map(|f| f.difficulty)
                 .map(|d| d.sort_key())
+                .min()
+                .or_else(|| card.challenge.difficulty.map(|d| d.sort_key()))
                 .unwrap_or(u8::MAX)
         });
     }

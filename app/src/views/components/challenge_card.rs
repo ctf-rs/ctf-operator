@@ -24,13 +24,23 @@ pub fn ChallengeCard(data: ChallengeCardData) -> impl IntoView {
         .description
         .clone()
         .unwrap_or_else(|| "No description".to_string());
-    let difficulty = ch.difficulty;
-
-    let diff_badge = difficulty.map(|d| {
-        let css_class = format!("difficulty-badge diff-{}", d.css_class());
-        let label = d.label();
-        view! { <span class={css_class}>{label}</span> }
-    });
+    // Aggregate difficulties from flags; show badges sorted by easiest first.
+    let mut diff_list: Vec<_> = ch.flags.iter().filter_map(|f| f.difficulty).collect();
+    diff_list.sort_by_key(|d| d.sort_key());
+    diff_list.dedup();
+    let diff_badge = if diff_list.is_empty() {
+        None
+    } else {
+        Some(view! {
+            <div class="difficulty-badges">
+                {diff_list.into_iter().map(|d| {
+                    let css_class = format!("difficulty-badge diff-{}", d.css_class());
+                    let label = d.label();
+                    view! { <span class={css_class}>{label}</span> }
+                }).collect_view()}
+            </div>
+        })
+    };
 
     let status_badge = if data.solved {
         Some(view! { <p class="solved-badge">"Solved"</p> }.into_any())

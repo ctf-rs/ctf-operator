@@ -183,6 +183,11 @@ pub struct ChallengeFlag {
     #[serde(default)]
     #[garde(dive)]
     pub scoring: FlagScoring,
+    /// Optional difficulty for this specific flag. When present, UIs should
+    /// display and use this difficulty instead of any challenge-level value.
+    #[serde(default)]
+    #[garde(skip)]
+    pub difficulty: Option<ChallengeDifficulty>,
 }
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]

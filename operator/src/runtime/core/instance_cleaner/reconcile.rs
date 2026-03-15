@@ -92,9 +92,7 @@ fn resolve_effective_duration(instance: &Instance, state: &CtfState) -> Option<u
     }
 
     // No user field means this is a global / always-on instance — no expiry.
-    if instance.spec.user.is_none() {
-        return None;
-    }
+    instance.spec.user.as_ref()?;
 
     let namespace = instance.namespace().unwrap_or_default();
 

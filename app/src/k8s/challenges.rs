@@ -128,6 +128,9 @@ fn build_challenge_view(
         })
         .collect::<Vec<_>>();
 
+    // Per-flag difficulty: prefer explicit flag difficulty, otherwise fall back
+    // to challenge-level difficulty (for backward compatibility with example
+    // YAMLs that set difficulty per-challenge).
     let flags = challenge
         .spec
         .flags
@@ -139,6 +142,7 @@ fn build_challenge_view(
             base_points: flag.scoring.base_points,
             min_points: flag.scoring.min_points,
             decay: flag.scoring.decay,
+            difficulty: flag.difficulty.or(challenge.spec.difficulty),
         })
         .collect::<Vec<_>>();
 
@@ -162,7 +166,15 @@ fn build_challenge_view(
         .collect();
 
     let categories: Vec<_> = challenge.spec.categories.iter().copied().collect();
-    let difficulty = challenge.spec.difficulty;
+    // Compute challenge-level difficulty as the easiest flag difficulty, if any
+    let mut flag_diffs: Vec<_> = challenge
+        .spec
+        .flags
+        .iter()
+        .filter_map(|f| f.difficulty)
+        .collect();
+    flag_diffs.sort_by_key(|d| d.sort_key());
+    let difficulty = flag_diffs.first().copied();
 
     Some(ChallengeView {
         namespace: namespace.to_string(),

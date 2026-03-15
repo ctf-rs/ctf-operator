@@ -1,11 +1,8 @@
 use leptos::prelude::*;
 
 use super::super::{
-    ChallengePageData,
-    components::InstanceControls,
-    display_file_name, file_route, format_countdown,
-    layout::PageShell,
-    scripts::instance_live_script,
+    ChallengePageData, components::InstanceControls, display_file_name, file_route,
+    format_countdown, layout::PageShell, scripts::instance_live_script,
 };
 
 // ---------------------------------------------------------------------------
@@ -21,9 +18,9 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
         "challenge-detail"
     };
 
-    let spawn_action = "/api/spawn_instance";
-    let extend_action = "/api/extend_instance";
-    let stop_action = "/api/stop_instance";
+    let _spawn_action = "/api/spawn_instance";
+    let _extend_action = "/api/extend_instance";
+    let _stop_action = "/api/stop_instance";
     let submit_action = "/api/submit_flag";
 
     let full_name = ch.full_name.clone();
@@ -33,7 +30,8 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
         .unwrap_or_else(|| "No description".to_string());
     let challenge_name = ch.name.clone();
     let flags = ch.flags.clone();
-    let difficulty = ch.difficulty;
+    // Determine difficulties from flags (difficulty is now per-flag)
+    let _difficulty = ch.difficulty;
     let exposed_ports = ch.exposed_ports.clone();
     let flag_hint = ch.flag_hint.clone();
 
@@ -46,7 +44,7 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
 
     let instancing = data.instancing;
 
-    let status_text = if data.solved {
+    let _status_text = if data.solved {
         "Solved".to_string()
     } else if !instancing {
         // Global challenge
@@ -76,8 +74,8 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
     };
 
     // Only show timer when instanced, instance is ready and has time left
-    let show_timer = instancing && data.ready && data.time_left_seconds.is_some();
-    let timer_text = data
+    let _show_timer = instancing && data.ready && data.time_left_seconds.is_some();
+    let _timer_text = data
         .time_left_seconds
         .map(|s| format_countdown(s))
         .unwrap_or_default();
@@ -90,16 +88,27 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
 
     let instance_script = instance_live_script(&challenge_name);
 
-    let extend_fb = data.extend_feedback.clone();
+    let _extend_fb = data.extend_feedback.clone();
     let submit_fb_flag_name = data.submit_feedback.as_ref().map(|f| f.flag_name.clone());
     let submit_fb_kind = data.submit_feedback.as_ref().map(|f| f.kind.clone());
     let submit_fb_message = data.submit_feedback.as_ref().map(|f| f.message.clone());
 
-    let diff_badge = difficulty.map(|d| {
-        let css_class = format!("difficulty-badge diff-{}", d.css_class());
-        let label = d.label();
-        view! { <span class={css_class}>{label}</span> }
-    });
+    let mut diff_list: Vec<_> = flags.iter().filter_map(|f| f.difficulty).collect();
+    diff_list.sort_by_key(|d| d.sort_key());
+    diff_list.dedup();
+    let diff_badge = if diff_list.is_empty() {
+        None
+    } else {
+        Some(view! {
+            <div class="difficulty-badges">
+                {diff_list.into_iter().map(|d| {
+                    let css_class = format!("difficulty-badge diff-{}", d.css_class());
+                    let label = d.label();
+                    view! { <span class={css_class}>{label}</span> }
+                }).collect_view()}
+            </div>
+        })
+    };
 
     // Points display
     let points = data.points;
@@ -152,41 +161,9 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                     </section>
                 </div>
 
-                <div class="instance-panel">
-                    <div class="instance-header">
-                        <h2>"Instance"</h2>
-                        <div class="instance-actions" id="instance-controls">
-                            {(instancing && !data.solved && !data.deleting && (!data.has_instance || data.time_left_seconds == Some(0))).then(|| view! {
-                                <form method="post" action={spawn_action} id="spawn-form">
-                                    <input type="hidden" name="challenge_name" value={challenge_name.clone()}/>
-                                    <button class="btn primary small" type="submit" id="spawn-btn">"Spawn"</button>
-                                </form>
-                            })}
-                            {(instancing && !data.solved && data.has_instance && !data.deleting).then(|| view! {
-                                <form method="post" action={stop_action} id="stop-form">
-                                    <input type="hidden" name="challenge_name" value={challenge_name.clone()}/>
-                                    <button class="btn danger small" type="submit" id="stop-btn">"Stop"</button>
-                                </form>
-                            })}
-                            {(instancing && !data.solved && data.has_instance && !data.deleting).then(|| {
-                                let extend_style = if data.can_extend { "" } else { "display:none" };
-                                view! {
-                                    <form method="post" action={extend_action} id="extend-form" style={extend_style}>
-                                        <input type="hidden" name="challenge_name" value={challenge_name.clone()}/>
-                                        <button class="btn extend small" type="submit" id="extend-btn">"Extend"</button>
-                                    </form>
-                                }
-                            })}
-                        </div>
-                        {extend_fb.map(|msg| view! { <span class="feedback-inline">{msg}</span> })}
-                        <div class="instance-meta">
-                            <span id="instance-status" class={if data.ready { "status-badge ready" } else if data.deleting { "status-badge deleting" } else { "status-badge" }}>{status_text}</span>
-                            {show_timer.then(|| view! { <span id="instance-timer" class="timer-badge">{timer_text}</span> })}
-                        </div>
-                    </div>
-
-                    {(!data.solved).then(move || {
-                        view! {
+                {(!data.solved).then(move || {
+                    view! {
+                        <div class="controls-wrapper">
                             <InstanceControls
                                 has_instance=data.has_instance
                                 ready=data.ready
@@ -203,9 +180,9 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                                 instance_base_domain=data.instance_base_domain.clone()
                                 flag_hint=flag_hint.clone()
                             />
-                        }
-                    })}
-                </div>
+                        </div>
+                    }
+                })}
             </div>
             <script>{instance_script}</script>
         </PageShell>

@@ -1,6 +1,7 @@
 use leptos::prelude::*;
 
 use crate::db::{FlagView, PortView};
+use ctf_cli::ChallengeDifficulty;
 
 // ---------------------------------------------------------------------------
 // Instance controls (connections & flag forms)
@@ -95,6 +96,7 @@ pub fn InstanceControls(
                         challenge_name=challenge_name.clone()
                         flag_name=flag.name.clone()
                         flag_label=display_label
+                        flag_difficulty=flag.difficulty
                         disabled=flags_disabled || flag_solved
                         solved=flag_solved
                         feedback=feedback
@@ -117,6 +119,7 @@ fn FlagForm(
     challenge_name: String,
     flag_name: String,
     flag_label: String,
+    flag_difficulty: Option<ChallengeDifficulty>,
     disabled: bool,
     solved: bool,
     feedback: Option<(String, String)>,
@@ -136,7 +139,13 @@ fn FlagForm(
     };
     view! {
         <form method="post" action={action} class={form_class}>
-            <label class="flag-label">{flag_label.clone()}</label>
+            <label class="flag-label">{flag_label.clone()}
+                {flag_difficulty.map(|d| {
+                    let css = format!("difficulty-badge diff-{}", d.css_class());
+                    let label = d.label();
+                    view! { <span class={css}>{label}</span> }
+                })}
+            </label>
             <input type="hidden" name="challenge_name" value={challenge_name}/>
             <input type="hidden" name="flag_name" value={flag_name.clone()}/>
             <input type="text" name="submitted_flag" placeholder={placeholder} required disabled=disabled/>

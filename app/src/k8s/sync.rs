@@ -12,6 +12,7 @@ use tracing::{error, info, warn};
 use crate::{config::AppConfig, db, k8s::watcher::Watcher, state::AppState};
 
 /// Watchers that populate Stores for app state.
+#[derive(Debug)]
 pub struct AppWatchers {
     pub instances: Store<Instance>,
     pub flags: Store<Flag>,

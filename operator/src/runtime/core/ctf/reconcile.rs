@@ -50,7 +50,7 @@ impl Reconciler for CtfReconciler {
     }
 }
 
-/// Creates or updates the single ReservationSet that all instances under
+/// Creates or updates the single `ReservationSet` that all instances under
 /// this CTF share for port allocation.
 async fn ensure_reservation_set(
     ctf: &Ctf,

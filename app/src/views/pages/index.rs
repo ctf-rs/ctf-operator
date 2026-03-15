@@ -1,10 +1,7 @@
 use leptos::prelude::*;
 
 use super::super::{
-    CategorySection,
-    components::ChallengeCard,
-    layout::PageShell,
-    scripts::index_timer_script,
+    CategorySection, components::ChallengeCard, layout::PageShell, scripts::index_timer_script,
 };
 
 // ---------------------------------------------------------------------------

@@ -199,5 +199,3 @@ impl Metrics {
 pub fn challenge_kv(name: &str) -> KeyValue {
     KeyValue::new("challenge", name.to_owned())
 }
-
-

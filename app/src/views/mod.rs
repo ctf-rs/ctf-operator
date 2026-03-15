@@ -15,6 +15,7 @@ use crate::scoreboard::UserScore;
 // Data types shared between views and handlers
 // ---------------------------------------------------------------------------
 
+#[derive(Debug)]
 pub struct ChallengeCardData {
     pub challenge: ChallengeView,
     pub solved: bool,
@@ -27,18 +28,21 @@ pub struct ChallengeCardData {
     pub points: u32,
 }
 
+#[derive(Debug)]
 pub struct CategorySection {
     pub category: ChallengeCategory,
     pub label: String,
     pub cards: Vec<ChallengeCardData>,
 }
 
+#[derive(Debug)]
 pub struct SubmissionFeedback {
     pub kind: String,
     pub flag_name: String,
     pub message: String,
 }
 
+#[derive(Debug)]
 pub struct ChallengePageData {
     pub challenge: ChallengeView,
     pub ctf_title: String,
@@ -59,6 +63,7 @@ pub struct ChallengePageData {
     pub points: u32,
 }
 
+#[derive(Debug)]
 pub struct ScoreboardPageData {
     pub ctf_title: String,
     pub user_label: String,

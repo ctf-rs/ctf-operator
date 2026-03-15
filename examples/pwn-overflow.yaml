@@ -22,14 +22,32 @@ spec:
   - stack
   - beginner
   flags:
-  - name: flag
-    body: fake_flag_value
+  - name: flag1
+    body: fooflag1
+    difficulty: veryeasy
+  - name: flag2
+    body: fooflag2
+    difficulty: veryeasy
+  - name: flag3
+    body: fooflag3
+    difficulty: easy
+  - name: flag4
+    body: fooflag4
+    difficulty: mid
+    random:
+      len: 8
   containers:
   - name: test
     image: nginx:alpine
     flags:
-    - name: flag
-      env: FLAG
+    - name: flag1
+      env: FLAG1
+    - name: flag2
+      env: FLAG2
+    - name: flag3
+      env: FLAG3
+    - name: flag4
+      env: FLAG4
     ports:
     - name: socat
       type: http

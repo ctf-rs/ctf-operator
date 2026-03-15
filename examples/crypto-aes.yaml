@@ -23,14 +23,20 @@ spec:
   - cbc
   - chosen-plaintext
   flags:
-  - name: flag
-    body: fake_flag_value
+  - name: flag-a
+    body: fake_flag_a
+    difficulty: mid
+  - name: flag-b
+    body: fake_flag_b
+    difficulty: mid
   containers:
   - name: test
     image: nginx:alpine
     flags:
-    - name: flag
-      env: FLAG
+    - name: flag-a
+      env: FLAG_A
+    - name: flag-b
+      env: FLAG_B
     ports:
     - name: socat
       type: http

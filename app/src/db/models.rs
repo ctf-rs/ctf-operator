@@ -27,6 +27,9 @@ pub struct FlagView {
     /// Decay factor (default: 6)
     #[serde(default = "default_decay")]
     pub decay: u32,
+    /// Optional difficulty rating for this flag
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub difficulty: Option<ChallengeDifficulty>,
 }
 
 fn default_base_points() -> u32 {

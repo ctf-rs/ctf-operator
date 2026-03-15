@@ -22,14 +22,25 @@ spec:
   - html
   - beginner
   flags:
-  - name: flag
-    body: fake_flag_value
+  - name: flag1
+    body: fake_flag_value_1
+    difficulty: veryeasy
+  - name: flag2
+    body: fake_flag_value_2
+    difficulty: veryeasy
+  - name: flag3
+    body: fake_flag_value_3
+    difficulty: easy
   containers:
   - name: test
     image: nginx:alpine
     flags:
-    - name: flag
-      env: FLAG
+    - name: flag1
+      env: FLAG1
+    - name: flag2
+      env: FLAG2
+    - name: flag3
+      env: FLAG3
     ports:
     - name: socat
       type: http

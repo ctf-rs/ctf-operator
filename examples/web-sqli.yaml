@@ -23,14 +23,22 @@ spec:
   - injection
   - authentication
   flags:
-  - name: flag
-    body: fake_flag_value
+  - name: flag-user
+    body: fake_flag_user
+    difficulty: easy
+  - name: flag-admin
+    body: fake_flag_admin
+    difficulty: easy
+    random:
+      len: 6
   containers:
   - name: test
     image: nginx:alpine
     flags:
-    - name: flag
-      env: FLAG
+    - name: flag-user
+      env: FLAG_USER
+    - name: flag-admin
+      env: FLAG_ADMIN
     ports:
     - name: socat
       type: http

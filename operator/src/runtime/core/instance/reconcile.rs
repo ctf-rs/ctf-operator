@@ -725,7 +725,7 @@ fn collect_instance_resources(
     let service_ready = state
         .services
         .get(&service_ref)
-        .map_or(false, |r| r.metadata.deletion_timestamp.is_none());
+        .is_some_and(|r| r.metadata.deletion_timestamp.is_none());
 
     ObservedInstanceResources {
         reservation_ready,
