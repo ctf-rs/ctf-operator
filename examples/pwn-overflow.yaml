@@ -16,7 +16,6 @@ spec:
   - CTF Team
   categories:
   - pwn
-  difficulty: veryeasy
   tags:
   - buffer-overflow
   - stack

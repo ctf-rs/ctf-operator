@@ -54,21 +54,15 @@ async fn reconcile_once(
 
     for row in &rows {
         let discord_id: String = row.get("discord_id");
-        let uid: u64 = match discord_id.parse() {
-            Ok(id) => id,
-            Err(_) => {
-                warn!(discord_id = %discord_id, "invalid discord_id in DB, skipping");
-                continue;
-            }
+        let Ok(uid) = discord_id.parse::<u64>() else {
+            warn!(discord_id = %discord_id, "invalid discord_id in DB, skipping");
+            continue;
         };
 
         // 3. Check if the member already has the role.
-        let member = match guild_id.member(http, UserId::new(uid)).await {
-            Ok(m) => m,
-            Err(_) => {
-                // Member may have left the server — skip silently.
-                continue;
-            }
+        let Ok(member) = guild_id.member(http, UserId::new(uid)).await else {
+            // Member may have left the server — skip silently.
+            continue;
         };
 
         if member.roles.contains(&role_id) {
@@ -85,7 +79,11 @@ async fn reconcile_once(
     }
 
     if assigned > 0 {
-        info!(assigned, total_linked = rows.len(), "reconcile pass complete");
+        info!(
+            assigned,
+            total_linked = rows.len(),
+            "reconcile pass complete"
+        );
     }
 
     Ok(())

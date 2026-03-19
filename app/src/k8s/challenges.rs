@@ -128,9 +128,6 @@ fn build_challenge_view(
         })
         .collect::<Vec<_>>();
 
-    // Per-flag difficulty: prefer explicit flag difficulty, otherwise fall back
-    // to challenge-level difficulty (for backward compatibility with example
-    // YAMLs that set difficulty per-challenge).
     let flags = challenge
         .spec
         .flags
@@ -142,7 +139,7 @@ fn build_challenge_view(
             base_points: flag.scoring.base_points,
             min_points: flag.scoring.min_points,
             decay: flag.scoring.decay,
-            difficulty: flag.difficulty.or(challenge.spec.difficulty),
+            difficulty: flag.difficulty,
         })
         .collect::<Vec<_>>();
 
@@ -184,7 +181,6 @@ fn build_challenge_view(
         full_name: challenge.spec.full_name.clone(),
         description: challenge.spec.description.clone(),
         categories,
-        difficulty,
         files,
         flags,
         exposed_ports,

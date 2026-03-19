@@ -63,11 +63,8 @@ async fn handle_verified(
     Json(body): Json<VerifiedBody>,
 ) -> impl IntoResponse {
     // 1. Verify HMAC.
-    let sig_bytes = match hex::decode(&body.sig) {
-        Ok(b) => b,
-        Err(_) => {
-            return (axum::http::StatusCode::BAD_REQUEST, "invalid sig encoding");
-        }
+    let Ok(sig_bytes) = hex::decode(&body.sig) else {
+        return (axum::http::StatusCode::BAD_REQUEST, "invalid sig encoding");
     };
 
     let Ok(mut mac) = HmacSha256::new_from_slice(state.config.discord_link_secret.as_bytes())
@@ -84,18 +81,12 @@ async fn handle_verified(
     }
 
     // 2. Decode payload.
-    let json_bytes = match base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(&body.data) {
-        Ok(b) => b,
-        Err(_) => {
-            return (axum::http::StatusCode::BAD_REQUEST, "invalid data encoding");
-        }
+    let Ok(json_bytes) = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(&body.data) else {
+        return (axum::http::StatusCode::BAD_REQUEST, "invalid data encoding");
     };
 
-    let payload: VerifiedPayload = match serde_json::from_slice(&json_bytes) {
-        Ok(p) => p,
-        Err(_) => {
-            return (axum::http::StatusCode::BAD_REQUEST, "invalid payload");
-        }
+    let Ok(payload) = serde_json::from_slice::<VerifiedPayload>(&json_bytes) else {
+        return (axum::http::StatusCode::BAD_REQUEST, "invalid payload");
     };
 
     // 3. Freshness check.
@@ -108,11 +99,8 @@ async fn handle_verified(
     }
 
     // 4. Parse discord id.
-    let discord_uid: u64 = match payload.discord_id.parse() {
-        Ok(id) => id,
-        Err(_) => {
-            return (axum::http::StatusCode::BAD_REQUEST, "invalid discord_id");
-        }
+    let Ok(discord_uid) = payload.discord_id.parse::<u64>() else {
+        return (axum::http::StatusCode::BAD_REQUEST, "invalid discord_id");
     };
 
     // 5. Assign the competitor role.

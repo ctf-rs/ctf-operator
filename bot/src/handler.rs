@@ -13,6 +13,10 @@ pub struct Handler {
 }
 
 #[async_trait]
+#[expect(
+    clippy::renamed_function_params,
+    reason = "serenity trait uses different parameter names"
+)]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         info!(user = %ready.user.name, "bot connected");
@@ -73,7 +77,7 @@ impl Handler {
                  Click the button below to get a personal verification link.\n\
                  ⚠️ You must be **logged in** to the CTF website first!",
             )
-            .color(0x5865F2);
+            .color(0x58_65_F2);
 
         let button = CreateButton::new("verify_account")
             .label("Verify Account")
@@ -109,7 +113,7 @@ impl Handler {
                 "Need help? Click the button below to create a support ticket.\n\n\
                  A moderator will assist you shortly.",
             )
-            .color(0x57F287);
+            .color(0x57_F2_87);
 
         let button = CreateButton::new("create_ticket")
             .label("Create Ticket")
@@ -169,7 +173,7 @@ impl Handler {
                  ⚠️ Make sure you're **logged in** to the CTF website first!\n\
                  This link expires in **5 minutes**.",
             ))
-            .color(0x5865F2);
+            .color(0x58_65_F2);
 
         comp.create_response(
             &ctx.http,

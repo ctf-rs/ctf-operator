@@ -17,7 +17,6 @@ spec:
   categories:
   - crypto
   - misc
-  difficulty: easy
   tags:
   - rsa
   - factoring
@@ -26,6 +25,7 @@ spec:
   - name: flag
     label: "Decrypt the message"
     body: fake_flag_value
+    difficulty: easy
   containers:
   - name: test
     image: nginx:alpine

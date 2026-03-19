@@ -17,7 +17,6 @@ spec:
   - CTF Team
   categories:
   - crypto
-  difficulty: insane
   tags:
   - lattice
   - lwe
@@ -26,6 +25,7 @@ spec:
   - name: flag
     label: "Decrypt the message"
     body: fake_flag_value
+    difficulty: insane
   containers:
   - name: test
     image: nginx:alpine

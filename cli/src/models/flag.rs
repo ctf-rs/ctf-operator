@@ -327,7 +327,7 @@ mod tests {
     #[test]
     fn validate_strict_accepts_valid_flag() {
         let flag = make_flag();
-        assert!(flag.validate_strict().is_ok());
+        flag.validate_strict().unwrap();
     }
 
     #[test]
@@ -490,7 +490,7 @@ mod tests {
         case_sensitive.options.ignore_case = false;
         assert!(!case_sensitive.verify("SCC{abcd}"));
 
-        let mut ignore_case = case_sensitive.clone();
+        let mut ignore_case = case_sensitive;
         ignore_case.options.ignore_case = true;
         assert!(ignore_case.verify("SCC{abcd}"));
         assert!(ignore_case.verify("SCC{ABCD}"));

@@ -17,7 +17,6 @@ spec:
   categories:
   - web
   - foren
-  difficulty: easy
   tags:
   - sql
   - injection

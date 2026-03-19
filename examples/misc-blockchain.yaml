@@ -17,7 +17,6 @@ spec:
   categories:
   - misc
   - crypto
-  difficulty: hard
   tags:
   - blockchain
   - solidity
@@ -26,6 +25,7 @@ spec:
   - name: flag
     label: "Solve the puzzle"
     body: fake_flag_value
+    difficulty: hard
   containers:
   - name: test
     image: nginx:alpine

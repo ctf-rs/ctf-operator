@@ -16,7 +16,6 @@ spec:
   - CTF Team
   categories:
   - web
-  difficulty: veryeasy
   tags:
   - http
   - html

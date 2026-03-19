@@ -28,9 +28,6 @@ pub struct Challenge {
     pub categories: HashSet<ChallengeCategory>,
     #[serde(default)]
     #[garde(skip)]
-    pub difficulty: Option<ChallengeDifficulty>,
-    #[serde(default)]
-    #[garde(skip)]
     pub tags: HashSet<String>,
     #[serde(default)]
     #[garde(skip)]
@@ -183,8 +180,7 @@ pub struct ChallengeFlag {
     #[serde(default)]
     #[garde(dive)]
     pub scoring: FlagScoring,
-    /// Optional difficulty for this specific flag. When present, UIs should
-    /// display and use this difficulty instead of any challenge-level value.
+    /// Optional difficulty for this flag.
     #[serde(default)]
     #[garde(skip)]
     pub difficulty: Option<ChallengeDifficulty>,

@@ -1130,7 +1130,7 @@ mod tests {
                     prefix: "SCC".to_string(),
                     format: ctf_cli::models::FlagFormat::Curly,
                     random: None,
-                    options: Default::default(),
+                    options: ctf_cli::models::FlagMatchOptions::default(),
                 },
                 network: ctf_cli::models::CtfNetwork {
                     ports: ctf_cli::models::CtfPorts {
@@ -1161,7 +1161,6 @@ mod tests {
             ChallengeSpec {
                 full_name: "Challenge".to_string(),
                 description: None,
-                difficulty: None,
                 instance_duration_seconds: None,
                 instancing: true,
                 categories: HashSet::new(),
@@ -1174,8 +1173,9 @@ mod tests {
                     format: None,
                     random: None,
                     label: None,
-                    options: Default::default(),
-                    scoring: Default::default(),
+                    options: ctf_cli::models::FlagMatchOptions::default(),
+                    scoring: ctf_cli::models::FlagScoring::default(),
+                    difficulty: None,
                 }],
                 containers: vec![ctf_cli::k8s::ChallengeContainer {
                     name: "svc".to_string(),

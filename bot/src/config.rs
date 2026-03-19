@@ -16,7 +16,7 @@ pub struct BotConfig {
     pub competitor_role_name: String,
     /// Bind address for the HTTP callback server (default: `0.0.0.0:3030`).
     pub http_addr: String,
-    /// PostgreSQL database URL (same DB as the web app).
+    /// `PostgreSQL` database URL (same DB as the web app).
     pub database_url: String,
     /// How often (in seconds) the reconciler checks for missing roles (default: 60).
     pub reconcile_interval_secs: u64,

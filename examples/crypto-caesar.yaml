@@ -16,7 +16,6 @@ spec:
   - CTF Team
   categories:
   - crypto
-  difficulty: veryeasy
   tags:
   - classical
   - substitution
@@ -25,6 +24,7 @@ spec:
   - name: flag
     label: "Decrypt the message"
     body: fake_flag_value
+    difficulty: veryeasy
   containers:
   - name: test
     image: nginx:alpine

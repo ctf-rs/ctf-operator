@@ -16,7 +16,6 @@ spec:
   - CTF Team
   categories:
   - rev
-  difficulty: veryeasy
   tags:
   - strings
   - static-analysis
@@ -25,6 +24,7 @@ spec:
   - name: flag
     label: "Reverse the binary"
     body: fake_flag_value
+    difficulty: veryeasy
   containers:
   - name: test
     image: nginx:alpine

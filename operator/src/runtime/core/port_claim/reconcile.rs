@@ -312,8 +312,8 @@ mod tests {
         let used = [20000_u16, 20001_u16, 20002_u16]
             .into_iter()
             .collect::<HashSet<_>>();
-        let mut left_rng = rand::rngs::StdRng::seed_from_u64(0xC0FFEE);
-        let mut right_rng = rand::rngs::StdRng::seed_from_u64(0xC0FFEE);
+        let mut left_rng = rand::rngs::StdRng::seed_from_u64(0x00C0_FFEE);
+        let mut right_rng = rand::rngs::StdRng::seed_from_u64(0x00C0_FFEE);
 
         let left = pick_free_port_with_rng(20000..=20010, &used, &mut left_rng);
         let right = pick_free_port_with_rng(20000..=20010, &used, &mut right_rng);

@@ -22,6 +22,7 @@
     "cargo clippy": true,
     "cargo clean": true,
     "cargo expand": true,
-    "true": true
+    "true": true,
+    "uniq": true
   }
 }

@@ -99,16 +99,6 @@ spec:
                 description:
                   nullable: true
                   type: string
-                difficulty:
-                  enum:
-                    - veryeasy
-                    - easy
-                    - mid
-                    - hard
-                    - insane
-                    - null
-                  nullable: true
-                  type: string
                 files:
                   items:
                     oneOf:
@@ -140,6 +130,17 @@ spec:
                         maxLength: 127
                         minLength: 1
                         type: string
+                      difficulty:
+                        description: Optional difficulty for this flag.
+                        enum:
+                          - veryeasy
+                          - easy
+                          - mid
+                          - hard
+                          - insane
+                          - null
+                        nullable: true
+                        type: string
                       format:
                         enum:
                           - curly
@@ -152,16 +153,6 @@ spec:
                         type: string
                       label:
                         description: Optional human-readable label for the flag (e.g., "Web Flag", "Forensics Flag").
-                        nullable: true
-                        type: string
-                      difficulty:
-                        enum:
-                          - veryeasy
-                          - easy
-                          - mid
-                          - hard
-                          - insane
-                          - null
                         nullable: true
                         type: string
                       name:
@@ -250,6 +241,12 @@ spec:
                   minimum: 0.0
                   nullable: true
                   type: integer
+                instancing:
+                  default: false
+                  description: |-
+                    When true, each user gets their own instance with randomised flags.
+                    When false (default), a single shared instance is created.
+                  type: boolean
                 tags:
                   default: []
                   items:

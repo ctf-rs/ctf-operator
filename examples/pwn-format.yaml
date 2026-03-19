@@ -17,7 +17,6 @@ spec:
   categories:
   - pwn
   - rev
-  difficulty: mid
   tags:
   - format-string
   - got-overwrite
@@ -26,6 +25,7 @@ spec:
   - name: flag
     label: "Exploit the binary"
     body: fake_flag_value
+    difficulty: mid
   containers:
   - name: test
     image: nginx:alpine

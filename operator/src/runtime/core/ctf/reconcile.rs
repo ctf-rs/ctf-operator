@@ -147,7 +147,7 @@ mod tests {
                     prefix: "SCC".to_string(),
                     format: ctf_cli::models::FlagFormat::Curly,
                     random: None,
-                    options: Default::default(),
+                    options: ctf_cli::models::FlagMatchOptions::default(),
                 },
                 network: ctf_cli::models::CtfNetwork {
                     ports: ctf_cli::models::CtfPorts {
@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn validate_spec_sets_ready_false_for_invalid_spec() {
         let mut ctf = valid_ctf();
-        ctf.spec.flag.prefix = "".to_string();
+        ctf.spec.flag.prefix = String::new();
 
         let mut status = CtfStatus::default();
         validate_spec(&ctf, &mut status);

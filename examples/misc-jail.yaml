@@ -16,7 +16,6 @@ spec:
   - CTF Team
   categories:
   - misc
-  difficulty: mid
   tags:
   - python
   - sandbox-escape
@@ -25,6 +24,7 @@ spec:
   - name: flag
     label: "Solve the puzzle"
     body: fake_flag_value
+    difficulty: mid
   containers:
   - name: test
     image: nginx:alpine

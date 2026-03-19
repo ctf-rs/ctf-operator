@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 description = "Discord bot for CTF platform — account linking, help desk tickets"
 license = "MIT"
+repository = "https://github.com/scc2026/ctf-operator"
+readme = "../README.md"
+keywords = ["ctf", "discord", "bot"]
+categories = ["command-line-utilities"]
 
 [lints]
 workspace = true

@@ -116,7 +116,7 @@ fn resource_to_instance_ref(
 mod tests {
     use super::*;
     use ctf_cli::k8s::{ChallengeSpec, CtfSpec, InstanceSpec};
-    use std::{collections::HashSet, sync::Arc};
+    use std::collections::HashSet;
 
     fn instance(name: &str, ns: &str, ctf: &str, challenge: &str) -> Arc<Instance> {
         let mut instance = Instance::new(
@@ -145,7 +145,7 @@ mod tests {
                     prefix: "SCC".to_string(),
                     format: ctf_cli::models::FlagFormat::Curly,
                     random: None,
-                    options: Default::default(),
+                    options: ctf_cli::models::FlagMatchOptions::default(),
                 },
                 network: ctf_cli::models::CtfNetwork {
                     ports: ctf_cli::models::CtfPorts {
@@ -166,7 +166,6 @@ mod tests {
             ChallengeSpec {
                 full_name: "Challenge".to_string(),
                 description: None,
-                difficulty: None,
                 instance_duration_seconds: None,
                 instancing: true,
                 categories: HashSet::new(),

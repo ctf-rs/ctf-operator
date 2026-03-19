@@ -110,8 +110,8 @@ mod tests {
                 format: ctf_cli::models::FlagFormat::Curly,
                 body: "hello".to_string(),
                 random: None,
-                options: Default::default(),
-                scoring: Default::default(),
+                options: ctf_cli::models::FlagMatchOptions::default(),
+                scoring: ctf_cli::models::FlagScoring::default(),
             },
         );
         flag.metadata.namespace = Some("ctf".to_string());
@@ -136,7 +136,7 @@ mod tests {
         let flag = valid_flag();
         let mut status = FlagStatus {
             flag: Some("preexisting".to_string()),
-            conditions: Default::default(),
+            conditions: ctf_cli::k8s::Conditions::default(),
         };
 
         validate_and_generate(&flag, &mut status);
@@ -148,11 +148,11 @@ mod tests {
     #[test]
     fn validate_and_generate_sets_not_ready_for_invalid_spec() {
         let mut flag = valid_flag();
-        flag.spec.prefix = "".to_string();
+        flag.spec.prefix = String::new();
 
         let mut status = FlagStatus {
             flag: Some("will-be-cleared".to_string()),
-            conditions: Default::default(),
+            conditions: ctf_cli::k8s::Conditions::default(),
         };
 
         validate_and_generate(&flag, &mut status);

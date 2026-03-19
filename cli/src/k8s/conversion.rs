@@ -65,7 +65,6 @@ pub fn challenge_from_core(
             instance_duration_seconds: challenge.instance_duration_seconds,
             instancing: challenge.instancing,
             categories: challenge.categories.clone(),
-            difficulty: challenge.difficulty,
             tags: challenge.tags.clone(),
             authors: challenge.authors.clone(),
             flags: challenge.flags.clone(),

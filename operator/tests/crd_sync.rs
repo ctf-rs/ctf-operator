@@ -51,10 +51,10 @@ fn helm_crds_match_generated_crds() {
 
 fn parse_yaml_docs(path: &Path) -> Vec<Value> {
     let content = fs::read_to_string(path)
-        .unwrap_or_else(|err| panic!("failed reading {}: {err}", path.display()));
+        .unwrap_or_else(|err| unreachable!("failed reading {}: {err}", path.display()));
 
     let value = serde_saphyr::from_str::<Value>(&content)
-        .unwrap_or_else(|err| panic!("failed parsing YAML in {}: {err}", path.display()));
+        .unwrap_or_else(|err| unreachable!("failed parsing YAML in {}: {err}", path.display()));
 
     if matches!(value, Value::Null) {
         Vec::new()

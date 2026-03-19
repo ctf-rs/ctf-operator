@@ -41,29 +41,3 @@ pub fn generate_verify_url(
         sig
     )
 }
-
-/// Build a signed callback payload that the web app sends to the bot after a
-/// successful account link.
-///
-/// Returns `(data, sig)` – base64url-encoded JSON and its hex HMAC.
-pub fn sign_callback(secret: &str, discord_id: &str) -> (String, String) {
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock before UNIX epoch")
-        .as_secs();
-
-    let payload = serde_json::json!({
-        "discord_id": discord_id,
-        "ts": ts,
-    });
-
-    let json_bytes = serde_json::to_vec(&payload).expect("JSON serialisation cannot fail");
-    let data = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&json_bytes);
-
-    let mut mac =
-        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepts any key length");
-    mac.update(data.as_bytes());
-    let sig = hex::encode(mac.finalize().into_bytes());
-
-    (data, sig)
-}

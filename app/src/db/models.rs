@@ -63,7 +63,6 @@ pub struct ChallengeView {
     pub full_name: String,
     pub description: Option<String>,
     pub categories: Vec<ChallengeCategory>,
-    pub difficulty: Option<ChallengeDifficulty>,
     pub files: Vec<String>,
     pub flags: Vec<FlagView>,
     pub exposed_ports: Vec<PortView>,

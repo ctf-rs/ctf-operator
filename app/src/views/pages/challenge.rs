@@ -31,8 +31,6 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
     let challenge_name = ch.name.clone();
     let flags = ch.flags.clone();
     let flag_points = data.flag_points.clone();
-    // Determine difficulties from flags (difficulty is now per-flag)
-    let _difficulty = ch.difficulty;
     let exposed_ports = ch.exposed_ports.clone();
     let flag_hint = ch.flag_hint.clone();
 

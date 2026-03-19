@@ -169,9 +169,6 @@ fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
         full_name: resource.spec.full_name.clone(),
         description: resource.spec.description.clone(),
         categories: resource.spec.categories.clone(),
-        // Difficulty is handled per-flag now; leave challenge-level difficulty
-        // unset here to avoid duplicating semantics.
-        difficulty: None,
         tags: resource.spec.tags.clone(),
         authors: resource.spec.authors.clone(),
         instance_duration_seconds: resource.spec.instance_duration_seconds,
@@ -254,7 +251,6 @@ mod tests {
             ChallengeSpec {
                 full_name: "Challenge One".to_string(),
                 description: Some("desc".to_string()),
-                difficulty: None,
                 instance_duration_seconds: None,
                 instancing: true,
                 categories: HashSet::new(),
@@ -267,8 +263,9 @@ mod tests {
                     format: None,
                     random: None,
                     label: None,
-                    options: Default::default(),
-                    scoring: Default::default(),
+                    options: ctf_cli::models::FlagMatchOptions::default(),
+                    scoring: ctf_cli::models::FlagScoring::default(),
+                    difficulty: None,
                 }],
                 containers: vec![ChallengeContainer {
                     name: "svc".to_string(),
@@ -316,8 +313,9 @@ mod tests {
             format: None,
             random: None,
             label: None,
-            options: Default::default(),
-            scoring: Default::default(),
+            options: ctf_cli::models::FlagMatchOptions::default(),
+            scoring: ctf_cli::models::FlagScoring::default(),
+            difficulty: None,
         });
 
         let mut status = ChallengeStatus::default();

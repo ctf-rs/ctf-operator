@@ -11,7 +11,6 @@ spec:
     - John Doe
   categories:
     - misc
-  difficulty: veryeasy
   tags:
     - socat
     - bash

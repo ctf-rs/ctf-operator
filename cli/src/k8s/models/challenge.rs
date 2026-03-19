@@ -36,8 +36,6 @@ pub struct ChallengeSpec {
     pub instancing: bool,
     pub categories: HashSet<crate::models::ChallengeCategory>,
     #[serde(default)]
-    pub difficulty: Option<crate::models::ChallengeDifficulty>,
-    #[serde(default)]
     pub tags: HashSet<String>,
     #[serde(default)]
     pub authors: HashSet<String>,

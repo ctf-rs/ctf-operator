@@ -17,7 +17,6 @@ spec:
   - CTF Team
   categories:
   - foren
-  difficulty: hard
   tags:
   - steganography
   - image-analysis
@@ -26,6 +25,7 @@ spec:
   - name: flag
     label: "Analyze the evidence"
     body: fake_flag_value
+    difficulty: hard
   containers:
   - name: test
     image: nginx:alpine

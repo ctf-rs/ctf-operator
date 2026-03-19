@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn deserialize_operator_runtime_config() {
-        let yaml = r#"
+        let yaml = r"
 registry:
   - endpoint: registry.ctf.rs/ctf
     secretRef:
@@ -178,7 +178,7 @@ instance:
         imagePullPolicy: IfNotPresent
     service:
         type: LoadBalancer
-"#;
+";
 
         let config: OperatorRuntimeConfig =
             serde_saphyr::from_str(yaml).expect("config should deserialize");
