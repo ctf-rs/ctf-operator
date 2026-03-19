@@ -68,6 +68,8 @@ pub async fn migrate(db: &DatabaseConnection) -> Result<()> {
             ctf_name TEXT NOT NULL,
             flag_name TEXT NOT NULL,
             generated_flag TEXT NOT NULL,
+            ignore_case BOOLEAN NOT NULL DEFAULT false,
+            ignore_random BOOLEAN NOT NULL DEFAULT false,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )"#,
     )

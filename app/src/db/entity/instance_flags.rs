@@ -12,6 +12,10 @@ pub struct Model {
     pub ctf_name: String,
     pub flag_name: String,
     pub generated_flag: String,
+    #[sea_orm(default_value = "false")]
+    pub ignore_case: bool,
+    #[sea_orm(default_value = "false")]
+    pub ignore_random: bool,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
     pub created_at: DateTimeWithTimeZone,
 

@@ -12,6 +12,8 @@ pub async fn log_flag_generation(
     ctf_name: &str,
     flag_name: &str,
     generated_flag: &str,
+    ignore_case: bool,
+    ignore_random: bool,
 ) -> Result<()> {
     let model = instance_flags::ActiveModel {
         instance_name: Set(instance_name.to_owned()),
@@ -20,6 +22,8 @@ pub async fn log_flag_generation(
         ctf_name: Set(ctf_name.to_owned()),
         flag_name: Set(flag_name.to_owned()),
         generated_flag: Set(generated_flag.to_owned()),
+        ignore_case: Set(ignore_case),
+        ignore_random: Set(ignore_random),
         ..Default::default()
     };
 

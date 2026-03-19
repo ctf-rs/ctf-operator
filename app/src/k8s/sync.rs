@@ -161,6 +161,8 @@ fn spawn_flag_watcher(
                             &ctf_name,
                             flag_part,
                             generated_flag,
+                            flag.spec.options.ignore_case,
+                            flag.spec.options.ignore_random,
                         )
                         .await
                         {
