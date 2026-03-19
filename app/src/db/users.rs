@@ -6,6 +6,24 @@ use sea_orm::{
 use super::entity::{sessions, users};
 use super::models::User;
 
+/// Link a Discord account to a user by user id.
+pub async fn link_discord(
+    db: &DatabaseConnection,
+    user_id: i64,
+    discord_id: &str,
+    discord_username: &str,
+) -> Result<()> {
+    let mut model: users::ActiveModel = users::Entity::find_by_id(user_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("user not found"))?
+        .into();
+    model.discord_id = Set(Some(discord_id.to_owned()));
+    model.discord_username = Set(Some(discord_username.to_owned()));
+    users::Entity::update(model).exec(db).await?;
+    Ok(())
+}
+
 pub async fn upsert_user(
     db: &DatabaseConnection,
     sub: &str,
@@ -33,6 +51,8 @@ pub async fn upsert_user(
         sub: result.sub,
         email: result.email,
         name: result.name,
+        discord_id: result.discord_id,
+        discord_username: result.discord_username,
         roles: Vec::new(),
     })
 }
@@ -85,6 +105,8 @@ pub async fn get_user_by_session(db: &DatabaseConnection, token: &str) -> Result
                 sub: user.sub,
                 email: user.email,
                 name: user.name,
+                discord_id: user.discord_id,
+                discord_username: user.discord_username,
                 roles,
             }))
         }

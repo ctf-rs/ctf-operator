@@ -1,4 +1,5 @@
 mod auth;
+mod discord;
 mod files;
 pub mod flags;
 pub mod instances;
@@ -86,7 +87,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/healthz", get(auth::healthz))
         .route("/login", get(auth::login))
         .route("/oauth/callback", get(auth::oauth_callback))
-        .route("/logout", post(auth::logout));
+        .route("/logout", post(auth::logout))
+        .route("/discord", get(discord::discord_link));
 
     Router::new()
         // Server functions (spawn, extend, stop, submit_flag, …)

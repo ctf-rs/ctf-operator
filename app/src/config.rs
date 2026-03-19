@@ -21,6 +21,9 @@ pub struct AppConfig {
     /// If true, extract client IP from proxy headers (X-Forwarded-For, etc.).
     /// If false, use the socket connection IP directly.
     pub behind_reverse_proxy: bool,
+    /// Shared HMAC secret used by the Discord bot to sign account-link tokens.
+    /// When unset, the `/discord` linking route is disabled.
+    pub discord_link_secret: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -106,6 +109,11 @@ impl AppConfig {
             })
             .unwrap_or(false);
 
+        let discord_link_secret = std::env::var("DISCORD_LINK_SECRET")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+
         Ok(Self {
             bind_addr,
             database_url,
@@ -129,6 +137,7 @@ impl AppConfig {
             challenge_files_s3_session_token,
             instance_base_domain,
             behind_reverse_proxy,
+            discord_link_secret,
         })
     }
 }

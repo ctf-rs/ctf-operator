@@ -14,7 +14,7 @@ pub use flags::{
 };
 #[allow(unused_imports)] // re-exported as public API
 pub use models::{ChallengeView, FlagView, PortView, SolvedKey, User};
-pub use users::{create_session, delete_session, get_user_by_session, upsert_user};
+pub use users::{create_session, delete_session, get_user_by_session, link_discord, upsert_user};
 
 use anyhow::Result;
 use sea_orm::{ConnectOptions, ConnectionTrait, Database, DatabaseConnection};
@@ -32,8 +32,19 @@ pub async fn migrate(db: &DatabaseConnection) -> Result<()> {
             sub TEXT NOT NULL UNIQUE,
             email TEXT,
             name TEXT,
+            discord_id TEXT,
+            discord_username TEXT,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )"#,
+    )
+    .await?;
+
+    // Add discord columns if they don't exist (migration for existing databases)
+    db.execute_unprepared(
+        r#"DO $$ BEGIN
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_id TEXT;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_username TEXT;
+        END $$"#,
     )
     .await?;
 

@@ -38,6 +38,8 @@ base64 = { workspace = true, optional = true }
 chrono = { version = "0.4", features = ["serde"], optional = true }
 ctf-cli = { path = "../cli", optional = true }
 futures = { workspace = true, optional = true }
+hex = { workspace = true, optional = true }
+hmac = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 k8s-openapi = { workspace = true, optional = true }
 kube = { workspace = true, features = ["client", "runtime"], optional = true }
@@ -46,6 +48,7 @@ rand = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 rustls = { workspace = true, features = ["ring", "std"], optional = true }
 sea-orm = { workspace = true, features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-chrono", "with-json"], optional = true }
+sha2 = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["full"], optional = true }
 tokio-stream = { workspace = true, optional = true }
 tower-http = { version = "0.6", features = ["fs"], optional = true }
@@ -73,6 +76,8 @@ ssr = [
     "dep:chrono",
     "dep:ctf-cli",
     "dep:futures",
+    "dep:hex",
+    "dep:hmac",
     "dep:http",
     "dep:k8s-openapi",
     "dep:kube",
@@ -81,6 +86,7 @@ ssr = [
     "dep:reqwest",
     "dep:rustls",
     "dep:sea-orm",
+    "dep:sha2",
     "dep:tokio",
     "dep:tokio-stream",
     "dep:tower-http",

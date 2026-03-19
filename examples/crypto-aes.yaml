@@ -5,19 +5,17 @@ metadata:
 spec:
   fullName: AES Challenge
   instancing: false
-  description: 'An encryption oracle allows you to encrypt arbitrary plaintexts using
+  description: |
+    An encryption oracle allows you to encrypt arbitrary plaintexts using
     AES-CBC.
 
     The initialization vector is reused across sessions. Exploit this weakness
 
     to perform a chosen-plaintext attack and recover the secret flag.
-
-    '
   authors:
   - CTF Team
   categories:
   - crypto
-  difficulty: mid
   tags:
   - aes
   - cbc

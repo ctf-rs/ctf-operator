@@ -9,6 +9,8 @@ pub struct User {
     pub sub: String,
     pub email: Option<String>,
     pub name: Option<String>,
+    pub discord_id: Option<String>,
+    pub discord_username: Option<String>,
     pub roles: Vec<String>,
 }
 
