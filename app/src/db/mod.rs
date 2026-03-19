@@ -39,15 +39,6 @@ pub async fn migrate(db: &DatabaseConnection) -> Result<()> {
     )
     .await?;
 
-    // Add discord columns if they don't exist (migration for existing databases)
-    db.execute_unprepared(
-        r#"DO $$ BEGIN
-            ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_id TEXT;
-            ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_username TEXT;
-        END $$"#,
-    )
-    .await?;
-
     db.execute_unprepared(
         r#"CREATE TABLE IF NOT EXISTS sessions (
             token TEXT PRIMARY KEY,
