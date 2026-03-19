@@ -41,6 +41,10 @@ pub struct CtfSpec {
     pub challenges: Vec<String>,
     pub flag: crate::models::CtfFlag,
     pub network: crate::models::CtfNetwork,
+    #[serde(default)]
+    pub scoreboard: crate::models::CtfScoreboard,
+    #[serde(default)]
+    pub schedule: crate::models::CtfSchedule,
 }
 
 const fn default_instance_duration_seconds() -> u32 {

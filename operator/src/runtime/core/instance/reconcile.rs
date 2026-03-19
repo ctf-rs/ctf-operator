@@ -1139,6 +1139,8 @@ mod tests {
                     },
                     ip: None,
                 },
+                scoreboard: ctf_cli::models::CtfScoreboard::default(),
+                schedule: ctf_cli::models::CtfSchedule::default(),
             },
         );
         ctf.metadata.namespace = Some("ctf".to_string());

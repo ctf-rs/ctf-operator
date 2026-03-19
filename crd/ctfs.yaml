@@ -115,6 +115,60 @@ spec:
                 public:
                   default: false
                   type: boolean
+                schedule:
+                  default:
+                    endTime: null
+                    ended: null
+                    open: null
+                    openTime: null
+                  description: CTF scheduling / time-gate configuration.
+                  properties:
+                    endTime:
+                      description: RFC 3339 timestamp when the CTF ends.
+                      format: date-time
+                      nullable: true
+                      type: string
+                    ended:
+                      description: |-
+                        Whether the CTF has ended. When `false` and `end_time` is set the
+                        operator will flip this automatically at the scheduled time.
+                      nullable: true
+                      type: boolean
+                    open:
+                      description: |-
+                        Whether the CTF is currently open. When `false` and `open_time` is set
+                        the operator will flip this automatically at the scheduled time.
+                      nullable: true
+                      type: boolean
+                    openTime:
+                      description: RFC 3339 timestamp when the CTF opens for participants.
+                      format: date-time
+                      nullable: true
+                      type: string
+                  type: object
+                scoreboard:
+                  default:
+                    freezeTime: null
+                    frozen: null
+                    visible: true
+                  description: Scoreboard display configuration.
+                  properties:
+                    freezeTime:
+                      description: RFC 3339 timestamp at which the scoreboard automatically freezes.
+                      format: date-time
+                      nullable: true
+                      type: string
+                    frozen:
+                      description: |-
+                        When `true` the scoreboard is frozen — scores are still recorded but
+                        the public ranking stops updating.
+                      nullable: true
+                      type: boolean
+                    visible:
+                      default: true
+                      description: "Whether the scoreboard is visible to participants (default: `true`)."
+                      type: boolean
+                  type: object
               required:
                 - challenges
                 - flag

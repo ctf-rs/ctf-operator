@@ -3,6 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -45,6 +46,12 @@ pub struct Ctf {
     pub flag: CtfFlag,
     #[garde(dive)]
     pub network: CtfNetwork,
+    #[serde(default)]
+    #[garde(skip)]
+    pub scoreboard: CtfScoreboard,
+    #[serde(default)]
+    #[garde(skip)]
+    pub schedule: CtfSchedule,
 }
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]
@@ -89,6 +96,63 @@ const fn default_storage_path_style() -> bool {
 
 const fn default_instance_duration_seconds() -> u32 {
     15 * 60
+}
+
+/// Scoreboard display configuration.
+#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]
+pub struct CtfScoreboard {
+    /// When `true` the scoreboard is frozen — scores are still recorded but
+    /// the public ranking stops updating.
+    #[serde(default)]
+    #[garde(skip)]
+    pub frozen: Option<bool>,
+    /// Whether the scoreboard is visible to participants (default: `true`).
+    #[serde(default = "default_scoreboard_visible")]
+    #[garde(skip)]
+    pub visible: bool,
+    /// RFC 3339 timestamp at which the scoreboard automatically freezes.
+    #[serde(default, rename = "freezeTime")]
+    #[garde(skip)]
+    pub freeze_time: Option<Time>,
+}
+
+impl Default for CtfScoreboard {
+    fn default() -> Self {
+        Self {
+            frozen: None,
+            visible: true,
+            freeze_time: None,
+        }
+    }
+}
+
+const fn default_scoreboard_visible() -> bool {
+    true
+}
+
+/// CTF scheduling / time-gate configuration.
+#[derive(
+    Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate, Default,
+)]
+pub struct CtfSchedule {
+    /// RFC 3339 timestamp when the CTF opens for participants.
+    #[serde(default, rename = "openTime")]
+    #[garde(skip)]
+    pub open_time: Option<Time>,
+    /// Whether the CTF is currently open. When `false` and `open_time` is set
+    /// the operator will flip this automatically at the scheduled time.
+    #[serde(default)]
+    #[garde(skip)]
+    pub open: Option<bool>,
+    /// RFC 3339 timestamp when the CTF ends.
+    #[serde(default, rename = "endTime")]
+    #[garde(skip)]
+    pub end_time: Option<Time>,
+    /// Whether the CTF has ended. When `false` and `end_time` is set the
+    /// operator will flip this automatically at the scheduled time.
+    #[serde(default)]
+    #[garde(skip)]
+    pub ended: Option<bool>,
 }
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]

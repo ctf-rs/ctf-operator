@@ -98,6 +98,8 @@ pub fn ctf_from_core(
             challenges: challenge_refs,
             flag: ctf.flag.clone(),
             network: ctf.network.clone(),
+            scoreboard: ctf.scoreboard.clone(),
+            schedule: ctf.schedule.clone(),
         },
     );
     resource.metadata.namespace = namespace;
