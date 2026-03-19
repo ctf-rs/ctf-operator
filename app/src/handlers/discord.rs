@@ -175,7 +175,12 @@ pub async fn discord_link(
         "discord account linked"
     );
 
-    // 7. Render success page.
+    // 7. Notify the Discord bot so it can assign the competitor role.
+    if let Some(ref callback_url) = state.config.discord_bot_callback_url {
+        notify_bot_callback(callback_url, secret, &payload.discord_id).await;
+    }
+
+    // 8. Render success page.
     let html = format!(
         r#"<html><body style="background:#111;color:#e5e7eb;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
 <div style="text-align:center">
@@ -196,4 +201,43 @@ fn html_escape(s: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+}
+
+/// Fire-and-forget POST to the Discord bot's callback endpoint so it can
+/// assign the competitor role.  Errors are logged but never block the user.
+async fn notify_bot_callback(callback_url: &str, secret: &str, discord_id: &str) {
+    let ts = chrono::Utc::now().timestamp();
+    let payload = serde_json::json!({ "discord_id": discord_id, "ts": ts });
+    let json_bytes = serde_json::to_vec(&payload).expect("json");
+    let data = base64::Engine::encode(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+        &json_bytes,
+    );
+
+    let mut mac = match <Hmac<Sha256>>::new_from_slice(secret.as_bytes()) {
+        Ok(m) => m,
+        Err(_) => return,
+    };
+    mac.update(data.as_bytes());
+    let sig = hex::encode(mac.finalize().into_bytes());
+
+    let url = format!("{}/verified", callback_url.trim_end_matches('/'));
+    let body = serde_json::json!({ "data": data, "sig": sig });
+
+    let client = reqwest::Client::new();
+    match client.post(&url).json(&body).send().await {
+        Ok(resp) if resp.status().is_success() => {
+            tracing::info!(discord_id, "bot callback succeeded");
+        }
+        Ok(resp) => {
+            tracing::warn!(
+                discord_id,
+                status = %resp.status(),
+                "bot callback returned non-success"
+            );
+        }
+        Err(e) => {
+            tracing::warn!(discord_id, error = %e, "bot callback request failed");
+        }
+    }
 }

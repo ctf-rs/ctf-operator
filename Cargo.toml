@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["app","cli", "operator"]
+members = ["app", "bot", "cli", "operator"]
 
 [workspace.lints.rust]
 ambiguous_negative_literals = "warn"

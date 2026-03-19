@@ -24,6 +24,10 @@ pub struct AppConfig {
     /// Shared HMAC secret used by the Discord bot to sign account-link tokens.
     /// When unset, the `/discord` linking route is disabled.
     pub discord_link_secret: Option<String>,
+    /// URL of the Discord bot's HTTP callback server (e.g. `http://localhost:3030`).
+    /// When set, the app POSTs a signed notification after a successful account link
+    /// so the bot can automatically assign the competitor role.
+    pub discord_bot_callback_url: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -114,6 +118,11 @@ impl AppConfig {
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty());
 
+        let discord_bot_callback_url = std::env::var("DISCORD_BOT_CALLBACK_URL")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+
         Ok(Self {
             bind_addr,
             database_url,
@@ -138,6 +147,7 @@ impl AppConfig {
             instance_base_domain,
             behind_reverse_proxy,
             discord_link_secret,
+            discord_bot_callback_url,
         })
     }
 }
