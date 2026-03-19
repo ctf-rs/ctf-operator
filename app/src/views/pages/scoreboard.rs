@@ -66,3 +66,30 @@ pub fn ScoreboardPage(data: ScoreboardPageData) -> impl IntoView {
         </PageShell>
     }
 }
+
+// ---------------------------------------------------------------------------
+// Scoreboard hidden page
+// ---------------------------------------------------------------------------
+
+#[component]
+pub fn ScoreboardHiddenPage(ctf_title: String, user_label: String) -> impl IntoView {
+    view! {
+        <PageShell title=format!("{} - Scoreboard", ctf_title.clone())>
+            <header class="topbar">
+                <div class="nav-buttons">
+                    <a class="ctf-title" href="/">{ctf_title}</a>
+                </div>
+                <div class="nav-buttons">
+                    <span class="muted">{user_label}</span>
+                    <form method="post" action="/logout" style="display:inline-block;">
+                        <button class="btn secondary small" type="submit">"Logout"</button>
+                    </form>
+                </div>
+            </header>
+            <div style="text-align:center;margin-top:6rem;">
+                <h1>"Scoreboard"</h1>
+                <p class="muted" style="margin-top:1.5rem;">"The scoreboard is currently hidden."</p>
+            </div>
+        </PageShell>
+    }
+}

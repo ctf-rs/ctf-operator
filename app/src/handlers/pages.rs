@@ -13,7 +13,7 @@ use tracing::warn;
 
 use crate::{
     db,
-    helpers::has_ctf_access,
+    helpers::{get_ctf_schedule, has_ctf_access, is_ctf_ended, is_ctf_open, seconds_until_time},
     k8s::{
         challenges,
         helpers::{
@@ -63,6 +63,27 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         });
         return Html(html).into_response();
     };
+
+    // Gate on CTF open status
+    let schedule = get_ctf_schedule(&state);
+    if !is_ctf_open(&schedule) {
+        let seconds_until_open = schedule.open_time.as_ref().map(seconds_until_time);
+        let user_label = user
+            .name
+            .clone()
+            .or(user.email.clone())
+            .unwrap_or_else(|| user.sub.clone());
+        let html = views::render_to_html(move || {
+            leptos::prelude::view! {
+                <views::CtfNotOpenPage
+                    ctf_title=ctf_name
+                    user_label=user_label
+                    seconds_until_open=seconds_until_open
+                />
+            }
+        });
+        return Html(html).into_response();
+    }
 
     let challenges = challenges::list_challenges_for_ctf(&state);
 
@@ -334,6 +355,10 @@ pub async fn challenge_page(
             .collect::<Vec<u32>>()
     };
 
+    // Check if CTF has ended (disable flag submission)
+    let schedule = get_ctf_schedule(&state);
+    let ctf_ended = is_ctf_ended(&schedule);
+
     let page_data = views::ChallengePageData {
         challenge,
         ctf_title: ctf_name.clone(),
@@ -352,6 +377,7 @@ pub async fn challenge_page(
         instance_phase_desc,
         points,
         flag_points,
+        ctf_ended,
     };
 
     let html = views::render_to_html(move || {
@@ -370,6 +396,43 @@ pub async fn scoreboard(
     Extension(user): Extension<db::User>,
 ) -> Response {
     let ctf_name = state.config.ctf_name.clone();
+
+    // Gate on CTF open status
+    let schedule = get_ctf_schedule(&state);
+    if !is_ctf_open(&schedule) {
+        let seconds_until_open = schedule.open_time.as_ref().map(seconds_until_time);
+        let user_label = user
+            .name
+            .clone()
+            .or(user.email.clone())
+            .unwrap_or_else(|| user.sub.clone());
+        let html = views::render_to_html(move || {
+            leptos::prelude::view! {
+                <views::CtfNotOpenPage
+                    ctf_title=ctf_name
+                    user_label=user_label
+                    seconds_until_open=seconds_until_open
+                />
+            }
+        });
+        return Html(html).into_response();
+    }
+
+    // Gate on scoreboard visibility
+    let sb_config = crate::helpers::get_ctf_scoreboard_config(&state);
+    if !sb_config.visible {
+        let user_label = user
+            .name
+            .clone()
+            .or(user.email.clone())
+            .unwrap_or_else(|| user.sub.clone());
+        let html = views::render_to_html(move || {
+            leptos::prelude::view! {
+                <views::ScoreboardHiddenPage ctf_title=ctf_name user_label=user_label/>
+            }
+        });
+        return Html(html).into_response();
+    }
 
     let user_label = user
         .name

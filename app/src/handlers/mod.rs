@@ -11,7 +11,7 @@ use axum::{
     Extension, Router,
     body::Body,
     middleware as axum_mw,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     routing::{get, post},
 };
 use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
@@ -21,7 +21,7 @@ use tower_http::services::ServeDir;
 
 use crate::{
     db,
-    middleware::{extract_session_cookie, http_metrics, require_auth},
+    middleware::{extract_session_cookie, http_metrics, require_auth, require_ctf_open},
     state::AppState,
 };
 
@@ -30,12 +30,18 @@ use crate::{
 /// Resolves the authenticated user (if any) from the session cookie and
 /// provides both `Arc<AppState>` and `db::User` to the Leptos context so
 /// server functions can access them via `expect_context` / `use_context`.
-async fn server_fn_handler(req: Request<Body>) -> impl IntoResponse {
+async fn server_fn_handler(req: Request<Body>) -> Response {
     let state: Arc<AppState> = req
         .extensions()
         .get::<Arc<AppState>>()
         .expect("AppState extension missing — add Extension(state) layer to the router")
         .clone();
+
+    // Block all server functions when the CTF has not opened yet.
+    let schedule = crate::helpers::get_ctf_schedule(&state);
+    if !crate::helpers::is_ctf_open(&schedule) {
+        return (axum::http::StatusCode::FORBIDDEN, "CTF has not started yet").into_response();
+    }
 
     // Resolve user from session cookie before dispatching to server fns.
     // `handle_server_fns_with_context` snapshots request Parts *before* any
@@ -54,6 +60,7 @@ async fn server_fn_handler(req: Request<Body>) -> impl IntoResponse {
         req,
     )
     .await
+    .into_response()
 }
 
 /// Look up the authenticated user from the session cookie (if present).
@@ -79,6 +86,7 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/file/{challenge_name}/{file_idx}",
             get(files::download_file),
         )
+        .route_layer(axum_mw::from_fn_with_state(state.clone(), require_ctf_open))
         .route_layer(axum_mw::from_fn_with_state(state.clone(), require_auth));
 
     // Public routes (no auth required)

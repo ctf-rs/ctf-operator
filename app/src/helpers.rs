@@ -4,8 +4,10 @@ use std::{
 };
 
 use axum::http::HeaderMap;
+use kube::ResourceExt;
 
 use crate::db::{ChallengeView, User};
+use crate::state::AppState;
 
 /// Build the canonical URL for a challenge page.
 pub fn challenge_route(challenge_name: &str) -> String {
@@ -107,4 +109,86 @@ pub fn extract_client_ip(
         // Direct connection - use socket IP
         socket_addr.map(|addr| addr.ip().to_string())
     }
+}
+
+// ---------------------------------------------------------------------------
+// CTF schedule / scoreboard helpers
+// ---------------------------------------------------------------------------
+
+/// Get the CTF resource's schedule from the k8s Store.
+pub fn get_ctf_schedule(state: &AppState) -> ctf_cli::models::CtfSchedule {
+    state
+        .ctfs
+        .state()
+        .into_iter()
+        .find(|c| c.name_any() == state.config.ctf_name)
+        .map(|c| c.spec.schedule.clone())
+        .unwrap_or_default()
+}
+
+/// Get the CTF resource's scoreboard config from the k8s Store.
+pub fn get_ctf_scoreboard_config(state: &AppState) -> ctf_cli::models::CtfScoreboard {
+    state
+        .ctfs
+        .state()
+        .into_iter()
+        .find(|c| c.name_any() == state.config.ctf_name)
+        .map(|c| c.spec.scoreboard.clone())
+        .unwrap_or_default()
+}
+
+/// Whether the CTF is currently open for participants.
+///
+/// Open when: `schedule.open == Some(true)` **or**
+///            `open_time` is set and now ≥ `open_time`.
+/// When neither `open` nor `open_time` is set the CTF is considered open
+/// (backwards-compatible default).
+pub fn is_ctf_open(schedule: &ctf_cli::models::CtfSchedule) -> bool {
+    if schedule.open == Some(true) {
+        return true;
+    }
+    if schedule.open == Some(false) {
+        // Explicitly closed — check if open_time has arrived
+        if let Some(ref t) = schedule.open_time {
+            return now_unix_seconds() >= t.0.as_second() as u64;
+        }
+        return false;
+    }
+    // open == None — check open_time if set, otherwise open by default
+    if let Some(ref t) = schedule.open_time {
+        return now_unix_seconds() >= t.0.as_second() as u64;
+    }
+    true
+}
+
+/// Whether the CTF has ended.
+///
+/// Ended when: `schedule.ended == Some(true)` **or**
+///             `end_time` is set and now ≥ `end_time`.
+pub fn is_ctf_ended(schedule: &ctf_cli::models::CtfSchedule) -> bool {
+    if schedule.ended == Some(true) {
+        return true;
+    }
+    if let Some(ref t) = schedule.end_time {
+        return now_unix_seconds() >= t.0.as_second() as u64;
+    }
+    false
+}
+
+/// Seconds until a `Time` value from now. Returns 0 if already past.
+pub fn seconds_until_time(t: &k8s_openapi::apimachinery::pkg::apis::meta::v1::Time) -> u64 {
+    let target = t.0.as_second() as u64;
+    let now = now_unix_seconds();
+    target.saturating_sub(now)
+}
+
+/// Whether the scoreboard is frozen (either explicitly or by freeze time).
+pub fn is_scoreboard_frozen(sb: &ctf_cli::models::CtfScoreboard) -> bool {
+    if sb.frozen == Some(true) {
+        return true;
+    }
+    if let Some(ref t) = sb.freeze_time {
+        return now_unix_seconds() >= t.0.as_second() as u64;
+    }
+    false
 }

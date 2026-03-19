@@ -3,7 +3,9 @@ mod layout;
 mod pages;
 mod scripts;
 
-pub use pages::{ChallengeDetailPage, IndexPage, LoginPage, ScoreboardPage};
+pub use pages::{
+    ChallengeDetailPage, CtfNotOpenPage, IndexPage, LoginPage, ScoreboardHiddenPage, ScoreboardPage,
+};
 
 use ctf_cli::ChallengeCategory;
 use leptos::prelude::*;
@@ -63,6 +65,8 @@ pub struct ChallengePageData {
     pub points: u32,
     /// Current points per-flag (same order as `challenge.flags`)
     pub flag_points: Vec<u32>,
+    /// Whether the CTF has ended (flag submission disabled)
+    pub ctf_ended: bool,
 }
 
 #[derive(Debug)]

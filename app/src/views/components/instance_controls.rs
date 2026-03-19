@@ -29,8 +29,11 @@ pub fn InstanceControls(
     instance_phase: Option<String>,
     time_left_seconds: Option<u64>,
     flag_hint: String,
+    /// When true the CTF has ended and flag submission is disabled.
+    #[prop(optional)]
+    ctf_ended: bool,
 ) -> impl IntoView {
-    let flags_disabled = !ready;
+    let flags_disabled = !ready || ctf_ended;
     let flags_for_forms = flags.clone();
     let points_for_forms = flag_points.clone();
 

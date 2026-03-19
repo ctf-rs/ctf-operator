@@ -139,6 +139,12 @@ fn update_instance_gauges(state: &AppState) {
 
 /// Refresh the scoreboard cache from database
 async fn refresh_scoreboard(state: &AppState) -> anyhow::Result<()> {
+    // If the scoreboard is frozen, skip recalculating points/leaderboard
+    let sb_config = crate::helpers::get_ctf_scoreboard_config(state);
+    if crate::helpers::is_scoreboard_frozen(&sb_config) {
+        return Ok(());
+    }
+
     let db = &state.db;
     let ctf_name = &state.config.ctf_name;
 

@@ -164,6 +164,11 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                 {(!data.solved).then(move || {
                     view! {
                         <div class="files-instance-sep"></div>
+                        {data.ctf_ended.then(|| view! {
+                            <div class="ctf-ended-banner" style="text-align:center;padding:1rem;margin-bottom:1rem;border:1px solid var(--border);border-radius:0.5rem;background:var(--surface);">
+                                <p style="font-weight:bold;">"The CTF has ended — flag submission is closed."</p>
+                            </div>
+                        })}
                         <div class="controls-wrapper">
                             <InstanceControls
                                 instancing=data.instancing
@@ -184,6 +189,7 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                                 instance_phase=data.instance_phase_desc.clone()
                                 time_left_seconds=data.time_left_seconds
                                 flag_hint=flag_hint.clone()
+                                ctf_ended=data.ctf_ended
                             />
                         </div>
                     }

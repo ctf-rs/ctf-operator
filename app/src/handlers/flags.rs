@@ -9,7 +9,7 @@ use tracing::warn;
 
 use crate::{
     db,
-    helpers::{challenge_route, extract_client_ip},
+    helpers::{challenge_route, extract_client_ip, get_ctf_schedule, is_ctf_ended},
     k8s::{
         challenges,
         helpers::is_instance_owned_by_user,
@@ -57,6 +57,13 @@ pub async fn submit_flag(
             urlencoding::encode(message)
         ));
     };
+
+    // Block flag submission when the CTF has ended
+    let schedule = get_ctf_schedule(&state);
+    if is_ctf_ended(&schedule) {
+        redirect_with("bad", "the CTF has ended");
+        return Ok(());
+    }
 
     if db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, ctf_name)
         .await

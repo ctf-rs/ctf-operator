@@ -11,7 +11,7 @@ use http::header;
 use tokio::sync::Mutex;
 use tower::{Layer, Service};
 
-use crate::{db, state::AppState};
+use crate::{db, helpers, state::AppState};
 
 // ---------------------------------------------------------------------------
 // HTTP metrics layer  (OTel semantic conventions)
@@ -175,4 +175,21 @@ pub async fn require_auth(
         }
         Ok(None) | Err(_) => Redirect::to("/login").into_response(),
     }
+}
+
+/// Axum middleware that blocks access to protected data endpoints when the
+/// CTF has not opened yet.  Page handlers (index, scoreboard) render their
+/// own "not open" views, but this middleware protects the remaining API /
+/// data routes (instance-state, file downloads, server-functions, etc.)
+/// so they never leak data before the competition begins.
+pub async fn require_ctf_open(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let schedule = helpers::get_ctf_schedule(&state);
+    if helpers::is_ctf_open(&schedule) {
+        return next.run(request).await;
+    }
+    (axum::http::StatusCode::FORBIDDEN, "CTF has not started yet").into_response()
 }
