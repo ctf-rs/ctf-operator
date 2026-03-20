@@ -94,7 +94,12 @@ pub fn ChallengeCard(data: ChallengeCardData) -> impl IntoView {
                     </div>
                 </div>
                 {status_badge}
-                <p class="muted desc">{description}</p>
+                <div class="muted desc">
+                    {description.split('\n').map(|line| {
+                        let line = line.to_string();
+                        view! { <p>{line}</p> }
+                    }).collect_view()}
+                </div>
             </div>
             <a class="btn" href={route}>"Open challenge"</a>
         </article>

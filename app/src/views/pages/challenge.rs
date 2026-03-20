@@ -142,7 +142,12 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                 <div class="detail-body">
                     <section class="description-section">
                         <h2>"Description"</h2>
-                        <p>{description}</p>
+                        <div class="description-text">
+                            {description.split('\n').map(|line| {
+                                let line = line.to_string();
+                                view! { <p>{line}</p> }
+                            }).collect_view()}
+                        </div>
                     </section>
 
                     <section class="files-section">
