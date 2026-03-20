@@ -177,6 +177,26 @@ pub async fn require_auth(
     }
 }
 
+/// Axum middleware that returns 500 Internal Server Error when the
+/// configured CTF resource does not exist in the cluster.
+pub async fn require_ctf_exists(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    if helpers::ctf_exists(&state) {
+        return next.run(request).await;
+    }
+    (
+        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+        format!(
+            "CTF '{}' not found in namespace '{}'",
+            state.config.ctf_name, state.config.ctf_namespace
+        ),
+    )
+        .into_response()
+}
+
 /// Axum middleware that blocks access to protected data endpoints when the
 /// CTF has not opened yet.  Page handlers (index, scoreboard) render their
 /// own "not open" views, but this middleware protects the remaining API /

@@ -20,7 +20,8 @@ use k8s_openapi::{
     api::{
         apps::v1::{Deployment, DeploymentSpec},
         core::v1::{
-            Container, Namespace, PodSpec, PodTemplateSpec, Service, ServicePort, ServiceSpec,
+            Container, LocalObjectReference, Namespace, PodSpec, PodTemplateSpec, Secret, Service,
+            ServicePort, ServiceSpec,
         },
     },
     apimachinery::pkg::{apis::meta::v1::LabelSelector, util::intstr::IntOrString},
@@ -260,6 +261,7 @@ async fn reconcile_apply(
 
     // Ensure all resources exist
     ensure_target_namespace(instance.as_ref(), &target_namespace, &state).await?;
+    ensure_image_pull_secret(&target_namespace, &state).await?;
 
     ensure_port_claims(
         instance.as_ref(),
@@ -792,6 +794,57 @@ async fn ensure_target_namespace(
     Ok(())
 }
 
+/// Copy the configured image-pull secret from its source namespace into the
+/// target instance namespace. The secret is applied with server-side-apply so
+/// the operation is idempotent.  The source secret is read from the local
+/// reflector store, not from the API server.
+async fn ensure_image_pull_secret(
+    target_namespace: &str,
+    state: &CtfState,
+) -> Result<(), CtfError> {
+    let Some(cfg) = &state
+        .config
+        .runtime_config
+        .instance
+        .deployment
+        .image_pull_secret
+    else {
+        return Ok(());
+    };
+
+    // Look up the source secret in the reflector store
+    let key = ObjectRef::<Secret>::new(&cfg.name).within(&cfg.namespace);
+    let source = state.secrets.get(&key).ok_or_else(|| {
+        CtfError::ConfigError(format!(
+            "image-pull secret '{}/{}' not found in store (not yet synced?)",
+            cfg.namespace, cfg.name
+        ))
+    })?;
+
+    // Build a copy with only the data we need
+    let copy = Secret {
+        metadata: ObjectMeta {
+            name: Some(cfg.name.clone()),
+            namespace: Some(target_namespace.to_owned()),
+            ..Default::default()
+        },
+        type_: source.type_.clone(),
+        data: source.data.clone(),
+        string_data: source.string_data.clone(),
+        ..Default::default()
+    };
+
+    Api::<Secret>::namespaced(state.client.clone(), target_namespace)
+        .patch(
+            &cfg.name,
+            &PatchParams::apply(InstanceReconciler::NAME).force(),
+            &Patch::Apply(&copy),
+        )
+        .await?;
+
+    Ok(())
+}
+
 async fn ensure_flags(
     instance: &Instance,
     ctf: &Ctf,
@@ -935,6 +988,18 @@ async fn ensure_deployment(
                 }),
                 spec: Some(PodSpec {
                     containers,
+                    image_pull_secrets: state
+                        .config
+                        .runtime_config
+                        .instance
+                        .deployment
+                        .image_pull_secret
+                        .as_ref()
+                        .map(|s| {
+                            vec![LocalObjectReference {
+                                name: s.name.clone(),
+                            }]
+                        }),
                     ..Default::default()
                 }),
             },

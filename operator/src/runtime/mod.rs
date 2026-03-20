@@ -9,7 +9,7 @@ pub use state::*;
 
 use crate::util::{Waiter, Watcher};
 use ctf_cli::k8s::{PortClaim, ReservationSet};
-use k8s_openapi::api::{apps::v1::Deployment, core::v1::Service};
+use k8s_openapi::api::{apps::v1::Deployment, core::v1::{Secret, Service}};
 use kube::{runtime::watcher::Config, Client};
 use std::{collections::HashSet, path::PathBuf, sync::Arc};
 use tracing::info;
@@ -90,13 +90,30 @@ fn create_crd_watchers(client: &Client, namespaces: &[String]) -> CrdWatchers {
 struct ResourceWatchers {
     deployment: Watcher<Deployment>,
     service: Watcher<Service>,
+    secret: Watcher<Secret>,
     reservation_set_store: Watcher<ReservationSet>,
     port_claim_store: Watcher<PortClaim>,
 }
 
 /// Creates watchers for managed Kubernetes resources
-fn create_resource_watchers(client: &Client) -> ResourceWatchers {
+fn create_resource_watchers(client: &Client, config: &OperatorConfig) -> ResourceWatchers {
     let managed_selector = format!("{MANAGED_BY_LABEL}={MANAGED_BY_VALUE}");
+
+    // Collect unique namespaces from imagePullSecrets config for the Secret watcher.
+    // If none are configured an all-namespace watcher with an impossible label selector
+    // is used so the reflector exists but never caches anything.
+    let secret_watcher = match &config.runtime_config.instance.deployment.image_pull_secret {
+        Some(cfg) => Watcher::new(
+            kube::Api::<Secret>::namespaced(client.clone(), &cfg.namespace),
+            Config::default(),
+            0xFFFF,
+        ),
+        None => Watcher::new(
+            kube::Api::<Secret>::all(client.clone()),
+            Config::default().labels("operators.ctf.rs/never-match=true"),
+            0xFFFF,
+        ),
+    };
 
     ResourceWatchers {
         deployment: Watcher::new(
@@ -109,6 +126,7 @@ fn create_resource_watchers(client: &Client) -> ResourceWatchers {
             Config::default().labels(&managed_selector),
             0xFFFF,
         ),
+        secret: secret_watcher,
         reservation_set_store: Watcher::new(
             kube::Api::all(client.clone()),
             Config::default(),
@@ -130,7 +148,7 @@ pub async fn run(
     let watched_namespace_vec: Vec<_> =
         operator_config.watched_namespaces.iter().cloned().collect();
     let crd = create_crd_watchers(&client, &watched_namespace_vec);
-    let res = create_resource_watchers(&client);
+    let res = create_resource_watchers(&client, &operator_config);
 
     let state = Arc::new(CtfState::new(
         client,
@@ -143,6 +161,7 @@ pub async fn run(
         res.port_claim_store.store(),
         res.deployment.store(),
         res.service.store(),
+        res.secret.store(),
     ));
 
     let ctf_controller = core::ctf::controller(Arc::clone(&state), &crd.ctf)?;
@@ -180,6 +199,7 @@ pub async fn run(
         .watcher(res.port_claim_store)
         .watcher(res.deployment)
         .watcher(res.service)
+        .watcher(res.secret)
         .controller(ctf_controller)
         .controller(challenge_controller)
         .controller(flag_controller)

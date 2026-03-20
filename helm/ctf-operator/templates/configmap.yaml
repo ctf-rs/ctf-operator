@@ -20,7 +20,12 @@ data:
 {{- if .Values.instance.deployment.imagePullPolicy }}
         imagePullPolicy: {{ .Values.instance.deployment.imagePullPolicy | quote }}
 {{- end }}
+{{- if and .Values.instance.deployment.imagePullSecret .Values.instance.deployment.imagePullSecret.name }}
+        imagePullSecret:
+          name: {{ .Values.instance.deployment.imagePullSecret.name | quote }}
+          namespace: {{ .Values.instance.deployment.imagePullSecret.namespace | default .Release.Namespace | quote }}
+{{- end }}
       service:
         type: {{ .Values.instance.service.type | quote }}
         nodePortMode: {{ .Values.instance.service.nodePortMode | quote }}
-      {{- end }}
+{{- end }}

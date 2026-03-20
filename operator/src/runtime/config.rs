@@ -36,6 +36,8 @@ pub struct InstanceDeploymentConfig {
     pub image_pull_policy: Option<String>,
     #[serde(default, rename = "useHostPort")]
     pub use_host_port: bool,
+    #[serde(default, rename = "imagePullSecret")]
+    pub image_pull_secret: Option<ImagePullSecretConfig>,
 }
 
 impl Default for InstanceDeploymentConfig {
@@ -44,6 +46,7 @@ impl Default for InstanceDeploymentConfig {
             replicas: default_instance_replicas(),
             image_pull_policy: None,
             use_host_port: false,
+            image_pull_secret: None,
         }
     }
 }
@@ -83,6 +86,14 @@ impl InstanceServiceType {
 
 const fn default_instance_replicas() -> i32 {
     1
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct ImagePullSecretConfig {
+    /// Name of the Secret to copy into instance namespaces.
+    pub name: String,
+    /// Namespace where the source Secret lives.
+    pub namespace: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -176,6 +187,9 @@ instance:
     deployment:
         replicas: 2
         imagePullPolicy: IfNotPresent
+        imagePullSecret:
+            name: my-registry-secret
+            namespace: ctf-operator
     service:
         type: LoadBalancer
 ";
@@ -197,5 +211,13 @@ instance:
             config.instance.service.type_,
             InstanceServiceType::LoadBalancer
         );
+        let pull_secret = config
+            .instance
+            .deployment
+            .image_pull_secret
+            .as_ref()
+            .expect("imagePullSecret should be set");
+        assert_eq!(pull_secret.name, "my-registry-secret");
+        assert_eq!(pull_secret.namespace, "ctf-operator");
     }
 }

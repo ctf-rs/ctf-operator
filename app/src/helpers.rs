@@ -115,6 +115,15 @@ pub fn extract_client_ip(
 // CTF schedule / scoreboard helpers
 // ---------------------------------------------------------------------------
 
+/// Check whether the CTF resource exists in the k8s Store.
+pub fn ctf_exists(state: &AppState) -> bool {
+    state
+        .ctfs
+        .state()
+        .iter()
+        .any(|c| c.name_any() == state.config.ctf_name)
+}
+
 /// Get the CTF resource's schedule from the k8s Store.
 pub fn get_ctf_schedule(state: &AppState) -> ctf_cli::models::CtfSchedule {
     state

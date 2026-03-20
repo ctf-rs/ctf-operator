@@ -6,7 +6,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: registry.ctf.rs/ctf/operator:edge
+          value: registry.ctf.rs/ctf/operator:0.1.0
 
   - it: renders operator args with all watch namespaces and instance namespace prefix
     set:

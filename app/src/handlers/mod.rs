@@ -21,7 +21,9 @@ use tower_http::services::ServeDir;
 
 use crate::{
     db,
-    middleware::{extract_session_cookie, http_metrics, require_auth, require_ctf_open},
+    middleware::{
+        extract_session_cookie, http_metrics, require_auth, require_ctf_exists, require_ctf_open,
+    },
     state::AppState,
 };
 
@@ -92,10 +94,6 @@ pub fn router(state: Arc<AppState>) -> Router {
     // Public routes (no auth required)
     let public = Router::new()
         .route("/", get(pages::index))
-        .route("/healthz", get(auth::healthz))
-        .route("/login", get(auth::login))
-        .route("/oauth/callback", get(auth::oauth_callback))
-        .route("/logout", post(auth::logout))
         .route("/discord", get(discord::discord_link));
 
     Router::new()
@@ -106,6 +104,16 @@ pub fn router(state: Arc<AppState>) -> Router {
         )
         .merge(protected_pages)
         .merge(public)
+        // Require CTF resource to exist for all routes above
+        .route_layer(axum_mw::from_fn_with_state(
+            state.clone(),
+            require_ctf_exists,
+        ))
+        // Auth & health routes are exempt from CTF-existence check
+        .route("/healthz", get(auth::healthz))
+        .route("/login", get(auth::login))
+        .route("/oauth/callback", get(auth::oauth_callback))
+        .route("/logout", post(auth::logout))
         .nest_service("/pkg", ServeDir::new("target/site/pkg"))
         // Include trace context as header in the response
         .layer(OtelInResponseLayer::default())
