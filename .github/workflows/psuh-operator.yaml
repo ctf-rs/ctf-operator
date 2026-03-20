@@ -1,0 +1,88 @@
+name: Publish Operator Edge (master)
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  publish:
+    runs-on: github-actions-ctf-rs
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=registry.ctf.rs/docker-hub/moby/buildkit:master
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["registry.ctf.rs/docker-hub"]
+
+      - name: Build image (pre-push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: |
+            registry.ctf.rs/ctf/operator:edge
+            registry.ctf.rs/ctf/operator:${{ github.sha }}
+
+      - name: Package Helm chart (pre-push)
+        run: |
+          mkdir -p dist
+          helm package ./helm/ctf-operator --destination ./dist
+
+      - name: Read Harbor creds for image push
+        id: vault_image
+        uses: hashicorp/vault-action@v3
+        with:
+          url: http://vault.vault:8200
+          method: kubernetes
+          kubernetesTokenPath: /var/run/secrets/vault/token
+          role: arc-github-actions-ctf-rs-runner
+          secrets: |
+            harbor/creds/github-actions-ctf-rs robot_account_name | HARBOR_USER ;
+            harbor/creds/github-actions-ctf-rs robot_account_secret | HARBOR_PASS
+
+      - name: Login for image push
+        uses: docker/login-action@v3
+        with:
+          registry: registry.ctf.rs
+          username: ${{ steps.vault_image.outputs.HARBOR_USER }}
+          password: ${{ steps.vault_image.outputs.HARBOR_PASS }}
+
+      - name: Push image
+        run: |
+          docker push registry.ctf.rs/ctf/operator:edge
+          docker push registry.ctf.rs/ctf/operator:${{ github.sha }}
+
+      - name: Read Harbor creds for Helm push
+        id: vault_helm
+        uses: hashicorp/vault-action@v3
+        with:
+          url: http://vault.vault:8200
+          method: kubernetes
+          kubernetesTokenPath: /var/run/secrets/vault/token
+          role: arc-github-actions-ctf-rs-runner
+          secrets: |
+            harbor/creds/github-actions-ctf-rs robot_account_name | HARBOR_USER ;
+            harbor/creds/github-actions-ctf-rs robot_account_secret | HARBOR_PASS
+
+      - name: Login Helm registry
+        env:
+          HARBOR_USER: ${{ steps.vault_helm.outputs.HARBOR_USER }}
+          HARBOR_PASS: ${{ steps.vault_helm.outputs.HARBOR_PASS }}
+        run: |
+          printf '%s' "$HARBOR_PASS" | helm registry login registry.ctf.rs \
+            --username "$HARBOR_USER" \
+            --password-stdin
+
+      - name: Push Helm chart
+        run: |
+          CHART_TGZ="$(ls -1 ./dist/ctf-operator-*.tgz | head -n1)"
+          test -n "$CHART_TGZ"
+          helm push "$CHART_TGZ" oci://registry.ctf.rs/ctf

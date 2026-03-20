@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: registry.ctf.rs/ctf/app
+  repository: registry.ctf.rs/ctf-app
   tag: edge
   pullPolicy: IfNotPresent
 
@@ -38,6 +38,8 @@ ctf:
     ports:
       start: 12000
       end: 13000
+  scoreboard: {}
+  schedule: {}
 
 instanceNamePrefix: ctf-inst
 
@@ -52,6 +54,26 @@ oauth:
 
 session:
   cookieName: ctf_app_session
+
+# S3-compatible storage for challenge file downloads.
+s3:
+  endpoint: ""
+  pathStyle: true
+  region: us-east-1
+  presignTtlSeconds: 600
+  accessKeyId: ""
+  secretAccessKey: ""
+
+# Base domain for instance connections (e.g. "ctf.example.com").
+instanceBaseDomain: ""
+
+# Whether the app sits behind a reverse proxy (trust X-Forwarded-For).
+behindReverseProxy: false
+
+# Discord bot integration.
+discord:
+  linkSecret: ""
+  botCallbackUrl: ""
 
 resources:
   requests:

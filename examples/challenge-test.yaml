@@ -14,18 +14,10 @@ spec:
   tags:
     - socat
     - bash
+  files:
+    - test.mp4
   flags:
     - name: flag
       label: "Solve the puzzle"
       body: fake_flag
-  containers:
-    - name: test
-      image: localhost/challenge-test:latest
-      flags:
-        - name: flag
-          env: FLAG
-      ports:
-        - name: socat
-          type: netcat
-          expose: true
-          containerPort: 1337
+      difficulty: easy

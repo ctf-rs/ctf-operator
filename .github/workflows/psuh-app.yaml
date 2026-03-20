@@ -1,4 +1,4 @@
-name: Publish Edge (master)
+name: Publish App Edge (master)
 on:
   push:
     branches:
@@ -28,13 +28,13 @@ jobs:
           load: true
           push: false
           tags: |
-            registry.ctf.rs/ctf/operator:edge
-            registry.ctf.rs/ctf/operator:${{ github.sha }}
+            registry.ctf.rs/ctf/app:edge
+            registry.ctf.rs/ctf/app:${{ github.sha }}
 
       - name: Package Helm chart (pre-push)
         run: |
           mkdir -p dist
-          helm package ./helm/ctf-operator --destination ./dist
+          helm package ./helm/ctf-app --destination ./dist
 
       - name: Read Harbor creds for image push
         id: vault_image
@@ -57,8 +57,8 @@ jobs:
 
       - name: Push image
         run: |
-          docker push registry.ctf.rs/ctf/operator:edge
-          docker push registry.ctf.rs/ctf/operator:${{ github.sha }}
+          docker push registry.ctf.rs/ctf/app:edge
+          docker push registry.ctf.rs/ctf/app:${{ github.sha }}
 
       - name: Read Harbor creds for Helm push
         id: vault_helm
@@ -83,6 +83,6 @@ jobs:
 
       - name: Push Helm chart
         run: |
-          CHART_TGZ="$(ls -1 ./dist/ctf-operator-*.tgz | head -n1)"
+          CHART_TGZ="$(ls -1 ./dist/ctf-app-*.tgz | head -n1)"
           test -n "$CHART_TGZ"
           helm push "$CHART_TGZ" oci://registry.ctf.rs/ctf

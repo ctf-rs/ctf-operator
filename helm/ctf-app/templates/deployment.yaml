@@ -37,15 +37,15 @@ spec:
             - name: APP_BIND_ADDR
               value: 0.0.0.0:8080
             - name: DATABASE_URL
-              value: {{ .Values.database.url | quote }}
+              value: {{ required "database.url is required" .Values.database.url | quote }}
             - name: OIDC_ISSUER_URL
-              value: {{ .Values.oauth.issuerUrl | quote }}
+              value: {{ required "oauth.issuerUrl is required" .Values.oauth.issuerUrl | quote }}
             - name: OIDC_CLIENT_ID
-              value: {{ .Values.oauth.clientId | quote }}
+              value: {{ required "oauth.clientId is required" .Values.oauth.clientId | quote }}
             - name: OIDC_CLIENT_SECRET
-              value: {{ .Values.oauth.clientSecret | quote }}
+              value: {{ required "oauth.clientSecret is required" .Values.oauth.clientSecret | quote }}
             - name: OIDC_REDIRECT_URL
-              value: {{ .Values.oauth.redirectUrl | quote }}
+              value: {{ required "oauth.redirectUrl is required" .Values.oauth.redirectUrl | quote }}
             - name: CTF_NAME
               value: {{ required "ctf.name is required" .Values.ctf.name | quote }}
             - name: CTF_NAMESPACE
@@ -53,7 +53,39 @@ spec:
             - name: INSTANCE_NAME_PREFIX
               value: {{ .Values.instanceNamePrefix | default "ctf-inst" | quote }}
             - name: SESSION_COOKIE_NAME
-              value: {{ .Values.session.cookieName | quote }}
+              value: {{ .Values.session.cookieName | default "ctf_app_session" | quote }}
+            {{- if .Values.s3.endpoint }}
+            - name: CHALLENGE_FILES_S3_ENDPOINT
+              value: {{ .Values.s3.endpoint | quote }}
+            {{- end }}
+            - name: CHALLENGE_FILES_S3_PATH_STYLE
+              value: {{ .Values.s3.pathStyle | default true | quote }}
+            - name: CHALLENGE_FILES_S3_REGION
+              value: {{ .Values.s3.region | default "us-east-1" | quote }}
+            - name: CHALLENGE_FILES_PRESIGN_TTL_SECONDS
+              value: {{ .Values.s3.presignTtlSeconds | default 600 | quote }}
+            {{- if .Values.s3.accessKeyId }}
+            - name: CHALLENGE_FILES_S3_ACCESS_KEY_ID
+              value: {{ .Values.s3.accessKeyId | quote }}
+            {{- end }}
+            {{- if .Values.s3.secretAccessKey }}
+            - name: CHALLENGE_FILES_S3_SECRET_ACCESS_KEY
+              value: {{ .Values.s3.secretAccessKey | quote }}
+            {{- end }}
+            {{- if .Values.instanceBaseDomain }}
+            - name: INSTANCE_BASE_DOMAIN
+              value: {{ .Values.instanceBaseDomain | quote }}
+            {{- end }}
+            - name: BEHIND_REVERSE_PROXY
+              value: {{ .Values.behindReverseProxy | default false | quote }}
+            {{- if .Values.discord.linkSecret }}
+            - name: DISCORD_LINK_SECRET
+              value: {{ .Values.discord.linkSecret | quote }}
+            {{- end }}
+            {{- if .Values.discord.botCallbackUrl }}
+            - name: DISCORD_BOT_CALLBACK_URL
+              value: {{ .Values.discord.botCallbackUrl | quote }}
+            {{- end }}
           resources:
 {{- toYaml .Values.resources | nindent 12 }}
 {{- with .Values.nodeSelector }}
