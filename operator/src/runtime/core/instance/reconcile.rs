@@ -1209,8 +1209,14 @@ async fn ensure_service(
     let svc_ref = ObjectRef::<Service>::new(&name).within(&namespace);
     if let Some(cached) = state.services.get(&svc_ref) {
         if cached.metadata.deletion_timestamp.is_none()
-            && cached.spec.as_ref().map(|s| (&s.selector, &s.ports, &s.type_))
-                == service.spec.as_ref().map(|s| (&s.selector, &s.ports, &s.type_))
+            && cached
+                .spec
+                .as_ref()
+                .map(|s| (&s.selector, &s.ports, &s.type_))
+                == service
+                    .spec
+                    .as_ref()
+                    .map(|s| (&s.selector, &s.ports, &s.type_))
             && cached.metadata.labels == service.metadata.labels
             && cached.metadata.annotations == service.metadata.annotations
         {
@@ -1292,8 +1298,7 @@ async fn ensure_port_claims(
             if let Some(cached) = state.port_claims.get(&claim_ref) {
                 if cached.metadata.deletion_timestamp.is_none()
                     && cached.spec.reservation.name == reservation_name
-                    && cached.spec.reservation.namespace.as_deref()
-                        == Some(reservation_namespace)
+                    && cached.spec.reservation.namespace.as_deref() == Some(reservation_namespace)
                     && cached.metadata.labels.as_ref() == Some(&labels)
                 {
                     continue;

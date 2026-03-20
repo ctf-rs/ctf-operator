@@ -172,9 +172,10 @@ pub async fn run(
         res.reservation_set_store.store(),
         res.port_claim_store.store(),
         res.namespace.store(),
+        res.managed_secret.store(),
         res.deployment.store(),
         res.service.store(),
-        res.secret.store(),
+        res.source_secret.store(),
     ));
 
     let ctf_controller = core::ctf::controller(Arc::clone(&state), &crd.ctf)?;
@@ -211,9 +212,10 @@ pub async fn run(
         .watcher(res.reservation_set_store)
         .watcher(res.port_claim_store)
         .watcher(res.namespace)
+        .watcher(res.managed_secret)
         .watcher(res.deployment)
         .watcher(res.service)
-        .watcher(res.secret)
+        .watcher(res.source_secret)
         .controller(ctf_controller)
         .controller(challenge_controller)
         .controller(flag_controller)

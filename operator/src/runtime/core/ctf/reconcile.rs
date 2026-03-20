@@ -78,7 +78,8 @@ async fn ensure_reservation_set(
     };
 
     // Check cache: skip API call if reservation set already exists with matching spec and labels
-    let rs_ref = kube::runtime::reflector::ObjectRef::<ReservationSet>::new(&name).within(namespace);
+    let rs_ref =
+        kube::runtime::reflector::ObjectRef::<ReservationSet>::new(&name).within(namespace);
     if let Some(cached) = state.reservation_sets.get(&rs_ref) {
         if cached.metadata.deletion_timestamp.is_none()
             && cached.spec == resource.spec
