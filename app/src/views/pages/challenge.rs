@@ -115,11 +115,13 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
     view! {
         <PageShell title=ctf_title.clone()>
             <header class="topbar">
-                <div class="nav-buttons">
+                <div class="nav-left">
                     <a class="ctf-title" href="/">{ctf_title}</a>
                 </div>
-                <div class="nav-buttons">
+                <div class="nav-center">
                     <a class="btn secondary" href="/scoreboard">"Scoreboard"</a>
+                </div>
+                <div class="nav-right">
                     <span class="muted">{data.user_label.clone()}</span>
                     <form method="post" action="/logout" style="display:inline-block;">
                         <button class="btn secondary small" type="submit">"Logout"</button>
@@ -190,6 +192,7 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                                 flag_hint=flag_hint.clone()
                                 deleting=data.deleting
                                 ctf_ended=data.ctf_ended
+                                error_message=data.error_message.clone().unwrap_or_default()
                             />
                         </div>
                     }

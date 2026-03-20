@@ -36,6 +36,9 @@ pub struct AppConfig {
     /// CTFs.  When a CTF is not public, a user must hold this role (or the
     /// admin role) to view challenges.
     pub player_role: Option<String>,
+    /// Maximum number of simultaneously spawned instances per user.
+    /// Defaults to 2.
+    pub max_instances_per_user: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -140,6 +143,12 @@ impl AppConfig {
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty());
 
+        let max_instances_per_user = std::env::var("MAX_INSTANCES_PER_USER")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .filter(|value| *value > 0)
+            .unwrap_or(2);
+
         Ok(Self {
             bind_addr,
             database_url,
@@ -167,6 +176,7 @@ impl AppConfig {
             discord_bot_callback_url,
             admin_role,
             player_role,
+            max_instances_per_user,
         })
     }
 }

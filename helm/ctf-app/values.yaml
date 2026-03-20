@@ -44,6 +44,9 @@ ctf:
 
 instanceNamePrefix: ctf-inst
 
+# Maximum number of simultaneously spawned instances per user.
+maxInstancesPerUser: 2
+
 database:
   url: ""
   # Use an existing Secret instead of a plain-text url.

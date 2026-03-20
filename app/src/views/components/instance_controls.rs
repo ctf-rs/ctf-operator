@@ -37,6 +37,9 @@ pub fn InstanceControls(
     /// When true the CTF has ended and flag submission is disabled.
     #[prop(optional)]
     ctf_ended: bool,
+    /// Error message to display inline (e.g. max instances reached).
+    #[prop(optional)]
+    error_message: String,
 ) -> impl IntoView {
     let flags_disabled = !ready || ctf_ended;
     let flags_for_forms = flags.clone();
@@ -146,12 +149,17 @@ pub fn InstanceControls(
             }
             .into_any()
         } else if !has_instance {
-            // Show Spawn button
+            // Show Spawn button + optional error message
             view! {
-                <form id="spawn-form" method="post" action="/api/spawn_instance" style="display:inline-block;">
-                    <input type="hidden" name="challenge_name" value={challenge_name.clone()}/>
-                    <button class="btn primary" type="submit">"Spawn instance"</button>
-                </form>
+                <>
+                    <form id="spawn-form" method="post" action="/api/spawn_instance" style="display:inline-block;">
+                        <input type="hidden" name="challenge_name" value={challenge_name.clone()}/>
+                        <button class="btn primary" type="submit">"Spawn instance"</button>
+                    </form>
+                    {(!error_message.is_empty()).then(|| view! {
+                        <span class="error-inline" style="color:#c0392b;font-weight:bold;margin-left:0.75rem;">{error_message.clone()}</span>
+                    })}
+                </>
             }
             .into_any()
         } else {

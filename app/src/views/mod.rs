@@ -69,6 +69,8 @@ pub struct ChallengePageData {
     pub flag_points: Vec<u32>,
     /// Whether the CTF has ended (flag submission disabled)
     pub ctf_ended: bool,
+    /// Generic error message to display (e.g. max instances reached)
+    pub error_message: Option<String>,
 }
 
 #[derive(Debug)]
@@ -76,6 +78,7 @@ pub struct ScoreboardPageData {
     pub ctf_title: String,
     pub user_label: String,
     pub leaderboard: Vec<UserScore>,
+    pub frozen: bool,
 }
 
 // ---------------------------------------------------------------------------

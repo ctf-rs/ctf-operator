@@ -1,7 +1,10 @@
 :root { color-scheme: dark; }
 body { font-family: Inter, system-ui, sans-serif; background: #1f232a; color: #e5e7eb; margin: 0; }
 a { color: #93c5fd; }
-.topbar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+.topbar { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+.nav-left { flex: 1; }
+.nav-center { flex: 0 0 auto; }
+.nav-right { flex: 1; display: flex; justify-content: flex-end; align-items: center; gap: 0.5rem; }
 .ctf-title { font-size: 1.5rem; font-weight: 700; color: #e5e7eb; text-decoration: none; }
 .ctf-title:hover { color: #fff; }
 .muted { color: #9ca3af; }

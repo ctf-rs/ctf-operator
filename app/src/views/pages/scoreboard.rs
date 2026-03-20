@@ -12,10 +12,11 @@ pub fn ScoreboardPage(data: ScoreboardPageData) -> impl IntoView {
     view! {
         <PageShell title=format!("{} - Scoreboard", ctf_title.clone())>
             <header class="topbar">
-                <div class="nav-buttons">
+                <div class="nav-left">
                     <a class="ctf-title" href="/">{ctf_title}</a>
                 </div>
-                <div class="nav-buttons">
+                <div class="nav-center"></div>
+                <div class="nav-right">
                     <span class="muted">{data.user_label.clone()}</span>
                     <form method="post" action="/logout" style="display:inline-block;">
                         <button class="btn secondary small" type="submit">"Logout"</button>
@@ -25,6 +26,11 @@ pub fn ScoreboardPage(data: ScoreboardPageData) -> impl IntoView {
 
             <div class="scoreboard-container">
                 <h1>"Scoreboard"</h1>
+                {data.frozen.then(|| view! {
+                    <p class="frozen-banner" style="text-align:center;color:#93c5fd;font-weight:600;margin:0.5rem 0 1rem;">
+                        "\u{2744}\u{fe0f} Scoreboard is frozen — scores may not reflect latest solves."
+                    </p>
+                })}
                 {if data.leaderboard.is_empty() {
                     view! {
                         <p class="muted" style="text-align:center;margin-top:2rem;">"No solves yet. Be the first!"</p>
@@ -76,10 +82,11 @@ pub fn ScoreboardHiddenPage(ctf_title: String, user_label: String) -> impl IntoV
     view! {
         <PageShell title=format!("{} - Scoreboard", ctf_title.clone())>
             <header class="topbar">
-                <div class="nav-buttons">
+                <div class="nav-left">
                     <a class="ctf-title" href="/">{ctf_title}</a>
                 </div>
-                <div class="nav-buttons">
+                <div class="nav-center"></div>
+                <div class="nav-right">
                     <span class="muted">{user_label}</span>
                     <form method="post" action="/logout" style="display:inline-block;">
                         <button class="btn secondary small" type="submit">"Logout"</button>

@@ -66,6 +66,8 @@ spec:
               value: {{ .Values.ctf.namespace | default "ctf" | quote }}
             - name: INSTANCE_NAME_PREFIX
               value: {{ .Values.instanceNamePrefix | default "ctf-inst" | quote }}
+            - name: MAX_INSTANCES_PER_USER
+              value: {{ .Values.maxInstancesPerUser | default 2 | quote }}
             - name: SESSION_COOKIE_NAME
               value: {{ .Values.session.cookieName | default "ctf_app_session" | quote }}
             {{- if .Values.s3.endpoint }}

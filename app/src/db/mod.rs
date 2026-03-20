@@ -132,6 +132,17 @@ pub async fn migrate(db: &DatabaseConnection) -> Result<()> {
     )
     .await?;
 
+    // Scoreboard cache – persists the computed scoreboard so a restart
+    // while frozen doesn't lose the pre-freeze values.
+    db.execute_unprepared(
+        r#"CREATE TABLE IF NOT EXISTS scoreboard_cache (
+            ctf_name TEXT PRIMARY KEY,
+            data JSONB NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )"#,
+    )
+    .await?;
+
     // -- additive migrations (safe to re-run) --
 
     // admin_submission column on flag_submissions

@@ -44,10 +44,11 @@ pub fn CtfNotOpenPage(
     view! {
         <PageShell title=ctf_title.clone()>
             <header class="topbar">
-                <div class="nav-buttons">
+                <div class="nav-left">
                     <a class="ctf-title" href="/">{ctf_title.clone()}</a>
                 </div>
-                <div class="nav-buttons">
+                <div class="nav-center"></div>
+                <div class="nav-right">
                     <span class="muted">{user_label}</span>
                     <form method="post" action="/logout" style="display:inline-block;">
                         <button class="btn secondary small" type="submit">"Logout"</button>

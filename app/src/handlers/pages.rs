@@ -55,11 +55,11 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         None => None,
     };
 
-    let ctf_name = state.config.ctf_name.clone();
+    let ctf_title = crate::helpers::get_ctf_full_name(&state);
 
     let Some(user) = user else {
         let html = views::render_to_html(move || {
-            leptos::prelude::view! { <views::LoginPage ctf_title=ctf_name/> }
+            leptos::prelude::view! { <views::LoginPage ctf_title=ctf_title/> }
         });
         return Html(html).into_response();
     };
@@ -76,7 +76,7 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         let html = views::render_to_html(move || {
             leptos::prelude::view! {
                 <views::CtfNotOpenPage
-                    ctf_title=ctf_name
+                    ctf_title=ctf_title
                     user_label=user_label
                     seconds_until_open=seconds_until_open
                 />
@@ -212,7 +212,7 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         .or(user.email.clone())
         .unwrap_or_else(|| user.sub.clone());
 
-    let ctf_title = ctf_name.clone();
+    let ctf_title = crate::helpers::get_ctf_full_name(&state);
     let html = views::render_to_html(move || {
         leptos::prelude::view! {
             <views::IndexPage ctf_title=ctf_title user_label=user_label sections=sections/>
@@ -334,6 +334,13 @@ pub async fn challenge_page(
     let extend_feedback =
         views::parse_extend_feedback(query.extend.as_deref(), query.message.as_deref());
 
+    // Standalone error message: ?message=... without submit/extend context
+    let error_message = if query.submit.is_none() && query.extend.is_none() {
+        query.message.clone()
+    } else {
+        None
+    };
+
     // Use config override if set, otherwise use the hostname from the request
     let instance_base_domain = state
         .config
@@ -361,9 +368,11 @@ pub async fn challenge_page(
     let schedule = get_ctf_schedule(&state);
     let ctf_ended = is_ctf_ended(&schedule);
 
+    let ctf_title = crate::helpers::get_ctf_full_name(&state);
+
     let page_data = views::ChallengePageData {
         challenge,
-        ctf_title: ctf_name.clone(),
+        ctf_title,
         user_label,
         instancing,
         has_instance,
@@ -381,6 +390,7 @@ pub async fn challenge_page(
         points,
         flag_points,
         ctf_ended,
+        error_message,
     };
 
     let html = views::render_to_html(move || {
@@ -399,6 +409,7 @@ pub async fn scoreboard(
     Extension(user): Extension<db::User>,
 ) -> Response {
     let ctf_name = state.config.ctf_name.clone();
+    let ctf_title = crate::helpers::get_ctf_full_name(&state);
 
     // Gate on CTF open status
     let schedule = get_ctf_schedule(&state);
@@ -412,7 +423,7 @@ pub async fn scoreboard(
         let html = views::render_to_html(move || {
             leptos::prelude::view! {
                 <views::CtfNotOpenPage
-                    ctf_title=ctf_name
+                    ctf_title=ctf_title
                     user_label=user_label
                     seconds_until_open=seconds_until_open
                 />
@@ -431,7 +442,7 @@ pub async fn scoreboard(
             .unwrap_or_else(|| user.sub.clone());
         let html = views::render_to_html(move || {
             leptos::prelude::view! {
-                <views::ScoreboardHiddenPage ctf_title=ctf_name user_label=user_label/>
+                <views::ScoreboardHiddenPage ctf_title=ctf_title user_label=user_label/>
             }
         });
         return Html(html).into_response();
@@ -449,10 +460,13 @@ pub async fn scoreboard(
         scoreboard.get_leaderboard(&ctf_name)
     };
 
+    let frozen = crate::helpers::is_scoreboard_frozen(&sb_config);
+
     let page_data = views::ScoreboardPageData {
-        ctf_title: ctf_name,
+        ctf_title,
         user_label,
         leaderboard,
+        frozen,
     };
 
     let html = views::render_to_html(move || {

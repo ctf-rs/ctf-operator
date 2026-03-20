@@ -150,6 +150,19 @@ pub fn get_ctf_schedule(state: &AppState) -> ctf_cli::models::CtfSchedule {
         .unwrap_or_default()
 }
 
+/// Get the CTF resource's full name from the k8s Store.
+///
+/// Falls back to the CRD name if the resource is missing.
+pub fn get_ctf_full_name(state: &AppState) -> String {
+    state
+        .ctfs
+        .state()
+        .into_iter()
+        .find(|c| c.name_any() == state.config.ctf_name)
+        .map(|c| c.spec.full_name.clone())
+        .unwrap_or_else(|| state.config.ctf_name.clone())
+}
+
 /// Get the CTF resource's scoreboard config from the k8s Store.
 pub fn get_ctf_scoreboard_config(state: &AppState) -> ctf_cli::models::CtfScoreboard {
     state

@@ -22,9 +22,8 @@ use crate::{
     k8s::{
         challenges,
         helpers::{
-            instance_expires_at_epoch, instance_ready_from_resource,
-            instance_time_left_seconds, is_instance_deleting, is_instance_owned_by_user,
-            resolve_instance_duration_seconds,
+            instance_expires_at_epoch, instance_ready_from_resource, instance_time_left_seconds,
+            is_instance_deleting, is_instance_owned_by_user, resolve_instance_duration_seconds,
         },
         instances as k8s_instances,
     },
@@ -75,11 +74,7 @@ pub async fn spawn_instance(challenge_name: String) -> Result<(), ServerFnError>
         .await
         .unwrap_or(false)
     {
-        leptos_axum::redirect(&format!(
-            "{}?message={}",
-            challenge_route(&challenge_name),
-            urlencoding::encode("challenge already solved")
-        ));
+        leptos_axum::redirect(&challenge_route(&challenge_name));
         return Ok(());
     }
 
@@ -102,6 +97,20 @@ pub async fn spawn_instance(challenge_name: String) -> Result<(), ServerFnError>
     // ---- Guard: instance already exists --------------------------------
     if k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name).is_some() {
         leptos_axum::redirect(&challenge_route(&challenge_name));
+        return Ok(());
+    }
+
+    // ---- Guard: max instances per user ---------------------------------
+    let user_instances = k8s_instances::list_instances_for_user(&state, user.id);
+    if user_instances.len() >= state.config.max_instances_per_user {
+        leptos_axum::redirect(&format!(
+            "{}?message={}",
+            challenge_route(&challenge_name),
+            urlencoding::encode(&format!(
+                "maximum number of instances ({}) reached, stop an existing instance first",
+                state.config.max_instances_per_user
+            ))
+        ));
         return Ok(());
     }
 
@@ -391,27 +400,20 @@ pub async fn stop_instance(challenge_name: String) -> Result<(), ServerFnError> 
         return Ok(());
     }
 
-    let redirect_with = |kind: &str, message: &str| {
-        leptos_axum::redirect(&format!(
-            "{}?stop={}&message={}",
-            challenge_route(&challenge_name),
-            kind,
-            urlencoding::encode(message)
-        ));
-    };
+    let redirect = || leptos_axum::redirect(&challenge_route(&challenge_name));
 
     let Some(instance) =
         k8s_instances::get_instance_for_challenge(&state, user.id, &challenge_name, ctf_name)
     else {
-        redirect_with("bad", "no instance to stop");
+        redirect();
         return Ok(());
     };
 
     // Verify ownership before deleting
     if !is_instance_owned_by_user(&instance, &user) {
-        redirect_with("bad", "instance belongs to a different user");
+        redirect();
         return Ok(());
-    }
+    };
 
     let instance_name = instance.name_any();
     let instance_ns = instance.metadata.namespace.clone().unwrap_or_default();
@@ -421,7 +423,7 @@ pub async fn stop_instance(challenge_name: String) -> Result<(), ServerFnError> 
         k8s_instances::delete_instance(&state.kube, &instance_ns, &instance_name).await
     {
         warn!(error = %err, "failed to stop instance");
-        redirect_with("bad", "failed to stop instance");
+        redirect();
         return Ok(());
     }
 
@@ -443,7 +445,7 @@ pub async fn stop_instance(challenge_name: String) -> Result<(), ServerFnError> 
         warn!(error = %err, "failed to log instance stop audit");
     }
 
-    redirect_with("ok", "instance stopping");
+    redirect();
     Ok(())
 }
 

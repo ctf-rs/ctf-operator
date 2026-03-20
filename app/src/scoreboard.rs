@@ -5,7 +5,7 @@ use sea_orm::{
     QuerySelect, Statement, sea_query::Expr,
 };
 use serde::{Deserialize, Serialize};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::db::entity::flag_submissions;
 use crate::{metrics, state::AppState};
@@ -97,10 +97,146 @@ impl Scoreboard {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Serializable snapshot (for DB persistence)
+// ---------------------------------------------------------------------------
+
+/// A JSON-friendly snapshot of the scoreboard for one CTF.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ScoreboardSnapshot {
+    flag_scores: Vec<FlagScoreEntry>,
+    /// Pre-computed total points per challenge.
+    #[serde(default)]
+    challenge_points: HashMap<String, u32>,
+    user_scores: Vec<UserScore>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FlagScoreEntry {
+    challenge: String,
+    flag: String,
+    score: FlagScore,
+}
+
+impl Scoreboard {
+    /// Build a snapshot for a single CTF.
+    fn snapshot(&self, ctf_name: &str) -> ScoreboardSnapshot {
+        let flag_scores = self
+            .flag_scores
+            .iter()
+            .filter(|((ctf, _, _), _)| ctf == ctf_name)
+            .map(|((_, ch, fl), score)| FlagScoreEntry {
+                challenge: ch.clone(),
+                flag: fl.clone(),
+                score: score.clone(),
+            })
+            .collect();
+
+        let challenge_points: HashMap<String, u32> = self
+            .challenge_points
+            .iter()
+            .filter(|((ctf, _), _)| ctf == ctf_name)
+            .map(|((_, ch), pts)| (ch.clone(), *pts))
+            .collect();
+
+        let user_scores = self.leaderboards.get(ctf_name).cloned().unwrap_or_default();
+
+        ScoreboardSnapshot {
+            flag_scores,
+            challenge_points,
+            user_scores,
+        }
+    }
+
+    /// Restore from a snapshot for a given CTF (additive – does not clear other CTFs).
+    fn apply_snapshot(&mut self, ctf_name: &str, snap: ScoreboardSnapshot) {
+        for entry in &snap.flag_scores {
+            let key = (
+                ctf_name.to_string(),
+                entry.challenge.clone(),
+                entry.flag.clone(),
+            );
+            self.flag_scores.insert(key, entry.score.clone());
+        }
+
+        // Restore challenge_points from snapshot.
+        for (ch, pts) in &snap.challenge_points {
+            let ch_key = (ctf_name.to_string(), ch.clone());
+            self.challenge_points.insert(ch_key, *pts);
+        }
+
+        // Restore user scores
+        for us in &snap.user_scores {
+            let key = (ctf_name.to_string(), us.user_id);
+            self.user_scores.insert(key, us.clone());
+        }
+
+        self.leaderboards
+            .insert(ctf_name.to_string(), snap.user_scores);
+    }
+}
+
+/// Persist the current scoreboard cache to the database.
+async fn save_scoreboard_cache(
+    db: &DatabaseConnection,
+    ctf_name: &str,
+    snapshot: &ScoreboardSnapshot,
+) -> anyhow::Result<()> {
+    let json = serde_json::to_value(snapshot)?;
+    db.execute_raw(Statement::from_sql_and_values(
+        DbBackend::Postgres,
+        r#"INSERT INTO scoreboard_cache (ctf_name, data, updated_at)
+           VALUES ($1, $2, now())
+           ON CONFLICT (ctf_name) DO UPDATE SET data = $2, updated_at = now()"#,
+        [ctf_name.into(), json.into()],
+    ))
+    .await?;
+    Ok(())
+}
+
+/// Load a previously persisted scoreboard snapshot from the database.
+async fn load_scoreboard_cache(
+    db: &DatabaseConnection,
+    ctf_name: &str,
+) -> anyhow::Result<Option<ScoreboardSnapshot>> {
+    let row = db
+        .query_one_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            r#"SELECT data FROM scoreboard_cache WHERE ctf_name = $1"#,
+            [ctf_name.into()],
+        ))
+        .await?;
+    match row {
+        Some(r) => {
+            let json: serde_json::Value = r.try_get_by_index(0)?;
+            let snap: ScoreboardSnapshot = serde_json::from_value(json)?;
+            Ok(Some(snap))
+        }
+        None => Ok(None),
+    }
+}
+
 /// Spawns the background scoreboard sync task
 pub fn spawn_scoreboard_worker(state: Arc<AppState>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         info!("scoreboard worker started");
+
+        // Seed the in-memory cache from DB so a restart while frozen keeps old scores.
+        let ctf_name = &state.config.ctf_name;
+        match load_scoreboard_cache(&state.db, ctf_name).await {
+            Ok(Some(snap)) => {
+                let mut cache = state.scoreboard.write().await;
+                cache.apply_snapshot(ctf_name, snap);
+                info!("scoreboard cache restored from database");
+            }
+            Ok(None) => {
+                info!("no persisted scoreboard cache found, starting fresh");
+            }
+            Err(err) => {
+                warn!(error = %err, "failed to load scoreboard cache from database");
+            }
+        }
+
         loop {
             if let Err(err) = refresh_scoreboard(&state).await {
                 error!(error = %err, "failed to refresh scoreboard");
@@ -139,17 +275,50 @@ fn update_instance_gauges(state: &AppState) {
 
 /// Refresh the scoreboard cache from database
 async fn refresh_scoreboard(state: &AppState) -> anyhow::Result<()> {
-    // If the scoreboard is frozen, skip recalculating points/leaderboard
     let sb_config = crate::helpers::get_ctf_scoreboard_config(state);
-    if crate::helpers::is_scoreboard_frozen(&sb_config) {
-        return Ok(());
-    }
+    let frozen = crate::helpers::is_scoreboard_frozen(&sb_config);
 
     let db = &state.db;
     let ctf_name = &state.config.ctf_name;
 
+    // ── Frozen: reload the last-persisted snapshot from DB and return ──
+    if frozen {
+        match load_scoreboard_cache(db, ctf_name).await {
+            Ok(Some(snap)) => {
+                let mut cache = state.scoreboard.write().await;
+                cache.apply_snapshot(ctf_name, snap);
+            }
+            Ok(None) => {
+                // No snapshot yet — fall through and compute one so the
+                // page is not blank on the very first freeze.
+                return compute_and_persist(state, db, ctf_name).await;
+            }
+            Err(err) => {
+                warn!(error = %err, "failed to reload scoreboard cache while frozen");
+            }
+        }
+        return Ok(());
+    }
+
+    // ── Not frozen: compute fresh scores and persist ──
+    compute_and_persist(state, db, ctf_name).await
+}
+
+/// Compute flag scores, challenge points, leaderboard and persist to DB.
+async fn compute_and_persist(
+    state: &AppState,
+    db: &DatabaseConnection,
+    ctf_name: &str,
+) -> anyhow::Result<()> {
     // Get flag configurations from sync cache
     let flag_configs = get_flag_configs(state).await;
+
+    // If the k8s Challenge store hasn't populated yet (e.g. right after
+    // startup) we'd compute zero points for everything and overwrite a
+    // perfectly good DB cache.  Skip this cycle instead.
+    if flag_configs.is_empty() {
+        return Ok(());
+    }
 
     // Get solve counts per flag from database
     let solve_counts = get_flag_solve_counts(db, ctf_name).await?;
@@ -165,18 +334,21 @@ async fn refresh_scoreboard(state: &AppState) -> anyhow::Result<()> {
             .unwrap_or(0);
 
         let score = FlagScore::new(*base_points, *min_points, *decay, solves);
-        let key = (ctf_name.clone(), challenge_name.clone(), flag_name.clone());
+        let key = (
+            ctf_name.to_string(),
+            challenge_name.clone(),
+            flag_name.clone(),
+        );
         flag_scores.insert(key, score.clone());
 
         // Accumulate challenge points
-        let ch_key = (ctf_name.clone(), challenge_name.clone());
+        let ch_key = (ctf_name.to_string(), challenge_name.clone());
         *challenge_points.entry(ch_key).or_insert(0) += score.current_points;
     }
 
-    // Calculate user scores
+    // Calculate user scores & leaderboard
     let user_scores = calculate_user_scores(db, ctf_name, &flag_scores).await?;
 
-    // Build sorted leaderboard
     let mut leaderboard: Vec<UserScore> = user_scores.values().cloned().collect();
     leaderboard.sort_by(|a, b| {
         b.total_points
@@ -184,12 +356,19 @@ async fn refresh_scoreboard(state: &AppState) -> anyhow::Result<()> {
             .then_with(|| a.last_solve_at.cmp(&b.last_solve_at))
     });
 
-    // Update cache
+    // Update in-memory cache
     let mut cache = state.scoreboard.write().await;
     cache.flag_scores = flag_scores;
     cache.challenge_points = challenge_points;
     cache.user_scores = user_scores;
-    cache.leaderboards.insert(ctf_name.clone(), leaderboard);
+    cache.leaderboards.insert(ctf_name.to_string(), leaderboard);
+
+    // Persist to DB so a restart while frozen preserves the pre-freeze scores.
+    let snapshot = cache.snapshot(ctf_name);
+    drop(cache);
+    if let Err(err) = save_scoreboard_cache(db, ctf_name, &snapshot).await {
+        warn!(error = %err, "failed to persist scoreboard cache to database");
+    }
 
     Ok(())
 }
