@@ -1090,10 +1090,12 @@ async fn ensure_service(
     let name = instance.name_any();
     let service_config = &state.config.runtime_config.instance.service;
 
-    let mut labels = base_labels(instance);
-    labels.insert("app.kubernetes.io/name".to_string(), name.clone());
-    // Merge extra labels from the service config
-    labels.extend(service_config.labels.clone());
+    let mut selector_labels = base_labels(instance);
+    selector_labels.insert("app.kubernetes.io/name".to_string(), name.clone());
+
+    // Metadata labels = selector labels + extra config labels
+    let mut metadata_labels = selector_labels.clone();
+    metadata_labels.extend(service_config.labels.clone());
 
     let annotations: Option<BTreeMap<String, String>> = if service_config.annotations.is_empty() {
         None
@@ -1141,12 +1143,12 @@ async fn ensure_service(
         metadata: ObjectMeta {
             name: Some(name.clone()),
             namespace: Some(namespace.clone()),
-            labels: Some(labels.clone()),
+            labels: Some(metadata_labels),
             annotations,
             ..Default::default()
         },
         spec: Some(ServiceSpec {
-            selector: Some(labels),
+            selector: Some(selector_labels),
             ports: Some(ports),
             type_: Some(service_config.type_.as_k8s_str().to_string()),
             ..Default::default()
