@@ -6,7 +6,8 @@ operator:
     replicaCount: 1
     image:
       repository: registry.ctf.rs/ctf/operator
-      tag: edge
+      # tag defaults to .Chart.AppVersion
+      tag: ""
       pullPolicy: IfNotPresent
     imagePullSecrets: []
       # Example:

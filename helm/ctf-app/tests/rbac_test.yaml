@@ -19,7 +19,7 @@ tests:
           path: rules
           content:
             apiGroups: ["operator.ctf.rs"]
-            resources: ["ctfs", "challenges", "instances", "flags"]
+            resources: ["ctfs", "challenges", "instances", "flags", "portclaims"]
             verbs: ["get", "list", "watch", "create", "patch", "update"]
 
   - it: creates a ClusterRoleBinding

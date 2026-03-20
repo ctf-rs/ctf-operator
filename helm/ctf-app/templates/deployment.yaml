@@ -28,7 +28,7 @@ spec:
 {{- end }}
       containers:
         - name: ctf-app
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
@@ -37,13 +37,27 @@ spec:
             - name: APP_BIND_ADDR
               value: 0.0.0.0:8080
             - name: DATABASE_URL
-              value: {{ required "database.url is required" .Values.database.url | quote }}
+            {{- if .Values.database.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.urlKey | default "url" }}
+            {{- else }}
+              value: {{ required "database.url is required when database.existingSecret is not set" .Values.database.url | quote }}
+            {{- end }}
             - name: OIDC_ISSUER_URL
               value: {{ required "oauth.issuerUrl is required" .Values.oauth.issuerUrl | quote }}
             - name: OIDC_CLIENT_ID
               value: {{ required "oauth.clientId is required" .Values.oauth.clientId | quote }}
             - name: OIDC_CLIENT_SECRET
-              value: {{ required "oauth.clientSecret is required" .Values.oauth.clientSecret | quote }}
+            {{- if .Values.oauth.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oauth.existingSecret }}
+                  key: {{ .Values.oauth.clientSecretKey | default "clientSecret" }}
+            {{- else }}
+              value: {{ required "oauth.clientSecret is required when oauth.existingSecret is not set" .Values.oauth.clientSecret | quote }}
+            {{- end }}
             - name: OIDC_REDIRECT_URL
               value: {{ required "oauth.redirectUrl is required" .Values.oauth.redirectUrl | quote }}
             - name: CTF_NAME
@@ -64,13 +78,27 @@ spec:
               value: {{ .Values.s3.region | default "us-east-1" | quote }}
             - name: CHALLENGE_FILES_PRESIGN_TTL_SECONDS
               value: {{ .Values.s3.presignTtlSeconds | default 600 | quote }}
-            {{- if .Values.s3.accessKeyId }}
+            {{- if or .Values.s3.accessKeyId .Values.s3.existingSecret }}
             - name: CHALLENGE_FILES_S3_ACCESS_KEY_ID
+            {{- if .Values.s3.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.s3.existingSecret }}
+                  key: {{ .Values.s3.accessKeyIdKey | default "accessKeyId" }}
+            {{- else }}
               value: {{ .Values.s3.accessKeyId | quote }}
             {{- end }}
-            {{- if .Values.s3.secretAccessKey }}
+            {{- end }}
+            {{- if or .Values.s3.secretAccessKey .Values.s3.existingSecret }}
             - name: CHALLENGE_FILES_S3_SECRET_ACCESS_KEY
+            {{- if .Values.s3.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.s3.existingSecret }}
+                  key: {{ .Values.s3.secretAccessKeyKey | default "secretAccessKey" }}
+            {{- else }}
               value: {{ .Values.s3.secretAccessKey | quote }}
+            {{- end }}
             {{- end }}
             {{- if .Values.instanceBaseDomain }}
             - name: INSTANCE_BASE_DOMAIN
@@ -78,9 +106,16 @@ spec:
             {{- end }}
             - name: BEHIND_REVERSE_PROXY
               value: {{ .Values.behindReverseProxy | default false | quote }}
-            {{- if .Values.discord.linkSecret }}
+            {{- if or .Values.discord.linkSecret .Values.discord.existingSecret }}
             - name: DISCORD_LINK_SECRET
+            {{- if .Values.discord.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.discord.existingSecret }}
+                  key: {{ .Values.discord.linkSecretKey | default "linkSecret" }}
+            {{- else }}
               value: {{ .Values.discord.linkSecret | quote }}
+            {{- end }}
             {{- end }}
             {{- if .Values.discord.botCallbackUrl }}
             - name: DISCORD_BOT_CALLBACK_URL
