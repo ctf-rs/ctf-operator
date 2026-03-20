@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: registry.ctf.rs/ctf-app
+  repository: registry.ctf.rs/ctf/app
   tag: edge
   pullPolicy: IfNotPresent
 

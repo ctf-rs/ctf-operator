@@ -3,12 +3,16 @@ FROM rust:1.93 AS builder
 WORKDIR /usr/src/ctf-operator
 
 COPY Cargo.toml ./
-COPY operator/Cargo.toml ./operator/Cargo.toml
-COPY cli/Cargo.toml ./cli/Cargo.toml
 COPY app/Cargo.toml ./app/Cargo.toml
+COPY bot/Cargo.toml ./bot/Cargo.toml
+COPY cli/Cargo.toml ./cli/Cargo.toml
+COPY operator/Cargo.toml ./operator/Cargo.toml
 
-RUN mkdir -p app/src cli/src operator/src \
+RUN mkdir -p app/src bot/src cli/src operator/src \
     && printf 'fn main() {}\n' > app/src/main.rs \
+    && printf 'pub fn placeholder() {}\n' > app/src/lib.rs \
+    && printf 'fn main() {}\n' > bot/src/main.rs \
+    && printf 'pub fn placeholder() {}\n' > bot/src/lib.rs \
     && printf 'fn main() {}\n' > cli/src/main.rs \
     && printf 'pub fn placeholder() {}\n' > cli/src/lib.rs \
     && printf 'fn main() {}\n' > operator/src/main.rs \
@@ -19,7 +23,7 @@ RUN cargo fetch
 COPY cli/src ./cli/src
 COPY app/src ./app/src
 
-RUN cargo build --release -p app --bin app
+RUN cargo build --release -p app --bin app --features ssr
 
 FROM debian:trixie-slim
 

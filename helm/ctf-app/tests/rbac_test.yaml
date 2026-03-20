@@ -1,0 +1,35 @@
+suite: RBAC rendering
+templates:
+  - templates/serviceaccount.yaml
+  - templates/clusterrole.yaml
+  - templates/clusterrolebinding.yaml
+tests:
+  - it: creates a ServiceAccount
+    template: templates/serviceaccount.yaml
+    asserts:
+      - isKind:
+          of: ServiceAccount
+
+  - it: creates a ClusterRole with expected rules
+    template: templates/clusterrole.yaml
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["operator.ctf.rs"]
+            resources: ["ctfs", "challenges", "instances", "flags"]
+            verbs: ["get", "list", "watch", "create", "patch", "update"]
+
+  - it: creates a ClusterRoleBinding
+    template: templates/clusterrolebinding.yaml
+    asserts:
+      - isKind:
+          of: ClusterRoleBinding
+      - equal:
+          path: roleRef.kind
+          value: ClusterRole
+      - equal:
+          path: subjects[0].kind
+          value: ServiceAccount

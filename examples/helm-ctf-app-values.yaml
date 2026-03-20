@@ -1,0 +1,87 @@
+# Example values for the ctf-app Helm chart.
+# Install with:
+#   helm install ctf-app helm/ctf-app -f examples/helm-ctf-app-values.yaml
+
+replicaCount: 1
+
+image:
+  repository: registry.ctf.rs/ctf-app
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: ctf-registry-pull-secret
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+ctf:
+  name: my-ctf
+  namespace: ctf
+  # Set install: true to have this chart create the Ctf resource.
+  install: true
+  fullName: "My CTF 2026"
+  description: "Annual capture-the-flag competition"
+  public: true
+  instanceDurationSeconds: 1800
+  challenges:
+    - crypto-rsa
+    - web-sqli
+    - pwn-overflow
+    - rev-strings
+  flag:
+    prefix: CTF
+    format: curly
+    random:
+      length: 12
+    options:
+      ignoreRandom: false
+  network:
+    ip: 10.0.42.1
+    ports:
+      start: 12000
+      end: 13000
+  scoreboard:
+    visible: true
+  schedule:
+    open: true
+
+instanceNamePrefix: ctf-inst
+
+database:
+  url: postgres://ctf:secret@postgres.db.svc:5432/ctf
+
+oauth:
+  issuerUrl: https://auth.ctf.example.com/realms/ctf
+  clientId: ctf-app
+  clientSecret: super-secret-client-secret
+  redirectUrl: https://ctf.example.com/oauth/callback
+
+session:
+  cookieName: ctf_app_session
+
+s3:
+  endpoint: https://s3.ctf.rs
+  pathStyle: true
+  region: us-east-1
+  presignTtlSeconds: 600
+  accessKeyId: minioadmin
+  secretAccessKey: minioadmin
+
+instanceBaseDomain: ctf.example.com
+
+behindReverseProxy: true
+
+discord:
+  linkSecret: my-hmac-shared-secret
+  botCallbackUrl: http://ctf-bot.ctf.svc:3030
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
