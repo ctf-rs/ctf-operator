@@ -27,7 +27,7 @@ use k8s_openapi::{
     apimachinery::pkg::{apis::meta::v1::LabelSelector, util::intstr::IntOrString},
 };
 use kube::{
-    api::{DeleteParams, ObjectMeta, Patch, PatchParams},
+    api::{ApiResource, DeleteParams, DynamicObject, ObjectMeta, Patch, PatchParams},
     runtime::{controller::Action, reflector::ObjectRef},
     Api, ResourceExt,
 };
@@ -262,6 +262,7 @@ async fn reconcile_apply(
     // Ensure all resources exist
     ensure_target_namespace(instance.as_ref(), &target_namespace, &state).await?;
     ensure_image_pull_secret(&target_namespace, &state).await?;
+    ensure_cilium_network_policy(&target_namespace, &state).await?;
 
     ensure_port_claims(
         instance.as_ref(),
@@ -839,6 +840,52 @@ async fn ensure_image_pull_secret(
             &cfg.name,
             &PatchParams::apply(InstanceReconciler::NAME).force(),
             &Patch::Apply(&copy),
+        )
+        .await?;
+
+    Ok(())
+}
+
+/// Create a CiliumNetworkPolicy in the instance namespace from the operator
+/// config.  The policy is applied with server-side-apply so updates to the
+/// spec in the config are automatically propagated.
+async fn ensure_cilium_network_policy(
+    target_namespace: &str,
+    state: &CtfState,
+) -> Result<(), CtfError> {
+    let Some(spec) = &state.config.runtime_config.instance.cilium_network_policy else {
+        return Ok(());
+    };
+
+    let ar = ApiResource {
+        group: "cilium.io".into(),
+        version: "v2".into(),
+        api_version: "cilium.io/v2".into(),
+        kind: "CiliumNetworkPolicy".into(),
+        plural: "ciliumnetworkpolicies".into(),
+    };
+
+    let policy_name = "instance-policy";
+    let policy = DynamicObject {
+        metadata: ObjectMeta {
+            name: Some(policy_name.to_owned()),
+            namespace: Some(target_namespace.to_owned()),
+            ..Default::default()
+        },
+        types: Some(kube::api::TypeMeta {
+            api_version: "cilium.io/v2".into(),
+            kind: "CiliumNetworkPolicy".into(),
+        }),
+        data: serde_json::json!({
+            "spec": spec,
+        }),
+    };
+
+    Api::<DynamicObject>::namespaced_with(state.client.clone(), target_namespace, &ar)
+        .patch(
+            policy_name,
+            &PatchParams::apply(InstanceReconciler::NAME).force(),
+            &Patch::Apply(&policy),
         )
         .await?;
 

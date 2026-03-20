@@ -79,6 +79,17 @@ instance:
   service:
     type: ClusterIP
     nodePortMode: Auto
+  # CiliumNetworkPolicy spec to create in each instance namespace.
+  # The operator will create a CiliumNetworkPolicy resource with this spec.
+  ciliumNetworkPolicy: {}
+    # Example:
+    # endpointSelector:
+    #   matchLabels:
+    #     role: instance
+    # ingress:
+    #   - fromEndpoints:
+    #       - matchLabels:
+    #           role: gateway
 
 serviceAccount:
   create: true

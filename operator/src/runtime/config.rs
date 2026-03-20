@@ -26,6 +26,8 @@ pub struct InstanceRuntimeConfig {
     pub deployment: InstanceDeploymentConfig,
     #[serde(default)]
     pub service: InstanceServiceConfig,
+    #[serde(default, rename = "ciliumNetworkPolicy")]
+    pub cilium_network_policy: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -192,6 +194,14 @@ instance:
             namespace: ctf-operator
     service:
         type: LoadBalancer
+    ciliumNetworkPolicy:
+        endpointSelector:
+            matchLabels:
+                role: instance
+        ingress:
+          - fromEndpoints:
+              - matchLabels:
+                  role: gateway
 ";
 
         let config: OperatorRuntimeConfig =
@@ -219,5 +229,12 @@ instance:
             .expect("imagePullSecret should be set");
         assert_eq!(pull_secret.name, "my-registry-secret");
         assert_eq!(pull_secret.namespace, "ctf-operator");
+        let cnp = config
+            .instance
+            .cilium_network_policy
+            .as_ref()
+            .expect("ciliumNetworkPolicy should be set");
+        assert!(cnp.get("endpointSelector").is_some());
+        assert!(cnp.get("ingress").is_some());
     }
 }

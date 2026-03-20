@@ -28,4 +28,7 @@ rules:
   - apiGroups: ["operator.ctf.rs"]
     resources: ["instances/finalizers"]
     verbs: ["update", "patch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumnetworkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 {{- end }}
