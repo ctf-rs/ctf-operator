@@ -37,17 +37,21 @@ pub fn InstanceControls(
     /// When true the CTF has ended and flag submission is disabled.
     #[prop(optional)]
     ctf_ended: bool,
+    /// Whether the challenge is already fully solved.
+    #[prop(optional)]
+    solved: bool,
     /// Error message to display inline (e.g. max instances reached).
     #[prop(optional)]
     error_message: String,
 ) -> impl IntoView {
-    let flags_disabled = !ready || ctf_ended;
+    let flags_disabled = solved || !ready || ctf_ended;
     let flags_for_forms = flags.clone();
     let points_for_forms = flag_points.clone();
 
     // Embed a state key in the DOM so the WASM SSE client can detect stale SSR.
     let ssr_state_key = format!(
-        "false|{}|{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}",
+        solved,
         has_instance,
         ready,
         deleting,
@@ -186,7 +190,7 @@ pub fn InstanceControls(
     view! {
         {instance_controls}
         {connection_details}
-        <div class="flags-section">
+        <div class="flags-section" style={if solved { "display:none" } else { "" }}>
             <h3>"Submit Flags"</h3>
             {flags_for_forms.into_iter().zip(points_for_forms.into_iter()).map(|(flag, pts)| {
                 let feedback = if submit_fb_flag_name.as_deref() == Some(&flag.name) {

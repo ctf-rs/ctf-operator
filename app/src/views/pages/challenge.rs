@@ -161,42 +161,39 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                     </section>
                 </div>
 
-                {(!data.solved).then(move || {
-                    view! {
-                        <div class="files-instance-sep"></div>
-                        {data.ctf_ended.then(|| view! {
-                            <div class="ctf-ended-banner" style="text-align:center;padding:1rem;margin-bottom:1rem;border:1px solid var(--border);border-radius:0.5rem;background:var(--surface);">
-                                <p style="font-weight:bold;">"The CTF has ended — flag submission is closed."</p>
-                            </div>
-                        })}
-                        <div class="controls-wrapper">
-                            <InstanceControls
-                                instancing=data.instancing
-                                has_instance=data.has_instance
-                                ready=data.ready
-                                can_extend=data.can_extend
-                                challenge_name=challenge_name.clone()
-                                submit_action=submit_action.to_string()
-                                extend_display=extend_display.to_string()
-                                    flags=flags.clone()
-                                    flag_points=flag_points.clone()
-                                submit_fb_flag_name=submit_fb_flag_name.clone()
-                                submit_fb_kind=submit_fb_kind.clone()
-                                submit_fb_message=submit_fb_message.clone()
-                                exposed_ports=exposed_ports.clone()
-                                instance_name=data.instance_name.clone()
-                                instance_base_domain=data.instance_base_domain.clone()
-                                instance_phase=data.instance_phase_desc.clone()
-                                time_left_seconds=data.time_left_seconds
-                                expires_at_epoch=data.expires_at_epoch
-                                flag_hint=flag_hint.clone()
-                                deleting=data.deleting
-                                ctf_ended=data.ctf_ended
-                                error_message=data.error_message.clone().unwrap_or_default()
-                            />
-                        </div>
-                    }
+                <div class="files-instance-sep"></div>
+                {data.ctf_ended.then(|| view! {
+                    <div class="ctf-ended-banner" style="text-align:center;padding:1rem;margin-bottom:1rem;border:1px solid var(--border);border-radius:0.5rem;background:var(--surface);">
+                        <p style="font-weight:bold;">"The CTF has ended — flag submission is closed."</p>
+                    </div>
                 })}
+                <div class="controls-wrapper">
+                    <InstanceControls
+                        instancing=data.instancing
+                        has_instance=data.has_instance
+                        ready=data.ready
+                        can_extend=data.can_extend
+                        challenge_name=challenge_name.clone()
+                        submit_action=submit_action.to_string()
+                        extend_display=extend_display.to_string()
+                        flags=flags.clone()
+                        flag_points=flag_points.clone()
+                        submit_fb_flag_name=submit_fb_flag_name.clone()
+                        submit_fb_kind=submit_fb_kind.clone()
+                        submit_fb_message=submit_fb_message.clone()
+                        exposed_ports=exposed_ports.clone()
+                        instance_name=data.instance_name.clone()
+                        instance_base_domain=data.instance_base_domain.clone()
+                        instance_phase=data.instance_phase_desc.clone()
+                        time_left_seconds=data.time_left_seconds
+                        expires_at_epoch=data.expires_at_epoch
+                        flag_hint=flag_hint.clone()
+                        deleting=data.deleting
+                        ctf_ended=data.ctf_ended
+                        solved=data.solved
+                        error_message=data.error_message.clone().unwrap_or_default()
+                    />
+                </div>
             </div>
         </PageShell>
     }

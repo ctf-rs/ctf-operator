@@ -70,14 +70,6 @@ pub async fn spawn_instance(challenge_name: String) -> Result<(), ServerFnError>
     let ctf_name = &state.config.ctf_name;
     let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, socket_addr);
 
-    if db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, ctf_name)
-        .await
-        .unwrap_or(false)
-    {
-        leptos_axum::redirect(&challenge_route(&challenge_name));
-        return Ok(());
-    }
-
     let Some(challenge_namespace) = challenges::find_challenge_namespace(&state, &challenge_name)
     else {
         return Err(ServerFnError::new(
@@ -327,22 +319,22 @@ pub async fn instance_state(
         .await
         .unwrap_or(false);
 
-    if solved {
-        return Json(InstanceStateResponse {
-            solved: true,
-            ..no_instance
-        })
-        .into_response();
-    }
-
     let Some(instance) =
         k8s_instances::get_instance_for_challenge(&state, user.id, &challenge_name, ctf_name)
     else {
-        return Json(no_instance).into_response();
+        return Json(InstanceStateResponse {
+            solved,
+            ..no_instance
+        })
+        .into_response();
     };
 
     if !is_instance_owned_by_user(&instance, &user) {
-        return Json(no_instance).into_response();
+        return Json(InstanceStateResponse {
+            solved,
+            ..no_instance
+        })
+        .into_response();
     }
 
     let ready = instance_ready_from_resource(&instance);
@@ -359,7 +351,7 @@ pub async fn instance_state(
         has_instance: true,
         ready,
         can_extend,
-        solved: false,
+        solved,
         deleting,
         time_left_seconds,
         expires_at_epoch,
@@ -484,10 +476,6 @@ fn compute_instance_state(
         instance_name: None,
     };
 
-    if solved {
-        return no_instance;
-    }
-
     let ctf_name = &state.config.ctf_name;
     let Some(instance) =
         k8s_instances::get_instance_for_challenge(state, user_id, challenge_name, ctf_name)
@@ -513,7 +501,7 @@ fn compute_instance_state(
         has_instance: true,
         ready,
         can_extend,
-        solved: false,
+        solved,
         deleting,
         time_left_seconds,
         expires_at_epoch,

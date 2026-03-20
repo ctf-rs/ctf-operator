@@ -281,9 +281,27 @@ pub async fn challenge_page(
         flag.solved = solved_flags.contains(&flag.name);
     }
 
-    let solved = db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, ctf_name)
-        .await
-        .unwrap_or(false);
+    let mut solved =
+        db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, ctf_name)
+            .await
+            .unwrap_or(false);
+
+    // Self-healing: if all flags are individually solved but the challenge
+    // wasn't marked as solved (e.g. mark_challenge_solved failed earlier),
+    // recover by marking it now.
+    if !solved && !challenge.flags.is_empty() && challenge.flags.iter().all(|f| f.solved) {
+        warn!(
+            challenge = %challenge_name,
+            user_id = user.id,
+            "all flags solved but challenge not marked — recovering"
+        );
+        if let Err(err) =
+            db::mark_challenge_solved(&state.db, user.id, &challenge_name, ctf_name).await
+        {
+            warn!(error = %err, "recovery mark_challenge_solved failed");
+        }
+        solved = true;
+    }
 
     let instance = crate::k8s::instances::get_instance_for_challenge(
         &state,
