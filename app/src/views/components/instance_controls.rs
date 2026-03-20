@@ -103,7 +103,7 @@ pub fn InstanceControls(
         let timer_view = if has_instance {
             time_left_seconds.map(|s| {
                 let t = format_countdown(s);
-                view! { <span class="timer-badge">{t}</span> }.into_any()
+                view! { <span id="instance-timer" class="timer-badge">{t}</span> }.into_any()
             })
         } else {
             None
@@ -114,19 +114,19 @@ pub fn InstanceControls(
             // Show Stop and optionally Extend
             let extend_button = if can_extend {
                 view! {
-                    <form method="post" action="/api/extend_instance" style="display:inline-block;">
+                    <form id="extend-form" method="post" action="/api/extend_instance" style="display:inline-block;">
                         <input type="hidden" name="challenge_name" value={challenge_name.clone()}/>
                         <button class="btn extend" type="submit">"Extend"</button>
                     </form>
                 }
                 .into_any()
             } else {
-                view! { <span></span> }.into_any()
+                view! { <span id="extend-form" style="display:none"></span> }.into_any()
             };
 
             view! {
                 <>
-                    <form method="post" action="/api/stop_instance" style="display:inline-block;">
+                    <form id="stop-form" method="post" action="/api/stop_instance" style="display:inline-block;">
                         <input type="hidden" name="challenge_name" value={challenge_name.clone()}/>
                         <button class="btn danger" type="submit">"Stop instance"</button>
                     </form>
@@ -137,7 +137,7 @@ pub fn InstanceControls(
         } else if !has_instance {
             // Show Spawn button
             view! {
-                <form method="post" action="/api/spawn_instance" style="display:inline-block;">
+                <form id="spawn-form" method="post" action="/api/spawn_instance" style="display:inline-block;">
                     <input type="hidden" name="challenge_name" value={challenge_name.clone()}/>
                     <button class="btn primary" type="submit">"Spawn instance"</button>
                 </form>
@@ -149,13 +149,13 @@ pub fn InstanceControls(
         };
 
         view! {
-            <div class="controls-row">
+            <div id="instance-controls" class="controls-row">
                 <div class="controls-left">
                     {control_buttons}
                 </div>
                 <div class="controls-right">
                     {timer_view}
-                    <span class="status-badge">{phase_text}</span>
+                    <span id="instance-status" class="status-badge">{phase_text}</span>
                 </div>
             </div>
         }
