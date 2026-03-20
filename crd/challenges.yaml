@@ -39,6 +39,7 @@ spec:
                     type: string
                   type: array
                 containers:
+                  default: []
                   items:
                     properties:
                       flags:
@@ -69,6 +70,9 @@ spec:
                               maximum: 65535.0
                               minimum: 0.0
                               type: integer
+                            env:
+                              nullable: true
+                              type: string
                             expose:
                               default: false
                               type: boolean
@@ -254,7 +258,6 @@ spec:
                   type: array
               required:
                 - categories
-                - containers
                 - flags
                 - fullName
               type: object
@@ -308,8 +311,6 @@ spec:
           x-kubernetes-validations:
             - message: fullName is empty
               rule: self.spec.fullName != ''
-            - message: at least one container is required
-              rule: size(self.spec.containers) > 0
             - message: container name and image are required
               rule: self.spec.containers.all(c, c.name != '' && c.image != '')
             - message: flag name and body are required

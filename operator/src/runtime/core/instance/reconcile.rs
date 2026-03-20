@@ -1012,9 +1012,7 @@ async fn ensure_deployment(
         .containers
         .iter()
         .map(|container| Container {
-            env: if container.flags.is_empty() {
-                None
-            } else {
+            env: {
                 let mut env = Vec::new();
                 for container_flag in &container.flags {
                     let Some(flag_value) = flag_values.get(&container_flag.name) else {
@@ -1026,7 +1024,23 @@ async fn ensure_deployment(
                         ..Default::default()
                     });
                 }
-                Some(env)
+                for port in &container.ports {
+                    if let Some(env_name) = &port.env {
+                        let port_value = allocated_ports
+                            .get(&port.name)
+                            .map_or_else(|| port.container_port.to_string(), |p| p.to_string());
+                        env.push(k8s_openapi::api::core::v1::EnvVar {
+                            name: env_name.clone(),
+                            value: Some(port_value),
+                            ..Default::default()
+                        });
+                    }
+                }
+                if env.is_empty() {
+                    None
+                } else {
+                    Some(env)
+                }
             },
             name: container.name.clone(),
             image: Some(container.image.clone()),
@@ -1543,12 +1557,14 @@ mod tests {
                     container_port: 80,
                     expose: true,
                     port_type: ctf_cli::models::ChallengePortType::HTTP,
+                    env: None,
                 },
                 ctf_cli::models::ContainerPort {
                     name: "admin".to_string(),
                     container_port: 8080,
                     expose: false,
                     port_type: ctf_cli::models::ChallengePortType::HTTP,
+                    env: None,
                 },
             ],
         }];
@@ -1571,6 +1587,7 @@ mod tests {
                     container_port: 80,
                     expose: true,
                     port_type: ctf_cli::models::ChallengePortType::HTTP,
+                    env: None,
                 }],
             },
             ctf_cli::k8s::ChallengeContainer {
@@ -1582,6 +1599,7 @@ mod tests {
                     container_port: 8080,
                     expose: true,
                     port_type: ctf_cli::models::ChallengePortType::HTTP,
+                    env: None,
                 }],
             },
         ];

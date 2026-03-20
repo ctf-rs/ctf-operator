@@ -235,6 +235,9 @@ pub struct ContainerPort {
     #[serde(rename = "type")]
     #[garde(skip)]
     pub port_type: ChallengePortType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[garde(skip)]
+    pub env: Option<String>,
 }
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]

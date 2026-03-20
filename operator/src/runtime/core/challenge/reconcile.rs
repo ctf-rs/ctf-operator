@@ -279,6 +279,7 @@ mod tests {
                         container_port: 8080,
                         expose: true,
                         port_type: ctf_cli::models::ChallengePortType::HTTP,
+                        env: None,
                     }],
                 }],
                 files: vec![ChallengeFileRef::S3 {

@@ -17,7 +17,6 @@ use crate::Conditions;
     status = "ChallengeStatus",
     derive = "PartialEq",
     validation = Rule::new("self.spec.fullName != ''").message("fullName is empty"),
-    validation = Rule::new("size(self.spec.containers) > 0").message("at least one container is required"),
     validation = Rule::new("self.spec.containers.all(c, c.name != '' && c.image != '')")
         .message("container name and image are required"),
     validation = Rule::new("self.spec.flags.all(f, f.name != '' && f.body != '')")
@@ -40,6 +39,7 @@ pub struct ChallengeSpec {
     #[serde(default)]
     pub authors: HashSet<String>,
     pub flags: Vec<crate::models::ChallengeFlag>,
+    #[serde(default)]
     pub containers: Vec<ChallengeContainer>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<ChallengeFileRef>,
