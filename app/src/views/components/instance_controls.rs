@@ -130,17 +130,7 @@ pub fn InstanceControls(
         // Control buttons depend on state
         let control_buttons = if has_instance && ready {
             // Show Stop and optionally Extend
-            let extend_button = if can_extend {
-                view! {
-                    <form id="extend-form" method="post" action="/api/extend_instance" style="display:inline-block;">
-                        <input type="hidden" name="challenge_name" value={challenge_name.clone()}/>
-                        <button class="btn extend" type="submit">"Extend"</button>
-                    </form>
-                }
-                .into_any()
-            } else {
-                view! { <span id="extend-form" style="display:none"></span> }.into_any()
-            };
+            let extend_display = if can_extend { "inline-block" } else { "none" };
 
             view! {
                 <>
@@ -148,7 +138,10 @@ pub fn InstanceControls(
                         <input type="hidden" name="challenge_name" value={challenge_name.clone()}/>
                         <button class="btn danger" type="submit">"Stop instance"</button>
                     </form>
-                    {extend_button}
+                    <form id="extend-form" method="post" action="/api/extend_instance" style={format!("display:{extend_display};")}>
+                        <input type="hidden" name="challenge_name" value={challenge_name.clone()}/>
+                        <button class="btn extend" type="submit">"Extend"</button>
+                    </form>
                 </>
             }
             .into_any()
