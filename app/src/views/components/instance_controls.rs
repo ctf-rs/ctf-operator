@@ -28,7 +28,12 @@ pub fn InstanceControls(
     instance_base_domain: String,
     instance_phase: Option<String>,
     time_left_seconds: Option<u64>,
+    /// Unix epoch (seconds) when instance timer expires.
+    expires_at_epoch: Option<u64>,
     flag_hint: String,
+    /// Whether the instance is being deleted.
+    #[prop(optional)]
+    deleting: bool,
     /// When true the CTF has ended and flag submission is disabled.
     #[prop(optional)]
     ctf_ended: bool,
@@ -36,6 +41,16 @@ pub fn InstanceControls(
     let flags_disabled = !ready || ctf_ended;
     let flags_for_forms = flags.clone();
     let points_for_forms = flag_points.clone();
+
+    // Embed a state key in the DOM so the WASM SSE client can detect stale SSR.
+    let ssr_state_key = format!(
+        "false|{}|{}|{}|{}|{}",
+        has_instance,
+        ready,
+        deleting,
+        expires_at_epoch.unwrap_or(0),
+        instance_name.as_deref().unwrap_or(""),
+    );
 
     // Generate connection details when instance is ready
     let connection_details = if ready && !exposed_ports.is_empty() {
@@ -103,7 +118,10 @@ pub fn InstanceControls(
         let timer_view = if has_instance {
             time_left_seconds.map(|s| {
                 let t = format_countdown(s);
-                view! { <span id="instance-timer" class="timer-badge">{t}</span> }.into_any()
+                let expires_attr = expires_at_epoch
+                    .map(|e| e.to_string())
+                    .unwrap_or_default();
+                view! { <span id="instance-timer" class="timer-badge" data-expires-at=expires_attr>{t}</span> }.into_any()
             })
         } else {
             None
@@ -149,7 +167,7 @@ pub fn InstanceControls(
         };
 
         view! {
-            <div id="instance-controls" class="controls-row">
+            <div id="instance-controls" class="controls-row" data-challenge-name={challenge_name.clone()} data-state-key={ssr_state_key.clone()}>
                 <div class="controls-left">
                     {control_buttons}
                 </div>

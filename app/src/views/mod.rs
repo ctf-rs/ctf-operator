@@ -53,6 +53,8 @@ pub struct ChallengePageData {
     pub has_instance: bool,
     pub ready: bool,
     pub time_left_seconds: Option<u64>,
+    /// Unix epoch (seconds) when the instance timer expires.
+    pub expires_at_epoch: Option<u64>,
     pub can_extend: bool,
     pub solved: bool,
     pub deleting: bool,

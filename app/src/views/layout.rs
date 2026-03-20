@@ -16,6 +16,9 @@ pub fn PageShell(title: String, children: Children) -> impl IntoView {
                 <main class="container">
                     {children()}
                 </main>
+                <script type="module">
+                    "import init, { hydrate } from '/pkg/app.js'; init({ module_or_path: '/pkg/app.wasm' }).then(hydrate);"
+                </script>
             </body>
         </html>
     }

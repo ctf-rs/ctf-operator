@@ -85,6 +85,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             get(instances::instance_state),
         )
         .route(
+            "/challenge/{challenge_name}/instance-events",
+            get(instances::instance_events),
+        )
+        .route(
             "/file/{challenge_name}/{file_idx}",
             get(files::download_file),
         )

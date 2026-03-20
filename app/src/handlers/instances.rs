@@ -1,10 +1,13 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{convert::Infallible, net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::{
     Extension, Json,
     extract::{ConnectInfo, Path, State},
     http::HeaderMap,
-    response::{IntoResponse, Response},
+    response::{
+        IntoResponse, Response,
+        sse::{Event, KeepAlive, Sse},
+    },
 };
 // Note: Extension + State + Path are still used by the manual `instance_state` handler.
 use ctf_cli::k8s::{Instance, InstanceSpec, InstanceUser};
@@ -19,8 +22,9 @@ use crate::{
     k8s::{
         challenges,
         helpers::{
-            instance_ready_from_resource, instance_time_left_seconds, is_instance_deleting,
-            is_instance_owned_by_user, resolve_instance_duration_seconds,
+            instance_expires_at_epoch, instance_ready_from_resource,
+            instance_time_left_seconds, is_instance_deleting, is_instance_owned_by_user,
+            resolve_instance_duration_seconds,
         },
         instances as k8s_instances,
     },
@@ -40,6 +44,7 @@ pub struct InstanceStateResponse {
     solved: bool,
     deleting: bool,
     time_left_seconds: Option<u64>,
+    expires_at_epoch: Option<u64>,
     instance_name: Option<String>,
 }
 
@@ -290,20 +295,19 @@ pub async fn instance_state(
 ) -> Response {
     let ctf_name = &state.config.ctf_name;
 
+    let no_instance = InstanceStateResponse {
+        has_instance: false,
+        ready: false,
+        can_extend: false,
+        solved: false,
+        deleting: false,
+        time_left_seconds: None,
+        expires_at_epoch: None,
+        instance_name: None,
+    };
+
     let Some(challenge) = challenges::get_challenge(&state, &challenge_name) else {
-        return (
-            axum::http::StatusCode::NOT_FOUND,
-            Json(InstanceStateResponse {
-                has_instance: false,
-                ready: false,
-                can_extend: false,
-                solved: false,
-                deleting: false,
-                time_left_seconds: None,
-                instance_name: None,
-            }),
-        )
-            .into_response();
+        return (axum::http::StatusCode::NOT_FOUND, Json(no_instance)).into_response();
     };
 
     if !has_ctf_access(&user, &challenge, &state.config) {
@@ -316,13 +320,8 @@ pub async fn instance_state(
 
     if solved {
         return Json(InstanceStateResponse {
-            has_instance: false,
-            ready: false,
-            can_extend: false,
             solved: true,
-            deleting: false,
-            time_left_seconds: None,
-            instance_name: None,
+            ..no_instance
         })
         .into_response();
     }
@@ -330,33 +329,16 @@ pub async fn instance_state(
     let Some(instance) =
         k8s_instances::get_instance_for_challenge(&state, user.id, &challenge_name, ctf_name)
     else {
-        return Json(InstanceStateResponse {
-            has_instance: false,
-            ready: false,
-            can_extend: false,
-            solved: false,
-            deleting: false,
-            time_left_seconds: None,
-            instance_name: None,
-        })
-        .into_response();
+        return Json(no_instance).into_response();
     };
 
     if !is_instance_owned_by_user(&instance, &user) {
-        return Json(InstanceStateResponse {
-            has_instance: false,
-            ready: false,
-            can_extend: false,
-            solved: false,
-            deleting: false,
-            time_left_seconds: None,
-            instance_name: None,
-        })
-        .into_response();
+        return Json(no_instance).into_response();
     }
 
     let ready = instance_ready_from_resource(&instance);
     let time_left_seconds = instance_time_left_seconds(&instance);
+    let expires_at_epoch = instance_expires_at_epoch(&instance);
     let deleting = is_instance_deleting(&instance);
     let can_extend = ready
         && !deleting
@@ -371,6 +353,7 @@ pub async fn instance_state(
         solved: false,
         deleting,
         time_left_seconds,
+        expires_at_epoch,
         instance_name: Some(instance.name_any()),
     })
     .into_response()
@@ -462,4 +445,143 @@ pub async fn stop_instance(challenge_name: String) -> Result<(), ServerFnError> 
 
     redirect_with("ok", "instance stopping");
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// SSE – push instance state changes to connected clients
+// ---------------------------------------------------------------------------
+
+/// Compute a compact state key for change detection.
+fn instance_state_key(resp: &InstanceStateResponse) -> String {
+    format!(
+        "{}|{}|{}|{}|{}|{}",
+        resp.solved,
+        resp.has_instance,
+        resp.ready,
+        resp.deleting,
+        resp.expires_at_epoch.unwrap_or(0),
+        resp.instance_name.as_deref().unwrap_or(""),
+    )
+}
+
+/// Compute [`InstanceStateResponse`] from the in-memory kube store.
+fn compute_instance_state(
+    state: &AppState,
+    user_id: i64,
+    challenge_name: &str,
+    solved: bool,
+) -> InstanceStateResponse {
+    let no_instance = InstanceStateResponse {
+        has_instance: false,
+        ready: false,
+        can_extend: false,
+        solved,
+        deleting: false,
+        time_left_seconds: None,
+        expires_at_epoch: None,
+        instance_name: None,
+    };
+
+    if solved {
+        return no_instance;
+    }
+
+    let ctf_name = &state.config.ctf_name;
+    let Some(instance) =
+        k8s_instances::get_instance_for_challenge(state, user_id, challenge_name, ctf_name)
+    else {
+        return no_instance;
+    };
+
+    if !is_instance_owned_by_user_by_id(&instance, user_id) {
+        return no_instance;
+    }
+
+    let ready = instance_ready_from_resource(&instance);
+    let time_left_seconds = instance_time_left_seconds(&instance);
+    let expires_at_epoch = instance_expires_at_epoch(&instance);
+    let deleting = is_instance_deleting(&instance);
+    let can_extend = ready
+        && !deleting
+        && time_left_seconds
+            .map(|seconds| seconds <= 300 && seconds > 0)
+            .unwrap_or(false);
+
+    InstanceStateResponse {
+        has_instance: true,
+        ready,
+        can_extend,
+        solved: false,
+        deleting,
+        time_left_seconds,
+        expires_at_epoch,
+        instance_name: Some(instance.name_any()),
+    }
+}
+
+/// Check instance ownership by user ID (used in SSE stream where we don't
+/// have the full `User` struct).
+fn is_instance_owned_by_user_by_id(instance: &Instance, user_id: i64) -> bool {
+    match &instance.spec.user {
+        Some(u) => u.id == user_id,
+        None => true,
+    }
+}
+
+/// SSE endpoint: pushes instance state events only when something changes.
+///
+/// The server reads from the in-memory kube reflector store every 3 s (cheap
+/// HashMap lookup) and only sends an event when the state key differs from
+/// the previous one.  This means **zero** traffic when the instance is
+/// steady-state and only brief bursts during transitions.
+pub async fn instance_events(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<db::User>,
+    Path(challenge_name): Path<String>,
+) -> Response {
+    let Some(challenge) = challenges::get_challenge(&state, &challenge_name) else {
+        return (axum::http::StatusCode::NOT_FOUND, "challenge not found").into_response();
+    };
+
+    if !has_ctf_access(&user, &challenge, &state.config) {
+        return (axum::http::StatusCode::FORBIDDEN, "forbidden").into_response();
+    }
+
+    let user_id = user.id;
+    let ctf_name = state.config.ctf_name.clone();
+    let challenge_name_owned = challenge_name.clone();
+
+    let stream = async_stream::stream! {
+        // Send the initial state immediately so the client doesn't start blind.
+        let solved = db::is_challenge_solved_for_user(&state.db, user_id, &challenge_name_owned, &ctf_name)
+            .await
+            .unwrap_or(false);
+        let snap = compute_instance_state(&state, user_id, &challenge_name_owned, solved);
+        let mut last_key = instance_state_key(&snap);
+        if let Ok(json) = serde_json::to_string(&snap) {
+            yield Ok::<_, Infallible>(Event::default().data(json));
+        }
+
+        let mut interval = tokio::time::interval(Duration::from_secs(3));
+        loop {
+            interval.tick().await;
+
+            let solved = db::is_challenge_solved_for_user(&state.db, user_id, &challenge_name_owned, &ctf_name)
+                .await
+                .unwrap_or(false);
+            let snap = compute_instance_state(&state, user_id, &challenge_name_owned, solved);
+            let key = instance_state_key(&snap);
+
+            if key != last_key {
+                last_key = key;
+                if let Ok(json) = serde_json::to_string(&snap) {
+                    yield Ok::<_, Infallible>(Event::default().data(json));
+                }
+            }
+        }
+    };
+
+    Sse::new(stream)
+        .keep_alive(KeepAlive::default().interval(Duration::from_secs(15)))
+        .into_response()
 }

@@ -2,7 +2,7 @@ use leptos::prelude::*;
 
 use super::super::{
     ChallengePageData, components::InstanceControls, display_file_name, file_route,
-    format_countdown, layout::PageShell, scripts::instance_live_script,
+    format_countdown, layout::PageShell,
 };
 
 // ---------------------------------------------------------------------------
@@ -84,8 +84,6 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
     } else {
         "none"
     };
-
-    let instance_script = instance_live_script(&challenge_name);
 
     let _extend_fb = data.extend_feedback.clone();
     let submit_fb_flag_name = data.submit_feedback.as_ref().map(|f| f.flag_name.clone());
@@ -188,14 +186,15 @@ pub fn ChallengeDetailPage(data: ChallengePageData) -> impl IntoView {
                                 instance_base_domain=data.instance_base_domain.clone()
                                 instance_phase=data.instance_phase_desc.clone()
                                 time_left_seconds=data.time_left_seconds
+                                expires_at_epoch=data.expires_at_epoch
                                 flag_hint=flag_hint.clone()
+                                deleting=data.deleting
                                 ctf_ended=data.ctf_ended
                             />
                         </div>
                     }
                 })}
             </div>
-            <script>{instance_script}</script>
         </PageShell>
     }
 }

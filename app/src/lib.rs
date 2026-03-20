@@ -24,7 +24,10 @@ pub mod state;
 pub mod views;
 
 #[cfg(feature = "hydrate")]
+mod instance_live;
+
+#[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn hydrate() {
-    // Instance polling is handled by inline JS emitted by scripts::instance_live_script().
+    instance_live::init();
 }

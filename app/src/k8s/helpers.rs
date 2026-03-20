@@ -50,6 +50,13 @@ pub fn instance_time_left_seconds(instance: &Instance) -> Option<u64> {
     }
 }
 
+/// Unix epoch (seconds) when the instance timer expires.
+/// Returns `None` when `expires_at` is not set (timer not started).
+pub fn instance_expires_at_epoch(instance: &Instance) -> Option<u64> {
+    let expires_at = instance.status.as_ref()?.expires_at.as_ref()?;
+    u64::try_from(expires_at.0.as_second()).ok()
+}
+
 /// Does the instance belong to the given user (by spec)?
 /// Global instances (user = None) are considered accessible by everyone.
 pub fn is_instance_owned_by_user(instance: &Instance, user: &User) -> bool {

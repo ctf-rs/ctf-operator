@@ -21,13 +21,15 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 url = { workspace = true }
 urlencoding = { workspace = true }
+js-sys = { version = "0.3", optional = true }
 wasm-bindgen = { workspace = true, optional = true }
 wasm-bindgen-futures = { version = "0.4", optional = true }
-web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlElement", "Request", "RequestInit", "RequestMode", "Response", "Headers", "Location", "DomTokenList", "console"], optional = true }
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlElement", "Request", "RequestInit", "RequestMode", "Response", "Headers", "Location", "DomTokenList", "console", "EventSource", "MessageEvent"], optional = true }
 serde-wasm-bindgen = { version = "0.6", optional = true }
 
 # Server-only dependencies
 anyhow = { workspace = true, optional = true }
+async-stream = { workspace = true, optional = true }
 aws-config = { workspace = true, optional = true }
 aws-credential-types = { workspace = true, optional = true }
 aws-sdk-s3 = { workspace = true, optional = true }
@@ -62,10 +64,11 @@ opentelemetry-otlp = { workspace = true, optional = true }
 uuid = { workspace = true, features = ["v4", "serde"], optional = true }
 
 [features]
-hydrate = ["leptos/hydrate", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:web-sys", "dep:serde-wasm-bindgen"]
+hydrate = ["leptos/hydrate", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:web-sys", "dep:serde-wasm-bindgen"]
 ssr = [
     "leptos/ssr",
     "dep:anyhow",
+    "dep:async-stream",
     "dep:aws-config",
     "dep:aws-credential-types",
     "dep:aws-sdk-s3",

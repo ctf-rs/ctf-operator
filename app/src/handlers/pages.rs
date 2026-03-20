@@ -17,8 +17,8 @@ use crate::{
     k8s::{
         challenges,
         helpers::{
-            instance_phase_description, instance_ready_from_resource, instance_time_left_seconds,
-            is_instance_deleting, is_instance_owned_by_user,
+            instance_expires_at_epoch, instance_phase_description, instance_ready_from_resource,
+            instance_time_left_seconds, is_instance_deleting, is_instance_owned_by_user,
         },
         portclaims::get_allocated_ports_for_instance,
     },
@@ -275,6 +275,7 @@ pub async fn challenge_page(
 
     let mut ready = false;
     let mut time_left_seconds: Option<u64> = None;
+    let mut expires_at_epoch: Option<u64> = None;
     let mut can_extend = false;
     let mut deleting = false;
     let mut instance_phase_desc: Option<String> = None;
@@ -287,6 +288,7 @@ pub async fn challenge_page(
             instance_name_str = Some(existing.name_any());
             ready = instance_ready_from_resource(existing);
             time_left_seconds = instance_time_left_seconds(existing);
+            expires_at_epoch = instance_expires_at_epoch(existing);
             deleting = is_instance_deleting(existing);
             can_extend = ready
                 && !deleting
@@ -367,6 +369,7 @@ pub async fn challenge_page(
         has_instance,
         ready,
         time_left_seconds,
+        expires_at_epoch,
         can_extend,
         solved,
         deleting,
