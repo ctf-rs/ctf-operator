@@ -1,5 +1,8 @@
 FROM rust:1.93 AS builder
 
+RUN rustup target add wasm32-unknown-unknown \
+    && cargo install cargo-leptos
+
 WORKDIR /usr/src/ctf-operator
 
 COPY Cargo.toml ./
@@ -23,7 +26,7 @@ RUN cargo fetch
 COPY cli/src ./cli/src
 COPY app/src ./app/src
 
-RUN cargo build --release -p app --bin app --features ssr
+RUN cargo leptos build --release
 
 FROM debian:trixie-slim
 
@@ -32,5 +35,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/src/ctf-operator/target/release/app /usr/local/bin/app
+COPY --from=builder /usr/src/ctf-operator/target/site /app/target/site
+
+WORKDIR /app
 
 ENTRYPOINT ["/usr/local/bin/app"]
