@@ -292,4 +292,55 @@ instance:
         assert!(cnp.get("endpointSelector").is_some());
         assert!(cnp.get("ingress").is_some());
     }
+
+    #[test]
+    fn cilium_policy_allow_world_ingress_and_namespace() {
+        let yaml = r"
+instance:
+    ciliumNetworkPolicy:
+        endpointSelector:
+            matchLabels: {}
+        ingress:
+          - fromEntities:
+              - world
+          - fromEndpoints:
+              - {}
+        egress:
+          - toEndpoints:
+              - {}
+";
+        let config: OperatorRuntimeConfig =
+            serde_saphyr::from_str(yaml).expect("config should deserialize");
+
+        let cnp = config
+            .instance
+            .cilium_network_policy
+            .as_ref()
+            .expect("ciliumNetworkPolicy should be set");
+
+        // endpointSelector with empty matchLabels (selects all pods in namespace)
+        let selector = &cnp["endpointSelector"]["matchLabels"];
+        assert!(selector.is_object(), "matchLabels should be an object");
+
+        // ingress: first rule allows from world entity
+        let ingress = cnp["ingress"].as_array().expect("ingress should be array");
+        assert_eq!(ingress.len(), 2);
+        assert_eq!(ingress[0]["fromEntities"][0], "world");
+
+        // ingress: second rule allows from all endpoints in namespace
+        let from_eps = ingress[1]["fromEndpoints"]
+            .as_array()
+            .expect("fromEndpoints should be array");
+        assert_eq!(from_eps.len(), 1);
+        assert!(from_eps[0].is_object());
+
+        // egress: allows to all endpoints in namespace
+        let egress = cnp["egress"].as_array().expect("egress should be array");
+        assert_eq!(egress.len(), 1);
+        let to_eps = egress[0]["toEndpoints"]
+            .as_array()
+            .expect("toEndpoints should be array");
+        assert_eq!(to_eps.len(), 1);
+        assert!(to_eps[0].is_object());
+    }
 }
