@@ -180,6 +180,7 @@ mod tests {
                     env: vec![],
                     flags: vec![],
                     ports: vec![],
+                    kata: None,
                 }],
                 files: vec![],
             },

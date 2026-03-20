@@ -202,6 +202,21 @@ pub struct ChallengeContainer {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[garde(dive)]
     pub ports: Vec<ContainerPort>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[garde(skip)]
+    pub kata: Option<ContainerKata>,
+}
+
+/// Kata Containers runtime configuration.
+#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct ContainerKata {
+    /// Custom kernel path for the Kata hypervisor.
+    /// Maps to annotation `io.katacontainers.config.hypervisor.kernel`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kernel: Option<String>,
+    /// Run the container in privileged mode (`securityContext.privileged: true`).
+    #[serde(default)]
+    pub privileged: bool,
 }
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq)]

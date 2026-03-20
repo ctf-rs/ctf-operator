@@ -43,6 +43,10 @@ pub struct InstanceDeploymentConfig {
     pub image_pull_secret: Option<ImagePullSecretConfig>,
     #[serde(default, rename = "nodeSelector")]
     pub node_selector: BTreeMap<String, String>,
+    /// Default runtimeClassName for instance pods (e.g. "gvisor").
+    /// Overridden to "kata" when a container sets the kata field.
+    #[serde(default, rename = "runtimeClassName")]
+    pub runtime_class_name: Option<String>,
 }
 
 impl Default for InstanceDeploymentConfig {
@@ -53,6 +57,7 @@ impl Default for InstanceDeploymentConfig {
             use_host_port: false,
             image_pull_secret: None,
             node_selector: BTreeMap::new(),
+            runtime_class_name: None,
         }
     }
 }

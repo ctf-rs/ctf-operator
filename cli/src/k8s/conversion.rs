@@ -36,6 +36,7 @@ pub fn challenge_from_core(
             env: container.env.clone(),
             flags: container.flags.clone(),
             ports: container.ports.clone(),
+            kata: container.kata.clone(),
         })
         .collect::<Vec<_>>();
 

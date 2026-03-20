@@ -1075,9 +1075,31 @@ async fn ensure_deployment(
                         .collect(),
                 )
             },
+            security_context: container.kata.as_ref().filter(|k| k.privileged).map(|_| {
+                k8s_openapi::api::core::v1::SecurityContext {
+                    privileged: Some(true),
+                    ..Default::default()
+                }
+            }),
             ..Default::default()
         })
         .collect::<Vec<_>>();
+
+    // Collect kata configuration from containers
+    let has_kata = challenge.spec.containers.iter().any(|c| c.kata.is_some());
+    let kata_kernel = challenge
+        .spec
+        .containers
+        .iter()
+        .find_map(|c| c.kata.as_ref().and_then(|k| k.kernel.clone()));
+
+    let mut pod_annotations = BTreeMap::new();
+    if let Some(kernel_path) = &kata_kernel {
+        pod_annotations.insert(
+            "io.katacontainers.config.hypervisor.kernel".to_string(),
+            kernel_path.clone(),
+        );
+    }
 
     let deployment = Deployment {
         metadata: managed_resource_metadata(name.clone(), namespace.clone(), labels.clone()),
@@ -1089,11 +1111,21 @@ async fn ensure_deployment(
             },
             template: PodTemplateSpec {
                 metadata: Some(ObjectMeta {
-                    labels: Some(labels),
+                    labels: Some(labels.clone()),
+                    annotations: if pod_annotations.is_empty() {
+                        None
+                    } else {
+                        Some(pod_annotations)
+                    },
                     ..Default::default()
                 }),
                 spec: Some(PodSpec {
                     containers,
+                    runtime_class_name: if has_kata {
+                        Some("kata".to_string())
+                    } else {
+                        deployment_config.runtime_class_name.clone()
+                    },
                     image_pull_secrets: state
                         .config
                         .runtime_config
@@ -1107,16 +1139,23 @@ async fn ensure_deployment(
                             }]
                         }),
                     node_selector: {
-                        let ns = &state
+                        let mut ns = state
                             .config
                             .runtime_config
                             .instance
                             .deployment
-                            .node_selector;
+                            .node_selector
+                            .clone();
+                        if has_kata {
+                            ns.insert(
+                                "node-role.kubernetes.io/insecure-plane".to_string(),
+                                String::new(),
+                            );
+                        }
                         if ns.is_empty() {
                             None
                         } else {
-                            Some(ns.clone())
+                            Some(ns)
                         }
                     },
                     ..Default::default()
@@ -1427,6 +1466,7 @@ mod tests {
                     env: vec![],
                     flags: vec![],
                     ports: vec![],
+                    kata: None,
                 }],
                 files: vec![],
             },
@@ -1576,6 +1616,7 @@ mod tests {
                     env: None,
                 },
             ],
+            kata: None,
         }];
 
         let names = exposed_port_names(&challenge);
@@ -1599,6 +1640,7 @@ mod tests {
                     port_type: ctf_cli::models::ChallengePortType::HTTP,
                     env: None,
                 }],
+                kata: None,
             },
             ctf_cli::k8s::ChallengeContainer {
                 name: "svc-b".to_string(),
@@ -1612,6 +1654,7 @@ mod tests {
                     port_type: ctf_cli::models::ChallengePortType::HTTP,
                     env: None,
                 }],
+                kata: None,
             },
         ];
 

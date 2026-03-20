@@ -73,6 +73,21 @@ spec:
                         type: array
                       image:
                         type: string
+                      kata:
+                        description: Kata Containers runtime configuration.
+                        nullable: true
+                        properties:
+                          kernel:
+                            description: |-
+                              Custom kernel path for the Kata hypervisor.
+                              Maps to annotation `io.katacontainers.config.hypervisor.kernel`.
+                            nullable: true
+                            type: string
+                          privileged:
+                            default: false
+                            description: "Run the container in privileged mode (`securityContext.privileged: true`)."
+                            type: boolean
+                        type: object
                       name:
                         type: string
                       ports:

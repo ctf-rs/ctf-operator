@@ -71,6 +71,9 @@ instance:
   deployment:
     replicas: 1
     imagePullPolicy: ""
+    # Default runtimeClassName for instance pods (e.g. "gvisor").
+    # Overridden to "kata" when a container sets the kata field.
+    runtimeClassName: ""
     # Secret to copy into instance namespaces for pulling challenge images.
     # Specify the name and source namespace of the Secret.
     imagePullSecret: {}

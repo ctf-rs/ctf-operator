@@ -209,6 +209,7 @@ fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
                 env: container.env.clone(),
                 flags: container.flags.clone(),
                 ports: container.ports.clone(),
+                kata: container.kata.clone(),
             })
             .collect(),
     };
@@ -283,6 +284,7 @@ mod tests {
                         port_type: ctf_cli::models::ChallengePortType::HTTP,
                         env: None,
                     }],
+                    kata: None,
                 }],
                 files: vec![ChallengeFileRef::S3 {
                     bucket: "files".to_string(),

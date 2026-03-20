@@ -61,6 +61,8 @@ pub struct ChallengeContainer {
     pub flags: Vec<crate::models::ContainerFlag>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ports: Vec<crate::models::ContainerPort>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kata: Option<crate::models::ContainerKata>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
