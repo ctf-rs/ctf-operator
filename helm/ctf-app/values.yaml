@@ -58,6 +58,11 @@ oauth:
   # Use an existing Secret for clientSecret.
   existingSecret: ""
   clientSecretKey: clientSecret
+  # OIDC role name that grants player (competitor) access to non-public CTFs.
+  playerRole: ""
+  # OIDC role name that grants admin access. Admin submissions are excluded
+  # from the scoreboard.
+  adminRole: ""
 
 session:
   cookieName: ctf_app_session

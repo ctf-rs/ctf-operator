@@ -9,7 +9,7 @@ use tracing::warn;
 
 use crate::{
     db,
-    helpers::{challenge_route, extract_client_ip, get_ctf_schedule, is_ctf_ended},
+    helpers::{challenge_route, extract_client_ip, get_ctf_schedule, is_admin, is_ctf_ended},
     k8s::{
         challenges,
         helpers::is_instance_owned_by_user,
@@ -45,6 +45,7 @@ pub async fn submit_flag(
 
     let ctf_name = &state.config.ctf_name;
     let client_ip = extract_client_ip(state.config.behind_reverse_proxy, &headers, socket_addr);
+    let admin_submission = is_admin(&user, &state.config);
 
     let submitted_flag_trimmed = submitted_flag.trim();
 
@@ -84,6 +85,7 @@ pub async fn submit_flag(
             &flag_name,
             submitted_flag_trimmed,
             false,
+            admin_submission,
             client_ip.as_deref(),
         )
         .await;
@@ -103,6 +105,7 @@ pub async fn submit_flag(
             &flag_name,
             submitted_flag_trimmed,
             false,
+            admin_submission,
             client_ip.as_deref(),
         )
         .await;
@@ -119,6 +122,7 @@ pub async fn submit_flag(
             &flag_name,
             submitted_flag_trimmed,
             false,
+            admin_submission,
             client_ip.as_deref(),
         )
         .await;
@@ -209,6 +213,7 @@ pub async fn submit_flag(
         accepted,
         cheated,
         cheated_instance_flag_id,
+        admin_submission,
         client_ip.as_deref(),
     )
     .await
@@ -303,6 +308,7 @@ async fn persist_flag_submission(
     flag_name: &str,
     submitted_flag: &str,
     accepted: bool,
+    admin_submission: bool,
     ip_address: Option<&str>,
 ) {
     if let Err(err) = db::add_flag_submission(
@@ -315,6 +321,7 @@ async fn persist_flag_submission(
         accepted,
         false,
         None,
+        admin_submission,
         ip_address,
     )
     .await

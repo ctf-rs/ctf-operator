@@ -6,6 +6,7 @@ use std::{
 use axum::http::HeaderMap;
 use kube::ResourceExt;
 
+use crate::config::AppConfig;
 use crate::db::{ChallengeView, User};
 use crate::state::AppState;
 
@@ -43,25 +44,39 @@ pub fn now_unix_seconds() -> u64 {
 
 /// Check whether `user` is allowed to see `challenge` based on the CTF's
 /// public flag and the user's role list.
-pub fn has_ctf_access(user: &User, challenge: &ChallengeView) -> bool {
+///
+/// Access is granted when:
+/// - the CTF is public, **or**
+/// - the user holds the configured admin role, **or**
+/// - the user holds the configured player role.
+pub fn has_ctf_access(user: &User, challenge: &ChallengeView, config: &AppConfig) -> bool {
     if challenge.ctf_public {
         return true;
     }
 
-    let namespace = challenge.namespace.to_ascii_lowercase();
-    let ctf_name = challenge.ctf_name.to_ascii_lowercase();
+    if is_admin(user, config) {
+        return true;
+    }
 
-    let required_roles = [
-        format!("ctf:{namespace}:{ctf_name}:player"),
-        format!("ctf:{namespace}:{ctf_name}:admin"),
-        "ctf:admin".to_string(),
-    ];
-
-    user.roles.iter().any(|role| {
-        required_roles
+    if let Some(ref player_role) = config.player_role {
+        return user
+            .roles
             .iter()
-            .any(|required| role.eq_ignore_ascii_case(required))
-    })
+            .any(|r| r.eq_ignore_ascii_case(player_role));
+    }
+
+    false
+}
+
+/// Whether the user holds the configured admin role.
+pub fn is_admin(user: &User, config: &AppConfig) -> bool {
+    if let Some(ref admin_role) = config.admin_role {
+        return user
+            .roles
+            .iter()
+            .any(|r| r.eq_ignore_ascii_case(admin_role));
+    }
+    false
 }
 
 /// Extract client IP address based on configuration.

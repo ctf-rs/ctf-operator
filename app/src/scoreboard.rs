@@ -212,7 +212,7 @@ async fn get_flag_configs(state: &AppState) -> HashMap<(String, String), (u32, u
     configs
 }
 
-/// Get solve counts per flag from database
+/// Get solve counts per flag from database (excludes admin submissions)
 async fn get_flag_solve_counts(
     db: &DatabaseConnection,
     ctf_name: &str,
@@ -224,6 +224,7 @@ async fn get_flag_solve_counts(
         .column_as(Expr::cust("COUNT(DISTINCT user_id)"), "solve_count")
         .filter(flag_submissions::Column::CtfName.eq(ctf_name))
         .filter(flag_submissions::Column::Accepted.eq(true))
+        .filter(flag_submissions::Column::AdminSubmission.eq(false))
         .group_by(flag_submissions::Column::ChallengeName)
         .group_by(flag_submissions::Column::FlagName)
         .into_tuple()
@@ -236,13 +237,13 @@ async fn get_flag_solve_counts(
         .collect())
 }
 
-/// Calculate user scores based on their solves
+/// Calculate user scores based on their solves (excludes admin submissions)
 async fn calculate_user_scores(
     db: &DatabaseConnection,
     ctf_name: &str,
     flag_scores: &HashMap<FlagKey, FlagScore>,
 ) -> anyhow::Result<HashMap<UserScoreKey, UserScore>> {
-    // Get all accepted submissions with user info
+    // Get all accepted submissions with user info (excluding admin submissions)
     let rows = db
         .query_all_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
@@ -255,7 +256,7 @@ async fn calculate_user_scores(
                 s.created_at
             FROM flag_submissions s
             JOIN users u ON u.id = s.user_id
-            WHERE s.ctf_name = $1 AND s.accepted = true
+            WHERE s.ctf_name = $1 AND s.accepted = true AND s.admin_submission = false
             ORDER BY s.user_id, s.challenge_name, s.flag_name, s.created_at
             "#,
             [ctf_name.into()],

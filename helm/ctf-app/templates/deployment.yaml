@@ -106,6 +106,14 @@ spec:
             {{- end }}
             - name: BEHIND_REVERSE_PROXY
               value: {{ .Values.behindReverseProxy | default false | quote }}
+            {{- if .Values.oauth.playerRole }}
+            - name: OIDC_PLAYER_ROLE
+              value: {{ .Values.oauth.playerRole | quote }}
+            {{- end }}
+            {{- if .Values.oauth.adminRole }}
+            - name: OIDC_ADMIN_ROLE
+              value: {{ .Values.oauth.adminRole | quote }}
+            {{- end }}
             {{- if or .Values.discord.linkSecret .Values.discord.existingSecret }}
             - name: DISCORD_LINK_SECRET
             {{- if .Values.discord.existingSecret }}

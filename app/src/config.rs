@@ -28,6 +28,14 @@ pub struct AppConfig {
     /// When set, the app POSTs a signed notification after a successful account link
     /// so the bot can automatically assign the competitor role.
     pub discord_bot_callback_url: Option<String>,
+    /// OIDC/JWT role name that grants admin access.  Admins can always view
+    /// non-public CTFs, and their flag submissions are excluded from the
+    /// scoreboard.
+    pub admin_role: Option<String>,
+    /// OIDC/JWT role name that grants player (competitor) access to non-public
+    /// CTFs.  When a CTF is not public, a user must hold this role (or the
+    /// admin role) to view challenges.
+    pub player_role: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -123,6 +131,15 @@ impl AppConfig {
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty());
 
+        let admin_role = std::env::var("OIDC_ADMIN_ROLE")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        let player_role = std::env::var("OIDC_PLAYER_ROLE")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+
         Ok(Self {
             bind_addr,
             database_url,
@@ -148,6 +165,8 @@ impl AppConfig {
             behind_reverse_proxy,
             discord_link_secret,
             discord_bot_callback_url,
+            admin_role,
+            player_role,
         })
     }
 }

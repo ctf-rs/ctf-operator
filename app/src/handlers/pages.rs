@@ -89,7 +89,7 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
 
     let challenges = challenges
         .into_iter()
-        .filter(|challenge| has_ctf_access(&user, challenge))
+        .filter(|challenge| has_ctf_access(&user, challenge, &state.config))
         .collect::<Vec<_>>();
 
     let solved_keys = db::list_solved_challenges_for_user(&state.db, user.id)
@@ -247,7 +247,7 @@ pub async fn challenge_page(
         return (axum::http::StatusCode::NOT_FOUND, "challenge not found").into_response();
     };
 
-    if !has_ctf_access(&user, &challenge) {
+    if !has_ctf_access(&user, &challenge, &state.config) {
         return (axum::http::StatusCode::FORBIDDEN, "forbidden").into_response();
     }
 

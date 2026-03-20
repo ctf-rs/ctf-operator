@@ -306,7 +306,7 @@ pub async fn instance_state(
             .into_response();
     };
 
-    if !has_ctf_access(&user, &challenge) {
+    if !has_ctf_access(&user, &challenge, &state.config) {
         return (axum::http::StatusCode::FORBIDDEN, "forbidden").into_response();
     }
 

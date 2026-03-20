@@ -85,6 +85,7 @@ pub async fn migrate(db: &DatabaseConnection) -> Result<()> {
             accepted BOOLEAN NOT NULL,
             cheated BOOLEAN NOT NULL DEFAULT false,
             cheated_instance_flag_id BIGINT REFERENCES instance_flags(id) ON DELETE SET NULL,
+            admin_submission BOOLEAN NOT NULL DEFAULT false,
             ip_address TEXT,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )"#,
@@ -128,6 +129,15 @@ pub async fn migrate(db: &DatabaseConnection) -> Result<()> {
             ip_address TEXT,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )"#,
+    )
+    .await?;
+
+    // -- additive migrations (safe to re-run) --
+
+    // admin_submission column on flag_submissions
+    db.execute_unprepared(
+        r#"ALTER TABLE flag_submissions
+           ADD COLUMN IF NOT EXISTS admin_submission BOOLEAN NOT NULL DEFAULT false"#,
     )
     .await?;
 
