@@ -56,6 +56,8 @@ pub struct ChallengeContainer {
     pub name: String,
     pub image: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub env: Vec<crate::models::ContainerEnv>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub flags: Vec<crate::models::ContainerFlag>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ports: Vec<crate::models::ContainerPort>,

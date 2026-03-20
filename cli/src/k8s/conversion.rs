@@ -33,6 +33,7 @@ pub fn challenge_from_core(
         .map(|container| ChallengeContainer {
             name: container.name.clone(),
             image: format!("{registry_base}/{}:{}", challenge.name, container.name),
+            env: container.env.clone(),
             flags: container.flags.clone(),
             ports: container.ports.clone(),
         })

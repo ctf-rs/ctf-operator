@@ -206,6 +206,7 @@ fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
                 image: ContainerImage::Image {
                     image: container.image.clone(),
                 },
+                env: container.env.clone(),
                 flags: container.flags.clone(),
                 ports: container.ports.clone(),
             })
@@ -270,6 +271,7 @@ mod tests {
                 containers: vec![ChallengeContainer {
                     name: "svc".to_string(),
                     image: "repo/svc:latest".to_string(),
+                    env: vec![],
                     flags: vec![ctf_cli::models::ContainerFlag {
                         name: "flag-1".to_string(),
                         env: "FLAG".to_string(),

@@ -177,6 +177,7 @@ mod tests {
                 containers: vec![ctf_cli::k8s::ChallengeContainer {
                     name: "svc".to_string(),
                     image: "repo/svc:latest".to_string(),
+                    env: vec![],
                     flags: vec![],
                     ports: vec![],
                 }],

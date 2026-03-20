@@ -195,6 +195,9 @@ pub struct ChallengeContainer {
     pub image: ContainerImage,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[garde(dive)]
+    pub env: Vec<ContainerEnv>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[garde(dive)]
     pub flags: Vec<ContainerFlag>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[garde(dive)]
@@ -206,6 +209,14 @@ pub struct ChallengeContainer {
 pub enum ContainerImage {
     Image { image: String },
     Dockerfile { path: PathBuf },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, Eq, garde::Validate)]
+pub struct ContainerEnv {
+    #[garde(length(min = 1))]
+    pub name: String,
+    #[garde(skip)]
+    pub value: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, Eq, garde::Validate)]

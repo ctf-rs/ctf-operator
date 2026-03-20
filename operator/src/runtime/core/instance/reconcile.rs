@@ -1036,6 +1036,13 @@ async fn ensure_deployment(
                         });
                     }
                 }
+                for container_env in &container.env {
+                    env.push(k8s_openapi::api::core::v1::EnvVar {
+                        name: container_env.name.clone(),
+                        value: Some(container_env.value.clone()),
+                        ..Default::default()
+                    });
+                }
                 if env.is_empty() {
                     None
                 } else {
@@ -1417,6 +1424,7 @@ mod tests {
                 containers: vec![ctf_cli::k8s::ChallengeContainer {
                     name: "svc".to_string(),
                     image: "repo/svc:latest".to_string(),
+                    env: vec![],
                     flags: vec![],
                     ports: vec![],
                 }],
@@ -1550,6 +1558,7 @@ mod tests {
         challenge.spec.containers = vec![ctf_cli::k8s::ChallengeContainer {
             name: "svc".to_string(),
             image: "repo/svc:latest".to_string(),
+            env: vec![],
             flags: vec![],
             ports: vec![
                 ctf_cli::models::ContainerPort {
@@ -1581,6 +1590,7 @@ mod tests {
             ctf_cli::k8s::ChallengeContainer {
                 name: "svc-a".to_string(),
                 image: "repo/svc-a:latest".to_string(),
+                env: vec![],
                 flags: vec![],
                 ports: vec![ctf_cli::models::ContainerPort {
                     name: "http".to_string(),
@@ -1593,6 +1603,7 @@ mod tests {
             ctf_cli::k8s::ChallengeContainer {
                 name: "svc-b".to_string(),
                 image: "repo/svc-b:latest".to_string(),
+                env: vec![],
                 flags: vec![],
                 ports: vec![ctf_cli::models::ContainerPort {
                     name: "http".to_string(),

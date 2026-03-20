@@ -42,6 +42,19 @@ spec:
                   default: []
                   items:
                     properties:
+                      env:
+                        items:
+                          properties:
+                            name:
+                              minLength: 1
+                              type: string
+                            value:
+                              type: string
+                          required:
+                            - name
+                            - value
+                          type: object
+                        type: array
                       flags:
                         items:
                           properties:
