@@ -13,7 +13,10 @@ use tracing::warn;
 
 use crate::{
     db,
-    helpers::{get_ctf_schedule, has_ctf_access, is_ctf_ended, is_ctf_open, seconds_until_time},
+    helpers::{
+        get_ctf_schedule, has_ctf_access, has_ctf_level_access, is_ctf_ended, is_ctf_open,
+        is_ctf_public, seconds_until_time,
+    },
     k8s::{
         challenges,
         helpers::{
@@ -63,6 +66,22 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         });
         return Html(html).into_response();
     };
+
+    // Gate on non-public CTF access
+    let ctf_public = is_ctf_public(&state);
+    if !has_ctf_level_access(&user, ctf_public, &state.config) {
+        let user_label = user
+            .name
+            .clone()
+            .or(user.email.clone())
+            .unwrap_or_else(|| user.sub.clone());
+        let html = views::render_to_html(move || {
+            leptos::prelude::view! {
+                <views::AccessDeniedPage ctf_title=ctf_title user_label=user_label/>
+            }
+        });
+        return Html(html).into_response();
+    }
 
     // Gate on CTF open status
     let schedule = get_ctf_schedule(&state);
@@ -410,6 +429,22 @@ pub async fn scoreboard(
 ) -> Response {
     let ctf_name = state.config.ctf_name.clone();
     let ctf_title = crate::helpers::get_ctf_full_name(&state);
+
+    // Gate on non-public CTF access
+    let ctf_public = is_ctf_public(&state);
+    if !has_ctf_level_access(&user, ctf_public, &state.config) {
+        let user_label = user
+            .name
+            .clone()
+            .or(user.email.clone())
+            .unwrap_or_else(|| user.sub.clone());
+        let html = views::render_to_html(move || {
+            leptos::prelude::view! {
+                <views::AccessDeniedPage ctf_title=ctf_title user_label=user_label/>
+            }
+        });
+        return Html(html).into_response();
+    }
 
     // Gate on CTF open status
     let schedule = get_ctf_schedule(&state);

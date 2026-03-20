@@ -4,7 +4,8 @@ mod pages;
 mod scripts;
 
 pub use pages::{
-    ChallengeDetailPage, CtfNotOpenPage, IndexPage, LoginPage, ScoreboardHiddenPage, ScoreboardPage,
+    AccessDeniedPage, ChallengeDetailPage, CtfNotOpenPage, IndexPage, LoginPage,
+    ScoreboardHiddenPage, ScoreboardPage,
 };
 
 use ctf_cli::ChallengeCategory;

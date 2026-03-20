@@ -1,155 +1,147 @@
 {
-  "realm": "ctf",
-  "enabled": true,
-  "displayName": "CTF Local",
-  "registrationAllowed": false,
-  "users": [
-    {
-      "username": "player",
-      "enabled": true,
-      "emailVerified": true,
-      "firstName": "CTF",
-      "lastName": "Player",
-      "email": "player@example.local",
-      "credentials": [
-        { "type": "password", "value": "player", "temporary": false }
-      ],
-      "realmRoles": ["offline_access", "uma_authorization"]
+    "realm": "ctf",
+    "enabled": true,
+    "displayName": "CTF Local",
+    "registrationAllowed": false,
+    "roles": {
+        "client": {
+            "ctf-app": [
+                { "name": "ctf-admin", "description": "CTF administrator" },
+                { "name": "ctf-player", "description": "CTF competitor" }
+            ]
+        }
     },
-    {
-      "username": "test1",
-      "enabled": true,
-      "emailVerified": true,
-      "firstName": "Test",
-      "lastName": "User 1",
-      "email": "test1@ctf.local",
-      "credentials": [
-        { "type": "password", "value": "test1", "temporary": false }
-      ],
-      "realmRoles": ["offline_access", "uma_authorization"]
-    },
-    {
-      "username": "test2",
-      "enabled": true,
-      "emailVerified": true,
-      "firstName": "Test",
-      "lastName": "User 2",
-      "email": "test2@ctf.local",
-      "credentials": [
-        { "type": "password", "value": "test2", "temporary": false }
-      ],
-      "realmRoles": ["offline_access", "uma_authorization"]
-    },
-    {
-      "username": "test3",
-      "enabled": true,
-      "emailVerified": true,
-      "firstName": "Test",
-      "lastName": "User 3",
-      "email": "test3@ctf.local",
-      "credentials": [
-        { "type": "password", "value": "test3", "temporary": false }
-      ],
-      "realmRoles": ["offline_access", "uma_authorization"]
-    },
-    {
-      "username": "test4",
-      "enabled": true,
-      "emailVerified": true,
-      "firstName": "Test",
-      "lastName": "User 4",
-      "email": "test4@ctf.local",
-      "credentials": [
-        { "type": "password", "value": "test4", "temporary": false }
-      ],
-      "realmRoles": ["offline_access", "uma_authorization"]
-    },
-    {
-      "username": "test5",
-      "enabled": true,
-      "emailVerified": true,
-      "firstName": "Test",
-      "lastName": "User 5",
-      "email": "test5@ctf.local",
-      "credentials": [
-        { "type": "password", "value": "test5", "temporary": false }
-      ],
-      "realmRoles": ["offline_access", "uma_authorization"]
-    },
-    {
-      "username": "test6",
-      "enabled": true,
-      "emailVerified": true,
-      "firstName": "Test",
-      "lastName": "User 6",
-      "email": "test6@ctf.local",
-      "credentials": [
-        { "type": "password", "value": "test6", "temporary": false }
-      ],
-      "realmRoles": ["offline_access", "uma_authorization"]
-    },
-    {
-      "username": "test7",
-      "enabled": true,
-      "emailVerified": true,
-      "firstName": "Test",
-      "lastName": "User 7",
-      "email": "test7@ctf.local",
-      "credentials": [
-        { "type": "password", "value": "test7", "temporary": false }
-      ],
-      "realmRoles": ["offline_access", "uma_authorization"]
-    },
-    {
-      "username": "test8",
-      "enabled": true,
-      "emailVerified": true,
-      "firstName": "Test",
-      "lastName": "User 8",
-      "email": "test8@ctf.local",
-      "credentials": [
-        { "type": "password", "value": "test8", "temporary": false }
-      ],
-      "realmRoles": ["offline_access", "uma_authorization"]
-    },
-    {
-      "username": "test9",
-      "enabled": true,
-      "emailVerified": true,
-      "firstName": "Test",
-      "lastName": "User 9",
-      "email": "test9@ctf.local",
-      "credentials": [
-        { "type": "password", "value": "test9", "temporary": false }
-      ],
-      "realmRoles": ["offline_access", "uma_authorization"]
-    },
-    {
-      "username": "test10",
-      "enabled": true,
-      "emailVerified": true,
-      "firstName": "Test",
-      "lastName": "User 10",
-      "email": "test10@ctf.local",
-      "credentials": [
-        { "type": "password", "value": "test10", "temporary": false }
-      ],
-      "realmRoles": ["offline_access", "uma_authorization"]
-    }
-  ],
-  "clients": [
-    {
-      "clientId": "ctf-app",
-      "name": "ctf-app",
-      "enabled": true,
-      "protocol": "openid-connect",
-      "publicClient": false,
-      "secret": "ctf-app-secret",
-      "standardFlowEnabled": true,
-      "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": false,
-      "redirectUris": ["http://localhost:8090/oauth/callback"],
-      "webOrigins": ["http://localhost:8090"]
-    }
-  ]
+    "groups": [
+        {
+            "name": "admin",
+            "clientRoles": {
+                "ctf-app": ["ctf-admin"]
+            }
+        },
+        {
+            "name": "scc2026-quals",
+            "clientRoles": {
+                "ctf-app": ["ctf-player"]
+            }
+        }
+    ],
+    "users": [
+        {
+            "username": "player",
+            "enabled": true,
+            "emailVerified": true,
+            "firstName": "CTF",
+            "lastName": "Player",
+            "email": "player@example.local",
+            "credentials": [{ "type": "password", "value": "player", "temporary": false }],
+            "groups": ["scc2026-quals"]
+        },
+        {
+            "username": "test1",
+            "enabled": true,
+            "emailVerified": true,
+            "firstName": "Test",
+            "lastName": "User 1",
+            "email": "test1@ctf.local",
+            "credentials": [{ "type": "password", "value": "test1", "temporary": false }],
+            "groups": ["admin"]
+        },
+        {
+            "username": "test2",
+            "enabled": true,
+            "emailVerified": true,
+            "firstName": "Test",
+            "lastName": "User 2",
+            "email": "test2@ctf.local",
+            "credentials": [{ "type": "password", "value": "test2", "temporary": false }],
+            "groups": ["scc2026-quals"]
+        },
+        {
+            "username": "test3",
+            "enabled": true,
+            "emailVerified": true,
+            "firstName": "Test",
+            "lastName": "User 3",
+            "email": "test3@ctf.local",
+            "credentials": [{ "type": "password", "value": "test3", "temporary": false }]
+        },
+        {
+            "username": "test4",
+            "enabled": true,
+            "emailVerified": true,
+            "firstName": "Test",
+            "lastName": "User 4",
+            "email": "test4@ctf.local",
+            "credentials": [{ "type": "password", "value": "test4", "temporary": false }]
+        },
+        {
+            "username": "test5",
+            "enabled": true,
+            "emailVerified": true,
+            "firstName": "Test",
+            "lastName": "User 5",
+            "email": "test5@ctf.local",
+            "credentials": [{ "type": "password", "value": "test5", "temporary": false }]
+        },
+        {
+            "username": "test6",
+            "enabled": true,
+            "emailVerified": true,
+            "firstName": "Test",
+            "lastName": "User 6",
+            "email": "test6@ctf.local",
+            "credentials": [{ "type": "password", "value": "test6", "temporary": false }]
+        },
+        {
+            "username": "test7",
+            "enabled": true,
+            "emailVerified": true,
+            "firstName": "Test",
+            "lastName": "User 7",
+            "email": "test7@ctf.local",
+            "credentials": [{ "type": "password", "value": "test7", "temporary": false }]
+        },
+        {
+            "username": "test8",
+            "enabled": true,
+            "emailVerified": true,
+            "firstName": "Test",
+            "lastName": "User 8",
+            "email": "test8@ctf.local",
+            "credentials": [{ "type": "password", "value": "test8", "temporary": false }]
+        },
+        {
+            "username": "test9",
+            "enabled": true,
+            "emailVerified": true,
+            "firstName": "Test",
+            "lastName": "User 9",
+            "email": "test9@ctf.local",
+            "credentials": [{ "type": "password", "value": "test9", "temporary": false }]
+        },
+        {
+            "username": "test10",
+            "enabled": true,
+            "emailVerified": true,
+            "firstName": "Test",
+            "lastName": "User 10",
+            "email": "test10@ctf.local",
+            "credentials": [{ "type": "password", "value": "test10", "temporary": false }]
+        }
+    ],
+    "clients": [
+        {
+            "clientId": "ctf-app",
+            "name": "ctf-app",
+            "enabled": true,
+            "protocol": "openid-connect",
+            "publicClient": false,
+            "secret": "ctf-app-secret",
+            "standardFlowEnabled": true,
+            "directAccessGrantsEnabled": false,
+            "serviceAccountsEnabled": false,
+            "redirectUris": ["http://localhost:8090/oauth/callback"],
+            "webOrigins": ["http://localhost:8090"]
+        }
+    ]
 }

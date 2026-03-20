@@ -3,6 +3,40 @@ use leptos::prelude::*;
 use super::super::layout::PageShell;
 
 // ---------------------------------------------------------------------------
+// Access denied page (non-public CTF, user lacks role)
+// ---------------------------------------------------------------------------
+
+#[component]
+pub fn AccessDeniedPage(ctf_title: String, user_label: String) -> impl IntoView {
+    view! {
+        <PageShell title=ctf_title.clone()>
+            <header class="topbar">
+                <div class="nav-left">
+                    <a class="ctf-title" href="/">{ctf_title.clone()}</a>
+                </div>
+                <div class="nav-center"></div>
+                <div class="nav-right">
+                    <span class="muted">{user_label}</span>
+                    <form method="post" action="/logout" style="display:inline-block;">
+                        <button class="btn secondary small" type="submit">"Logout"</button>
+                    </form>
+                </div>
+            </header>
+
+            <div style="text-align:center;margin-top:6rem;">
+                <h1>"Access Denied"</h1>
+                <p class="muted" style="margin-top:1.5rem;">
+                    "You do not have permission to access " {ctf_title} "."
+                </p>
+                <p class="muted" style="margin-top:0.5rem;">
+                    "If you believe this is an error, please contact an organiser."
+                </p>
+            </div>
+        </PageShell>
+    }
+}
+
+// ---------------------------------------------------------------------------
 // CTF not-yet-open page (with optional countdown timer)
 // ---------------------------------------------------------------------------
 

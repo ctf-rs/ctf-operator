@@ -42,6 +42,39 @@ pub fn now_unix_seconds() -> u64 {
         .unwrap_or(0)
 }
 
+/// Whether the CTF is public (visible to all authenticated users).
+pub fn is_ctf_public(state: &AppState) -> bool {
+    state
+        .ctfs
+        .state()
+        .into_iter()
+        .find(|c| c.name_any() == state.config.ctf_name)
+        .map(|c| c.spec.public)
+        .unwrap_or(false)
+}
+
+/// Check whether `user` is allowed to access the CTF at all.
+///
+/// Access is granted when:
+/// - the CTF is public, **or**
+/// - the user holds the configured admin role, **or**
+/// - the user holds the configured player role.
+pub fn has_ctf_level_access(user: &User, ctf_public: bool, config: &AppConfig) -> bool {
+    if ctf_public {
+        return true;
+    }
+    if is_admin(user, config) {
+        return true;
+    }
+    if let Some(ref player_role) = config.player_role {
+        return user
+            .roles
+            .iter()
+            .any(|r| r.eq_ignore_ascii_case(player_role));
+    }
+    false
+}
+
 /// Check whether `user` is allowed to see `challenge` based on the CTF's
 /// public flag and the user's role list.
 ///
@@ -50,22 +83,7 @@ pub fn now_unix_seconds() -> u64 {
 /// - the user holds the configured admin role, **or**
 /// - the user holds the configured player role.
 pub fn has_ctf_access(user: &User, challenge: &ChallengeView, config: &AppConfig) -> bool {
-    if challenge.ctf_public {
-        return true;
-    }
-
-    if is_admin(user, config) {
-        return true;
-    }
-
-    if let Some(ref player_role) = config.player_role {
-        return user
-            .roles
-            .iter()
-            .any(|r| r.eq_ignore_ascii_case(player_role));
-    }
-
-    false
+    has_ctf_level_access(user, challenge.ctf_public, config)
 }
 
 /// Whether the user holds the configured admin role.
