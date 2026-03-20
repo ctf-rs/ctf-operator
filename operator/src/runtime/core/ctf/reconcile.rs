@@ -67,7 +67,7 @@ async fn ensure_reservation_set(
         metadata: ObjectMeta {
             name: Some(name.clone()),
             namespace: Some(namespace.to_owned()),
-            labels: Some(labels),
+            labels: Some(labels.clone()),
             ..Default::default()
         },
         spec: ReservationSetSpec {
@@ -76,6 +76,17 @@ async fn ensure_reservation_set(
         },
         status: None,
     };
+
+    // Check cache: skip API call if reservation set already exists with matching spec and labels
+    let rs_ref = kube::runtime::reflector::ObjectRef::<ReservationSet>::new(&name).within(namespace);
+    if let Some(cached) = state.reservation_sets.get(&rs_ref) {
+        if cached.metadata.deletion_timestamp.is_none()
+            && cached.spec == resource.spec
+            && cached.metadata.labels.as_ref() == Some(&labels)
+        {
+            return Ok(());
+        }
+    }
 
     Api::<ReservationSet>::namespaced(state.client.clone(), namespace)
         .patch(

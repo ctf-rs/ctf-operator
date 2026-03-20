@@ -775,6 +775,18 @@ async fn ensure_target_namespace(
         MANAGED_BY_VALUE.to_string(),
     );
 
+    // Check cache: skip API call if namespace already exists with correct labels
+    let ns_ref = ObjectRef::<Namespace>::new(target_namespace);
+    if let Some(cached) = state.namespaces.get(&ns_ref) {
+        if cached.metadata.deletion_timestamp.is_none() {
+            if let Some(cached_labels) = &cached.metadata.labels {
+                if labels.iter().all(|(k, v)| cached_labels.get(k) == Some(v)) {
+                    return Ok(());
+                }
+            }
+        }
+    }
+
     let namespace = Namespace {
         metadata: ObjectMeta {
             name: Some(target_namespace.to_owned()),
@@ -823,10 +835,14 @@ async fn ensure_image_pull_secret(
     })?;
 
     // Build a copy with only the data we need
+    let mut labels = BTreeMap::new();
+    labels.insert(MANAGED_BY_LABEL.to_string(), MANAGED_BY_VALUE.to_string());
+
     let copy = Secret {
         metadata: ObjectMeta {
             name: Some(cfg.name.clone()),
             namespace: Some(target_namespace.to_owned()),
+            labels: Some(labels),
             ..Default::default()
         },
         type_: source.type_.clone(),
@@ -834,6 +850,17 @@ async fn ensure_image_pull_secret(
         string_data: source.string_data.clone(),
         ..Default::default()
     };
+
+    // Check cache: skip if the managed copy already has matching data
+    let secret_ref = ObjectRef::<Secret>::new(&cfg.name).within(target_namespace);
+    if let Some(cached) = state.managed_secrets.get(&secret_ref) {
+        if cached.metadata.deletion_timestamp.is_none()
+            && cached.type_ == copy.type_
+            && cached.data == copy.data
+        {
+            return Ok(());
+        }
+    }
 
     Api::<Secret>::namespaced(state.client.clone(), target_namespace)
         .patch(
@@ -935,6 +962,17 @@ async fn ensure_flags(
             },
             scoring: challenge_flag.scoring.clone(),
         };
+
+        // Check cache: skip API call if flag already exists with matching spec and labels
+        let flag_ref = ObjectRef::<Flag>::new(&name).within(target_namespace);
+        if let Some(cached) = state.flags.get(&flag_ref) {
+            if cached.metadata.deletion_timestamp.is_none()
+                && cached.spec == spec
+                && cached.metadata.labels.as_ref() == Some(&labels)
+            {
+                continue;
+            }
+        }
 
         let resource = Flag {
             metadata: managed_resource_metadata(name.clone(), namespace.clone(), labels.clone()),
@@ -1068,6 +1106,17 @@ async fn ensure_deployment(
         ..Default::default()
     };
 
+    // Check cache: skip API call if deployment already exists with matching spec
+    let dep_ref = ObjectRef::<Deployment>::new(&name).within(&namespace);
+    if let Some(cached) = state.deployments.get(&dep_ref) {
+        if cached.metadata.deletion_timestamp.is_none()
+            && cached.spec == deployment.spec
+            && cached.metadata.labels == deployment.metadata.labels
+        {
+            return Ok(());
+        }
+    }
+
     Api::<Deployment>::namespaced(state.client.clone(), &namespace)
         .patch(
             &name,
@@ -1156,6 +1205,19 @@ async fn ensure_service(
         ..Default::default()
     };
 
+    // Check cache: skip API call if service already exists with matching spec and labels
+    let svc_ref = ObjectRef::<Service>::new(&name).within(&namespace);
+    if let Some(cached) = state.services.get(&svc_ref) {
+        if cached.metadata.deletion_timestamp.is_none()
+            && cached.spec.as_ref().map(|s| (&s.selector, &s.ports, &s.type_))
+                == service.spec.as_ref().map(|s| (&s.selector, &s.ports, &s.type_))
+            && cached.metadata.labels == service.metadata.labels
+            && cached.metadata.annotations == service.metadata.annotations
+        {
+            return Ok(());
+        }
+    }
+
     Api::<Service>::namespaced(state.client.clone(), &namespace)
         .patch(
             &name,
@@ -1224,6 +1286,19 @@ async fn ensure_port_claims(
             }
 
             let name = port_claim_name(instance, &port.name);
+
+            // Check cache: skip API call if port claim exists with matching spec and labels
+            let claim_ref = ObjectRef::<PortClaim>::new(&name).within(target_namespace);
+            if let Some(cached) = state.port_claims.get(&claim_ref) {
+                if cached.metadata.deletion_timestamp.is_none()
+                    && cached.spec.reservation.name == reservation_name
+                    && cached.spec.reservation.namespace.as_deref()
+                        == Some(reservation_namespace)
+                    && cached.metadata.labels.as_ref() == Some(&labels)
+                {
+                    continue;
+                }
+            }
 
             let resource = PortClaim {
                 metadata: managed_resource_metadata(

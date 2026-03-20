@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::runtime::OperatorRuntimeConfig;
 use ctf_cli::k8s::{Challenge, Ctf, Flag, Instance, PortClaim, ReservationSet};
-use k8s_openapi::api::{apps::v1::Deployment, core::v1::{Secret, Service}};
+use k8s_openapi::api::{apps::v1::Deployment, core::v1::{Namespace, Secret, Service}};
 use kube::{runtime::reflector::Store, Client};
 
 #[derive(Debug, Clone)]
@@ -25,6 +25,8 @@ pub struct CtfState {
     pub flags: Store<Flag>,
     pub reservation_sets: Store<ReservationSet>,
     pub port_claims: Store<PortClaim>,
+    pub namespaces: Store<Namespace>,
+    pub managed_secrets: Store<Secret>,
     pub deployments: Store<Deployment>,
     pub services: Store<Service>,
     pub secrets: Store<Secret>,
@@ -45,6 +47,8 @@ impl CtfState {
         flags: Store<Flag>,
         reservation_sets: Store<ReservationSet>,
         port_claims: Store<PortClaim>,
+        namespaces: Store<Namespace>,
+        managed_secrets: Store<Secret>,
         deployments: Store<Deployment>,
         services: Store<Service>,
         secrets: Store<Secret>,
@@ -58,6 +62,8 @@ impl CtfState {
             flags,
             reservation_sets,
             port_claims,
+            namespaces,
+            managed_secrets,
             deployments,
             services,
             secrets,

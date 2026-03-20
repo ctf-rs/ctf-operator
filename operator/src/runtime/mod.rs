@@ -9,7 +9,7 @@ pub use state::*;
 
 use crate::util::{Waiter, Watcher};
 use ctf_cli::k8s::{PortClaim, ReservationSet};
-use k8s_openapi::api::{apps::v1::Deployment, core::v1::{Secret, Service}};
+use k8s_openapi::api::{apps::v1::Deployment, core::v1::{Namespace, Secret, Service}};
 use kube::{runtime::watcher::Config, Client};
 use std::{collections::HashSet, path::PathBuf, sync::Arc};
 use tracing::info;
@@ -88,9 +88,11 @@ fn create_crd_watchers(client: &Client, namespaces: &[String]) -> CrdWatchers {
 
 /// Resource watchers for managed Kubernetes resources
 struct ResourceWatchers {
+    namespace: Watcher<Namespace>,
+    managed_secret: Watcher<Secret>,
     deployment: Watcher<Deployment>,
     service: Watcher<Service>,
-    secret: Watcher<Secret>,
+    source_secret: Watcher<Secret>,
     reservation_set_store: Watcher<ReservationSet>,
     port_claim_store: Watcher<PortClaim>,
 }
@@ -102,7 +104,7 @@ fn create_resource_watchers(client: &Client, config: &OperatorConfig) -> Resourc
     // Collect unique namespaces from imagePullSecrets config for the Secret watcher.
     // If none are configured an all-namespace watcher with an impossible label selector
     // is used so the reflector exists but never caches anything.
-    let secret_watcher = match &config.runtime_config.instance.deployment.image_pull_secret {
+    let source_secret_watcher = match &config.runtime_config.instance.deployment.image_pull_secret {
         Some(cfg) => Watcher::new(
             kube::Api::<Secret>::namespaced(client.clone(), &cfg.namespace),
             Config::default(),
@@ -116,6 +118,16 @@ fn create_resource_watchers(client: &Client, config: &OperatorConfig) -> Resourc
     };
 
     ResourceWatchers {
+        namespace: Watcher::new(
+            kube::Api::all(client.clone()),
+            Config::default().labels(&managed_selector),
+            0xFFFF,
+        ),
+        managed_secret: Watcher::new(
+            kube::Api::all(client.clone()),
+            Config::default().labels(&managed_selector),
+            0xFFFF,
+        ),
         deployment: Watcher::new(
             kube::Api::all(client.clone()),
             Config::default().labels(&managed_selector),
@@ -126,7 +138,7 @@ fn create_resource_watchers(client: &Client, config: &OperatorConfig) -> Resourc
             Config::default().labels(&managed_selector),
             0xFFFF,
         ),
-        secret: secret_watcher,
+        source_secret: source_secret_watcher,
         reservation_set_store: Watcher::new(
             kube::Api::all(client.clone()),
             Config::default(),
@@ -159,6 +171,7 @@ pub async fn run(
         crd.flag.store(),
         res.reservation_set_store.store(),
         res.port_claim_store.store(),
+        res.namespace.store(),
         res.deployment.store(),
         res.service.store(),
         res.secret.store(),
@@ -197,6 +210,7 @@ pub async fn run(
         .watcher(crd.port_claim)
         .watcher(res.reservation_set_store)
         .watcher(res.port_claim_store)
+        .watcher(res.namespace)
         .watcher(res.deployment)
         .watcher(res.service)
         .watcher(res.secret)
