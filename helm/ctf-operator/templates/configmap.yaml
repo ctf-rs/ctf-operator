@@ -25,9 +25,21 @@ data:
           name: {{ .Values.instance.deployment.imagePullSecret.name | quote }}
           namespace: {{ .Values.instance.deployment.imagePullSecret.namespace | default .Release.Namespace | quote }}
 {{- end }}
+{{- if .Values.instance.deployment.nodeSelector }}
+        nodeSelector:
+{{ toYaml .Values.instance.deployment.nodeSelector | nindent 10 }}
+{{- end }}
       service:
         type: {{ .Values.instance.service.type | quote }}
         nodePortMode: {{ .Values.instance.service.nodePortMode | quote }}
+{{- if .Values.instance.service.annotations }}
+        annotations:
+{{ toYaml .Values.instance.service.annotations | nindent 10 }}
+{{- end }}
+{{- if .Values.instance.service.labels }}
+        labels:
+{{ toYaml .Values.instance.service.labels | nindent 10 }}
+{{- end }}
 {{- if .Values.instance.ciliumNetworkPolicy }}
       ciliumNetworkPolicy:
 {{ toYaml .Values.instance.ciliumNetworkPolicy | nindent 8 }}

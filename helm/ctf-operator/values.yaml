@@ -76,9 +76,22 @@ instance:
     imagePullSecret: {}
       # name: ctf-registry-creds
       # namespace: ctf-operator
+    # Node selector for instance pods.
+    nodeSelector: {}
+      # kubernetes.io/hostname: worker-1
   service:
     type: ClusterIP
     nodePortMode: Auto
+    # Extra annotations to add to every instance Service.
+    annotations: {}
+      # io.cilium/lb-ipam-ips: "10.4.10.1"
+      # lbipam.cilium.io/sharing-key: ctf-playground
+      # lbipam.cilium.io/sharing-cross-namespace: "*"
+    # Extra labels to add to every instance Service.
+    labels: {}
+      # advertise: bgp-ip
+      # playground: "true"
+      # tcp: "true"
   # CiliumNetworkPolicy spec to create in each instance namespace.
   # The operator will create a CiliumNetworkPolicy resource with this spec.
   ciliumNetworkPolicy: {}

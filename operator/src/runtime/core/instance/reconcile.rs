@@ -1047,6 +1047,19 @@ async fn ensure_deployment(
                                 name: s.name.clone(),
                             }]
                         }),
+                    node_selector: {
+                        let ns = &state
+                            .config
+                            .runtime_config
+                            .instance
+                            .deployment
+                            .node_selector;
+                        if ns.is_empty() {
+                            None
+                        } else {
+                            Some(ns.clone())
+                        }
+                    },
                     ..Default::default()
                 }),
             },
@@ -1079,6 +1092,14 @@ async fn ensure_service(
 
     let mut labels = base_labels(instance);
     labels.insert("app.kubernetes.io/name".to_string(), name.clone());
+    // Merge extra labels from the service config
+    labels.extend(service_config.labels.clone());
+
+    let annotations: Option<BTreeMap<String, String>> = if service_config.annotations.is_empty() {
+        None
+    } else {
+        Some(service_config.annotations.clone())
+    };
 
     let mut ports = Vec::<ServicePort>::new();
     let mut seen_names = BTreeSet::new();
@@ -1117,7 +1138,13 @@ async fn ensure_service(
     }
 
     let service = Service {
-        metadata: managed_resource_metadata(name.clone(), namespace.clone(), labels.clone()),
+        metadata: ObjectMeta {
+            name: Some(name.clone()),
+            namespace: Some(namespace.clone()),
+            labels: Some(labels.clone()),
+            annotations,
+            ..Default::default()
+        },
         spec: Some(ServiceSpec {
             selector: Some(labels),
             ports: Some(ports),

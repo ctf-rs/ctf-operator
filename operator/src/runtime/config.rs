@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -40,6 +41,8 @@ pub struct InstanceDeploymentConfig {
     pub use_host_port: bool,
     #[serde(default, rename = "imagePullSecret")]
     pub image_pull_secret: Option<ImagePullSecretConfig>,
+    #[serde(default, rename = "nodeSelector")]
+    pub node_selector: BTreeMap<String, String>,
 }
 
 impl Default for InstanceDeploymentConfig {
@@ -49,6 +52,7 @@ impl Default for InstanceDeploymentConfig {
             image_pull_policy: None,
             use_host_port: false,
             image_pull_secret: None,
+            node_selector: BTreeMap::new(),
         }
     }
 }
@@ -57,12 +61,18 @@ impl Default for InstanceDeploymentConfig {
 pub struct InstanceServiceConfig {
     #[serde(default, rename = "type")]
     pub type_: InstanceServiceType,
+    #[serde(default)]
+    pub annotations: BTreeMap<String, String>,
+    #[serde(default)]
+    pub labels: BTreeMap<String, String>,
 }
 
 impl Default for InstanceServiceConfig {
     fn default() -> Self {
         Self {
             type_: InstanceServiceType::ClusterIp,
+            annotations: BTreeMap::new(),
+            labels: BTreeMap::new(),
         }
     }
 }
@@ -192,8 +202,17 @@ instance:
         imagePullSecret:
             name: my-registry-secret
             namespace: ctf-operator
+        nodeSelector:
+            kubernetes.io/hostname: worker-1
     service:
         type: LoadBalancer
+        annotations:
+            io.cilium/lb-ipam-ips: 10.4.10.1
+            lbipam.cilium.io/sharing-key: ctf-playground
+            lbipam.cilium.io/sharing-cross-namespace: '*'
+        labels:
+            advertise: bgp-ip
+            playground: 'true'
     ciliumNetworkPolicy:
         endpointSelector:
             matchLabels:
@@ -221,6 +240,33 @@ instance:
             config.instance.service.type_,
             InstanceServiceType::LoadBalancer
         );
+        assert_eq!(
+            config
+                .instance
+                .service
+                .annotations
+                .get("io.cilium/lb-ipam-ips")
+                .map(String::as_str),
+            Some("10.4.10.1")
+        );
+        assert_eq!(
+            config
+                .instance
+                .service
+                .annotations
+                .get("lbipam.cilium.io/sharing-key")
+                .map(String::as_str),
+            Some("ctf-playground")
+        );
+        assert_eq!(
+            config
+                .instance
+                .service
+                .labels
+                .get("advertise")
+                .map(String::as_str),
+            Some("bgp-ip")
+        );
         let pull_secret = config
             .instance
             .deployment
@@ -229,6 +275,15 @@ instance:
             .expect("imagePullSecret should be set");
         assert_eq!(pull_secret.name, "my-registry-secret");
         assert_eq!(pull_secret.namespace, "ctf-operator");
+        assert_eq!(
+            config
+                .instance
+                .deployment
+                .node_selector
+                .get("kubernetes.io/hostname")
+                .map(String::as_str),
+            Some("worker-1")
+        );
         let cnp = config
             .instance
             .cilium_network_policy
