@@ -260,7 +260,13 @@ async fn reconcile_apply(
     let reservation_namespace = refs.ctf.namespace().unwrap_or_default();
 
     // Ensure all resources exist
-    ensure_target_namespace(instance.as_ref(), &target_namespace, &state).await?;
+    ensure_target_namespace(
+        instance.as_ref(),
+        refs.challenge.as_ref(),
+        &target_namespace,
+        &state,
+    )
+    .await?;
     ensure_image_pull_secret(&target_namespace, &state).await?;
     ensure_cilium_network_policy(&target_namespace, &state).await?;
 
@@ -766,6 +772,7 @@ fn target_namespace_for_instance(
 
 async fn ensure_target_namespace(
     instance: &Instance,
+    challenge: &Challenge,
     target_namespace: &str,
     state: &CtfState,
 ) -> Result<(), CtfError> {
@@ -774,6 +781,21 @@ async fn ensure_target_namespace(
         "app.kubernetes.io/part-of".to_string(),
         MANAGED_BY_VALUE.to_string(),
     );
+
+    // If any container requires kata + privileged, set the Pod Security
+    // Admission label so the namespace allows privileged pods (needed for
+    // Talos / PSS "baseline" default).
+    let needs_privileged = challenge
+        .spec
+        .containers
+        .iter()
+        .any(|c| c.kata.as_ref().is_some_and(|k| k.privileged));
+    if needs_privileged {
+        labels.insert(
+            "pod-security.kubernetes.io/enforce".to_string(),
+            "privileged".to_string(),
+        );
+    }
 
     // Check cache: skip API call if namespace already exists with correct labels
     let ns_ref = ObjectRef::<Namespace>::new(target_namespace);
