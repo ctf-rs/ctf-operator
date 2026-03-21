@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use kube::{CustomResource, runtime::reflector::ObjectRef};
+use kube::{runtime::reflector::ObjectRef, CustomResource};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -69,6 +69,7 @@ pub enum ChallengeParentKind {
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum ChallengeCategory {
+    Welcome,
     #[serde(alias = "reverse")]
     Rev,
     Pwn,

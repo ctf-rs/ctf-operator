@@ -54,6 +54,7 @@ pub struct Challenge {
 )]
 #[serde(rename_all = "lowercase")]
 pub enum ChallengeCategory {
+    Welcome,
     #[serde(alias = "reverse")]
     Rev,
     Pwn,
@@ -72,6 +73,7 @@ impl ChallengeCategory {
     #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
+            Self::Welcome => "Welcome",
             Self::Web => "Web",
             Self::Pwn => "Pwn",
             Self::Crypto => "Crypto",
@@ -87,14 +89,15 @@ impl ChallengeCategory {
     #[must_use]
     pub const fn sort_key(self) -> u8 {
         match self {
-            Self::Web => 0,
-            Self::Pwn => 1,
-            Self::Crypto => 2,
-            Self::Rev => 3,
-            Self::Foren => 4,
-            Self::Misc => 5,
-            Self::Hw => 6,
-            Self::Osint => 7,
+            Self::Welcome => 0,
+            Self::Web => 1,
+            Self::Pwn => 2,
+            Self::Crypto => 3,
+            Self::Rev => 4,
+            Self::Foren => 5,
+            Self::Misc => 6,
+            Self::Hw => 7,
+            Self::Osint => 8,
         }
     }
 }

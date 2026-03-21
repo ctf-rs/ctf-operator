@@ -28,6 +28,7 @@ spec:
                 categories:
                   items:
                     enum:
+                      - welcome
                       - rev
                       - pwn
                       - web
