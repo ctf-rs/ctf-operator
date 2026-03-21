@@ -310,7 +310,9 @@ pub async fn challenge_page(
         ctf_name,
     );
 
-    let mut ready = false;
+    // Challenges without containers don't need instances — flags are always
+    // submittable (the form should never be disabled for lack of readiness).
+    let mut ready = !challenge.has_containers;
     let mut time_left_seconds: Option<u64> = None;
     let mut expires_at_epoch: Option<u64> = None;
     let mut can_extend = false;

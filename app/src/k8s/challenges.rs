@@ -162,6 +162,8 @@ fn build_challenge_view(
         })
         .collect();
 
+    let has_containers = !challenge.spec.containers.is_empty();
+
     let categories: Vec<_> = challenge.spec.categories.iter().copied().collect();
     // Compute challenge-level difficulty as the easiest flag difficulty, if any
     let mut flag_diffs: Vec<_> = challenge
@@ -184,6 +186,7 @@ fn build_challenge_view(
         files,
         flags,
         exposed_ports,
+        has_containers,
         instancing: challenge.spec.instancing,
         flag_hint: String::new(), // TODO: add to CRD
     })

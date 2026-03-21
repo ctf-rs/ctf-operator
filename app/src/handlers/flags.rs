@@ -74,6 +74,34 @@ pub async fn submit_flag(
         return Ok(());
     }
 
+    // ---- Container-less challenges: verify flag directly from spec --------
+    let challenge_crd = state
+        .challenges
+        .state()
+        .into_iter()
+        .find(|c| c.name_any() == challenge_name);
+
+    let has_containers = challenge_crd
+        .as_ref()
+        .map_or(true, |c| !c.spec.containers.is_empty());
+
+    if !has_containers {
+        let (kind, msg) = submit_static_flag(
+            &state,
+            &challenge_crd,
+            user.id,
+            &challenge_name,
+            ctf_name,
+            &flag_name,
+            submitted_flag_trimmed,
+            admin_submission,
+            client_ip.as_deref(),
+        )
+        .await;
+        redirect_with(&kind, &msg);
+        return Ok(());
+    }
+
     let Some(instance) =
         k8s_instances::get_instance_for_challenge(&state, user.id, &challenge_name, ctf_name)
     else {
@@ -296,8 +324,148 @@ pub async fn submit_flag(
 }
 
 // ---------------------------------------------------------------------------
-// Internal helper
+// Internal helpers
 // ---------------------------------------------------------------------------
+
+/// Handle flag submission for challenges that have no containers.
+///
+/// Flags are verified directly from the Challenge CRD spec (static flags)
+/// instead of requiring a running instance.  Returns `(kind, message)` for
+/// the redirect feedback.
+#[expect(clippy::too_many_arguments)]
+async fn submit_static_flag(
+    state: &Arc<AppState>,
+    challenge_crd: &Option<std::sync::Arc<ctf_cli::k8s::Challenge>>,
+    user_id: i64,
+    challenge_name: &str,
+    ctf_name: &str,
+    flag_name: &str,
+    submitted_flag: &str,
+    admin_submission: bool,
+    client_ip: Option<&str>,
+) -> (String, String) {
+    let Some(challenge_crd) = challenge_crd else {
+        persist_flag_submission(
+            state,
+            user_id,
+            challenge_name,
+            ctf_name,
+            flag_name,
+            submitted_flag,
+            false,
+            admin_submission,
+            client_ip,
+        )
+        .await;
+        return ("bad".into(), "challenge not found".into());
+    };
+
+    // Find the matching flag definition in the spec
+    let challenge_flag = challenge_crd
+        .spec
+        .flags
+        .iter()
+        .find(|f| f.name == flag_name);
+
+    let accepted = if let Some(cf) = challenge_flag {
+        // Look up CTF flag defaults for prefix/format
+        let ctf_crd = state
+            .ctfs
+            .state()
+            .into_iter()
+            .find(|c| c.name_any() == *ctf_name);
+
+        if let Some(ctf_crd) = ctf_crd {
+            let core_flag = CoreFlag {
+                prefix: cf
+                    .prefix
+                    .clone()
+                    .unwrap_or_else(|| ctf_crd.spec.flag.prefix.clone()),
+                format: cf.format.unwrap_or(ctf_crd.spec.flag.format),
+                body: cf.body.clone(),
+                random: cf
+                    .random
+                    .clone()
+                    .or_else(|| ctf_crd.spec.flag.random.clone()),
+                options: ctf_cli::models::FlagMatchOptions {
+                    ignore_case: cf.options.ignore_case || ctf_crd.spec.flag.options.ignore_case,
+                    ignore_random: cf.options.ignore_random
+                        || ctf_crd.spec.flag.options.ignore_random,
+                },
+                scoring: cf.scoring.clone(),
+            };
+            core_flag.verify(submitted_flag)
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    // Persist submission
+    if let Err(err) = db::add_flag_submission(
+        &state.db,
+        user_id,
+        challenge_name,
+        ctf_name,
+        flag_name,
+        submitted_flag,
+        accepted,
+        false,
+        None,
+        admin_submission,
+        client_ip,
+    )
+    .await
+    {
+        warn!(error = %err, "failed to persist flag submission");
+    }
+
+    let m = metrics::get();
+
+    if accepted {
+        m.flag_submissions.add(
+            1,
+            &m.attrs(&[
+                metrics::challenge_kv(challenge_name),
+                opentelemetry::KeyValue::new("result", "correct"),
+            ]),
+        );
+
+        // Check if all flags are now solved
+        let solved_flag_count =
+            db::count_solved_flags_for_user(&state.db, user_id, challenge_name, ctf_name)
+                .await
+                .unwrap_or(0) as usize;
+
+        let total_flags = challenges::get_challenge(state, challenge_name)
+            .map(|ch| ch.flags.len())
+            .unwrap_or(1);
+
+        if solved_flag_count >= total_flags {
+            m.challenges_solved
+                .add(1, &m.attrs(&[metrics::challenge_kv(challenge_name)]));
+            if let Err(err) =
+                db::mark_challenge_solved(&state.db, user_id, challenge_name, ctf_name).await
+            {
+                warn!(error = %err, "failed to persist solved challenge state");
+            }
+            return ("good".into(), "challenge solved".into());
+        }
+
+        return ("good".into(), "flag accepted".into());
+    }
+
+    m.flag_submissions.add(
+        1,
+        &m.attrs(&[
+            metrics::challenge_kv(challenge_name),
+            opentelemetry::KeyValue::new("result", "incorrect"),
+        ]),
+    );
+
+    ("bad".into(), "flag is not correct".into())
+}
 
 /// Persist a flag submission (no cheat logic — that lives in `submit_flag`).
 async fn persist_flag_submission(

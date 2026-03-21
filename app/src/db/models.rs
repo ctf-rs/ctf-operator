@@ -66,6 +66,8 @@ pub struct ChallengeView {
     pub files: Vec<String>,
     pub flags: Vec<FlagView>,
     pub exposed_ports: Vec<PortView>,
+    /// Whether the challenge has any containers (and thus needs instances).
+    pub has_containers: bool,
     /// Per-user instancing enabled for this challenge.
     pub instancing: bool,
     /// Flag format hint like "SCC{...}" for placeholder
