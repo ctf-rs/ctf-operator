@@ -155,10 +155,13 @@ fn extract_roles_from_jwt(access_token: &str) -> Vec<String> {
     }
 
     if let Some(resource_access) = json.get("resource_access").and_then(|v| v.as_object()) {
-        for (_client, value) in resource_access {
+        for (client, value) in resource_access {
             if let Some(client_roles) = value.get("roles").and_then(|v| v.as_array()) {
                 for role in client_roles.iter().filter_map(|v| v.as_str()) {
-                    roles.push(role.to_string());
+                    // Client roles are stored as `<client>/<role>` to
+                    // avoid collisions with realm roles or roles from
+                    // other clients (e.g. "scc2026-quals/admin").
+                    roles.push(format!("{client}/{role}"));
                 }
             }
         }

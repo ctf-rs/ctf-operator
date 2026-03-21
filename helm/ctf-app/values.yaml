@@ -65,7 +65,7 @@ oauth:
   playerRole: ""
   # OIDC role name that grants admin access. Admin submissions are excluded
   # from the scoreboard.
-  adminRole: ""
+  adminRole: "scc2026-quals/admin"
 
 session:
   cookieName: ctf_app_session
