@@ -383,10 +383,10 @@ async fn submit_static_flag(
                     .unwrap_or_else(|| ctf_crd.spec.flag.prefix.clone()),
                 format: cf.format.unwrap_or(ctf_crd.spec.flag.format),
                 body: cf.body.clone(),
-                random: cf
-                    .random
-                    .clone()
-                    .or_else(|| ctf_crd.spec.flag.random.clone()),
+                // Static challenges have no operator generating random
+                // suffixes, so only use random if the challenge itself
+                // explicitly declares it — never inherit the CTF default.
+                random: cf.random.clone(),
                 options: ctf_cli::models::FlagMatchOptions {
                     ignore_case: cf.options.ignore_case || ctf_crd.spec.flag.options.ignore_case,
                     ignore_random: cf.options.ignore_random
