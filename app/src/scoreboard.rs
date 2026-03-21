@@ -45,8 +45,19 @@ impl FlagScore {
         if solves == 0 {
             return base_points;
         }
-        let points = (base_points as f64) / (1.0 + (solves as f64 / decay as f64));
-        points.round().max(min_points as f64) as u32
+
+        // Shift solves so the first solve keeps full base points.
+        let shifted_solves = solves.saturating_sub(1) as f64;
+        let decay = f64::from(decay.max(1));
+        let progress = shifted_solves / decay;
+
+        // Mixed linear + quadratic decay for stronger early drop while
+        // preserving a smooth curve to the minimum floor.
+        let factor = (0.7 * progress) + (0.3 * progress * progress);
+        let value =
+            f64::from(base_points) + (f64::from(min_points) - f64::from(base_points)) * factor;
+
+        value.ceil().max(f64::from(min_points)) as u32
     }
 }
 

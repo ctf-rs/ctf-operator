@@ -103,7 +103,9 @@ impl Default for FlagScoring {
 
 impl FlagScoring {
     /// Calculate points for this flag given the number of solves.
-    /// Uses formula: `max(min_points`, `base_points` / (1 + (solves / decay)))
+    /// Uses shifted mixed decay so solve #1 keeps full base points:
+    /// `ceil(base_points + (min_points - base_points) * (0.7*x + 0.3*x^2))`
+    /// where `x = max(0, solves - 1) / decay`.
     #[must_use]
     #[expect(
         clippy::cast_possible_truncation,
@@ -114,9 +116,15 @@ impl FlagScoring {
         if solves == 0 {
             return self.base_points;
         }
-        let points =
-            f64::from(self.base_points) / (1.0 + (f64::from(solves) / f64::from(self.decay)));
-        points.round().max(f64::from(self.min_points)) as u32
+
+        let shifted_solves = f64::from(solves.saturating_sub(1));
+        let decay = f64::from(self.decay.max(1));
+        let progress = shifted_solves / decay;
+        let factor = (0.7 * progress) + (0.3 * progress * progress);
+        let value = f64::from(self.base_points)
+            + (f64::from(self.min_points) - f64::from(self.base_points)) * factor;
+
+        value.ceil().max(f64::from(self.min_points)) as u32
     }
 }
 
