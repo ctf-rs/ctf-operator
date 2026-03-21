@@ -131,6 +131,12 @@ spec:
             - name: DISCORD_BOT_CALLBACK_URL
               value: {{ .Values.discord.botCallbackUrl | quote }}
             {{- end }}
+            {{- if .Values.otel.enabled }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.otel.endpoint | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.otel.serviceName | default "ctf-app" | quote }}
+            {{- end }}
           resources:
 {{- toYaml .Values.resources | nindent 12 }}
 {{- with .Values.nodeSelector }}

@@ -97,6 +97,15 @@ discord:
   existingSecret: ""
   linkSecretKey: linkSecret
 
+# OpenTelemetry OTLP exporter configuration.
+otel:
+  # Set to true to inject OTEL_EXPORTER_OTLP_ENDPOINT into the pod.
+  enabled: false
+  # gRPC endpoint of the OTLP collector (e.g. Alloy).
+  endpoint: "http://alloy.monitoring.svc:4317"
+  # Value for OTEL_SERVICE_NAME (defaults to "ctf-app").
+  serviceName: "ctf-app"
+
 resources:
   requests:
     cpu: 100m
