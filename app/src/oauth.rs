@@ -40,7 +40,7 @@ struct TokenResponse {
 struct UserInfoResponse {
     sub: String,
     email: Option<String>,
-    name: Option<String>,
+    preferred_username: Option<String>,
 }
 
 pub async fn build_client(config: &OidcConfig) -> Result<OidcClient> {
@@ -112,7 +112,7 @@ pub async fn finish_login(client: &OidcClient, code: String) -> Result<UserClaim
     Ok(UserClaims {
         sub: info.sub,
         email: info.email,
-        name: info.name,
+        name: info.preferred_username,
         roles,
     })
 }
