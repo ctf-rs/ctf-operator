@@ -128,10 +128,8 @@ fn start_local_timer() {
         }
     }) as Box<dyn FnMut()>);
 
-    let _ = win.set_interval_with_callback_and_timeout_and_arguments_0(
-        cb.as_ref().unchecked_ref(),
-        1000,
-    );
+    let _ = win
+        .set_interval_with_callback_and_timeout_and_arguments_0(cb.as_ref().unchecked_ref(), 1000);
     cb.forget();
 }
 

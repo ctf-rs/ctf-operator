@@ -1,6 +1,9 @@
 use anyhow::{bail, Context};
-use ctf_cli::models::ContainerImage;
-use std::{collections::HashSet, path::Path};
+use ctf_cli::models::{Challenge, ContainerImage};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 use tokio::process::Command;
 
 use crate::{
@@ -8,10 +11,6 @@ use crate::{
     read_challenge, read_ctf,
 };
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "build orchestration logic is inherently linear"
-)]
 pub async fn build(args: BuildArgs) -> anyhow::Result<()> {
     let BuildArgs {
         ctf,
@@ -31,49 +30,8 @@ pub async fn build(args: BuildArgs) -> anyhow::Result<()> {
         bail!("ctf has no challenges configured");
     }
 
-    let mut challenge_items = Vec::new();
-    let mut seen_challenge_names = HashSet::<String>::new();
-    for challenge_rel_path in &ctf.challenges {
-        let challenge_path = ctf_dir.join(challenge_rel_path);
-        let challenge = read_challenge(challenge_path.clone()).await?;
-
-        if !seen_challenge_names.insert(challenge.name.clone()) {
-            bail!(
-                "duplicate challenge name in ctf challenge files: {}",
-                challenge.name
-            );
-        }
-
-        challenge_items.push((challenge_path, challenge));
-    }
-
-    let requested_names = challenges.into_iter().collect::<HashSet<_>>();
-    let selected = if requested_names.is_empty() {
-        challenge_items
-    } else {
-        let selected = challenge_items
-            .into_iter()
-            .filter(|(_, challenge)| requested_names.contains(&challenge.name))
-            .collect::<Vec<_>>();
-
-        let available = selected
-            .iter()
-            .map(|(_, challenge)| challenge.name.clone())
-            .collect::<HashSet<_>>();
-        let missing = requested_names
-            .difference(&available)
-            .cloned()
-            .collect::<Vec<_>>();
-
-        if !missing.is_empty() {
-            bail!(
-                "requested challenge name(s) not found in ctf challenge YAML names: {}",
-                missing.join(", ")
-            );
-        }
-
-        selected
-    };
+    let challenge_items = load_challenges(&ctf_dir, &ctf.challenges).await?;
+    let selected = select_challenges(challenge_items, challenges)?;
 
     let publish_registry = if publish {
         Some(
@@ -88,6 +46,67 @@ pub async fn build(args: BuildArgs) -> anyhow::Result<()> {
         None
     };
 
+    build_selected_challenges(&selected, publish_registry.as_deref(), backend).await
+}
+
+async fn load_challenges(
+    ctf_dir: &Path,
+    challenge_paths: &[PathBuf],
+) -> anyhow::Result<Vec<(PathBuf, Challenge)>> {
+    let mut items = Vec::new();
+    let mut seen_names = HashSet::<String>::new();
+    for rel_path in challenge_paths {
+        let path = ctf_dir.join(rel_path);
+        let challenge = read_challenge(path.clone()).await?;
+        if !seen_names.insert(challenge.name.clone()) {
+            bail!(
+                "duplicate challenge name in ctf challenge files: {}",
+                challenge.name
+            );
+        }
+        items.push((path, challenge));
+    }
+    Ok(items)
+}
+
+fn select_challenges(
+    challenge_items: Vec<(PathBuf, Challenge)>,
+    requested: Vec<String>,
+) -> anyhow::Result<Vec<(PathBuf, Challenge)>> {
+    let requested_names = requested.into_iter().collect::<HashSet<_>>();
+    if requested_names.is_empty() {
+        return Ok(challenge_items);
+    }
+
+    let selected = challenge_items
+        .into_iter()
+        .filter(|(_, challenge)| requested_names.contains(&challenge.name))
+        .collect::<Vec<_>>();
+
+    let available = selected
+        .iter()
+        .map(|(_, challenge)| challenge.name.clone())
+        .collect::<HashSet<_>>();
+    let missing = requested_names
+        .difference(&available)
+        .cloned()
+        .collect::<Vec<_>>();
+
+    if !missing.is_empty() {
+        bail!(
+            "requested challenge name(s) not found in ctf challenge YAML names: {}",
+            missing.join(", ")
+        );
+    }
+
+    Ok(selected)
+}
+
+async fn build_selected_challenges(
+    selected: &[(PathBuf, Challenge)],
+    publish_registry: Option<&str>,
+    backend: Backend,
+) -> anyhow::Result<()> {
     for (challenge_path, challenge) in selected {
         let challenge_dir = challenge_path
             .parent()
@@ -111,11 +130,11 @@ pub async fn build(args: BuildArgs) -> anyhow::Result<()> {
                     .context("Dockerfile must have parent directory")?;
 
                 let local_tag = format!("{}/{}:latest", challenge.name, container.name);
-                let publish_tag = publish_registry.as_ref().map(|registry| {
+                let publish_tag = publish_registry.map(|registry| {
                     format!("{registry}/{}/{}:latest", challenge.name, container.name)
                 });
 
-                println!("Building container {} with {:?}", container.name, backend);
+                println!("Building container {} with {backend:?}", container.name);
 
                 match backend {
                     Backend::Docker => {

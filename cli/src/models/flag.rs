@@ -120,9 +120,9 @@ impl FlagScoring {
         let shifted_solves = f64::from(solves.saturating_sub(1));
         let decay = f64::from(self.decay.max(1));
         let progress = shifted_solves / decay;
-        let factor = (0.7 * progress) + (0.3 * progress * progress);
-        let value = f64::from(self.base_points)
-            + (f64::from(self.min_points) - f64::from(self.base_points)) * factor;
+        let factor = 0.7_f64.mul_add(progress, 0.3 * progress * progress);
+        let value = (f64::from(self.min_points) - f64::from(self.base_points))
+            .mul_add(factor, f64::from(self.base_points));
 
         value.ceil().max(f64::from(self.min_points)) as u32
     }

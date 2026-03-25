@@ -231,11 +231,19 @@ instance:
         let config: OperatorRuntimeConfig =
             serde_saphyr::from_str(yaml).expect("config should deserialize");
 
+        assert_registry_and_storage(&config);
+        assert_instance_config(&config);
+    }
+
+    fn assert_registry_and_storage(config: &OperatorRuntimeConfig) {
         assert_eq!(config.registry.len(), 1);
         assert_eq!(config.storage.s3.len(), 1);
         assert_eq!(config.registry[0].endpoint, "registry.ctf.rs/ctf");
         assert_eq!(config.storage.s3[0].bucket, "ctf-bucket-a");
         assert!(config.storage.s3[0].path_style);
+    }
+
+    fn assert_instance_config(config: &OperatorRuntimeConfig) {
         assert_eq!(config.instance.deployment.replicas, 2);
         assert_eq!(
             config.instance.deployment.image_pull_policy.as_deref(),

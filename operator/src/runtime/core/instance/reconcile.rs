@@ -6,8 +6,8 @@ use std::{
 
 use crate::{
     runtime::{
-        CtfError, CtfState, FINALIZER_NAME, LABEL_CHALLENGE, LABEL_CTF, LABEL_INSTANCE,
-        LABEL_NAMESPACE, MANAGED_BY_LABEL, MANAGED_BY_VALUE,
+        CtfError, CtfState, InstanceDeploymentConfig, FINALIZER_NAME, LABEL_CHALLENGE, LABEL_CTF,
+        LABEL_INSTANCE, LABEL_NAMESPACE, MANAGED_BY_LABEL, MANAGED_BY_VALUE,
     },
     util::Reconciler,
 };
@@ -243,7 +243,7 @@ async fn reconcile_apply(
     instance: Arc<Instance>,
     state: Arc<CtfState>,
 ) -> Result<Action, CtfError> {
-    let target_namespace = target_namespace_for_instance(instance.as_ref(), &state)?;
+    let target_namespace = target_namespace_for_instance(instance.as_ref());
     let mut status = instance.status.clone().unwrap_or_default();
 
     // Validate references (Ctf and Challenge)
@@ -335,30 +335,12 @@ async fn reconcile_apply(
     update_status_conditions(&mut status, &observed);
     let all_ready = all_conditions_true_except(&status, "Ready");
 
-    // Start timer when instance becomes ready for the first time
-    if all_ready
-        && instance
-            .status
-            .as_ref()
-            .and_then(|s| s.ready_since.as_ref())
-            .is_none()
-    {
-        let now_unix = now_unix_seconds();
-        status.ready_since = unix_seconds_to_time(now_unix);
-
-        // Global instances (user=None, duration=None) never expire.
-        if instance.spec.duration_seconds.is_none() && instance.spec.user.is_none() {
-            status.expires_at = None;
-        } else {
-            let duration = instance
-                .spec
-                .duration_seconds
-                .unwrap_or(refs.duration_seconds);
-            status.expires_at = unix_seconds_to_time(now_unix.saturating_add(duration));
-        }
-    }
-
-    // Always recompute expires_at so duration_seconds changes take effect
+    initialize_ready_timer(
+        instance.as_ref(),
+        &mut status,
+        all_ready,
+        refs.duration_seconds,
+    );
     recompute_expires_at(instance.as_ref(), &mut status, refs.duration_seconds);
 
     patch_status_if_needed(instance.as_ref(), &state, status).await?;
@@ -370,12 +352,41 @@ async fn reconcile_apply(
     }
 }
 
+/// Start the instance expiration timer when it becomes ready for the first time.
+fn initialize_ready_timer(
+    instance: &Instance,
+    status: &mut InstanceStatus,
+    all_ready: bool,
+    default_duration: u64,
+) {
+    if !all_ready
+        || instance
+            .status
+            .as_ref()
+            .and_then(|s| s.ready_since.as_ref())
+            .is_some()
+    {
+        return;
+    }
+
+    let now_unix = now_unix_seconds();
+    status.ready_since = unix_seconds_to_time(now_unix);
+
+    // Global instances (user=None, duration=None) never expire.
+    if instance.spec.duration_seconds.is_none() && instance.spec.user.is_none() {
+        status.expires_at = None;
+    } else {
+        let duration = instance.spec.duration_seconds.unwrap_or(default_duration);
+        status.expires_at = unix_seconds_to_time(now_unix.saturating_add(duration));
+    }
+}
+
 async fn reconcile_cleanup(
     instance: Arc<Instance>,
     state: Arc<CtfState>,
     api: &Api<Instance>,
 ) -> Result<Action, CtfError> {
-    let target_namespace = target_namespace_for_instance(instance.as_ref(), &state)?;
+    let target_namespace = target_namespace_for_instance(instance.as_ref());
     let ns_api: Api<Namespace> = Api::all(state.client.clone());
     let name = instance.name_any();
 
@@ -747,14 +758,7 @@ fn collect_instance_resources(
     }
 }
 
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "Result wrapper allows future error handling expansion"
-)]
-fn target_namespace_for_instance(
-    instance: &Instance,
-    _state: &CtfState,
-) -> Result<String, CtfError> {
+fn target_namespace_for_instance(instance: &Instance) -> String {
     let mut ns = instance.name_any().to_ascii_lowercase();
     if ns.len() > 63 {
         ns.truncate(63);
@@ -767,7 +771,7 @@ fn target_namespace_for_instance(
         "ctf-inst-fallback".clone_into(&mut ns);
     }
 
-    Ok(ns)
+    ns
 }
 
 async fn ensure_target_namespace(
@@ -895,7 +899,7 @@ async fn ensure_image_pull_secret(
     Ok(())
 }
 
-/// Create a CiliumNetworkPolicy in the instance namespace from the operator
+/// Create a `CiliumNetworkPolicy` in the instance namespace from the operator
 /// config.  The policy is applied with server-side-apply so updates to the
 /// spec in the config are automatically propagated.
 async fn ensure_cilium_network_policy(
@@ -1024,12 +1028,127 @@ async fn ensure_deployment(
     let namespace = target_namespace.to_owned();
     let name = instance.name_any();
     let deployment_config = &state.config.runtime_config.instance.deployment;
-    let use_host_port = deployment_config.use_host_port;
 
     let mut labels = base_labels(instance);
     labels.insert("app.kubernetes.io/name".to_string(), name.clone());
 
-    let containers = challenge
+    let pod_template = build_pod_template(
+        challenge,
+        flag_values,
+        allocated_ports,
+        deployment_config,
+        &labels,
+    );
+
+    let deployment = Deployment {
+        metadata: managed_resource_metadata(name.clone(), namespace.clone(), labels.clone()),
+        spec: Some(DeploymentSpec {
+            replicas: Some(deployment_config.replicas),
+            selector: LabelSelector {
+                match_labels: Some(labels.clone()),
+                ..Default::default()
+            },
+            template: pod_template,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    // Check cache: skip API call if deployment already exists with matching spec
+    let dep_ref = ObjectRef::<Deployment>::new(&name).within(&namespace);
+    if let Some(cached) = state.deployments.get(&dep_ref) {
+        if cached.metadata.deletion_timestamp.is_none()
+            && cached.spec == deployment.spec
+            && cached.metadata.labels == deployment.metadata.labels
+        {
+            return Ok(());
+        }
+    }
+
+    Api::<Deployment>::namespaced(state.client.clone(), &namespace)
+        .patch(
+            &name,
+            &PatchParams::apply(InstanceReconciler::NAME).force(),
+            &Patch::Apply(&deployment),
+        )
+        .await?;
+
+    Ok(())
+}
+
+fn build_pod_template(
+    challenge: &Challenge,
+    flag_values: &BTreeMap<String, String>,
+    allocated_ports: &BTreeMap<String, u16>,
+    deployment_config: &InstanceDeploymentConfig,
+    labels: &BTreeMap<String, String>,
+) -> PodTemplateSpec {
+    let containers = build_containers(challenge, flag_values, allocated_ports, deployment_config);
+
+    let has_kata = challenge.spec.containers.iter().any(|c| c.kata.is_some());
+    let kata_kernel = challenge
+        .spec
+        .containers
+        .iter()
+        .find_map(|c| c.kata.as_ref().and_then(|k| k.kernel.clone()));
+
+    let mut pod_annotations = BTreeMap::new();
+    if let Some(kernel_path) = &kata_kernel {
+        pod_annotations.insert(
+            "io.katacontainers.config.hypervisor.kernel".to_string(),
+            kernel_path.clone(),
+        );
+    }
+
+    let mut node_selector = deployment_config.node_selector.clone();
+    if has_kata {
+        node_selector.insert(
+            "node-role.kubernetes.io/insecure-plane".to_string(),
+            String::new(),
+        );
+    }
+
+    PodTemplateSpec {
+        metadata: Some(ObjectMeta {
+            labels: Some(labels.clone()),
+            annotations: if pod_annotations.is_empty() {
+                None
+            } else {
+                Some(pod_annotations)
+            },
+            ..Default::default()
+        }),
+        spec: Some(PodSpec {
+            containers,
+            runtime_class_name: if has_kata {
+                Some("kata".to_string())
+            } else {
+                deployment_config.runtime_class_name.clone()
+            },
+            image_pull_secrets: deployment_config.image_pull_secret.as_ref().map(|s| {
+                vec![LocalObjectReference {
+                    name: s.name.clone(),
+                }]
+            }),
+            node_selector: if node_selector.is_empty() {
+                None
+            } else {
+                Some(node_selector)
+            },
+            ..Default::default()
+        }),
+    }
+}
+
+fn build_containers(
+    challenge: &Challenge,
+    flag_values: &BTreeMap<String, String>,
+    allocated_ports: &BTreeMap<String, u16>,
+    deployment_config: &InstanceDeploymentConfig,
+) -> Vec<Container> {
+    let use_host_port = deployment_config.use_host_port;
+
+    challenge
         .spec
         .containers
         .iter()
@@ -1048,9 +1167,10 @@ async fn ensure_deployment(
                 }
                 for port in &container.ports {
                     if let Some(env_name) = &port.env {
-                        let port_value = allocated_ports
-                            .get(&port.name)
-                            .map_or_else(|| port.container_port.to_string(), |p| p.to_string());
+                        let port_value = allocated_ports.get(&port.name).map_or_else(
+                            || port.container_port.to_string(),
+                            std::string::ToString::to_string,
+                        );
                         env.push(k8s_openapi::api::core::v1::EnvVar {
                             name: env_name.clone(),
                             value: Some(port_value),
@@ -1105,109 +1225,7 @@ async fn ensure_deployment(
             }),
             ..Default::default()
         })
-        .collect::<Vec<_>>();
-
-    // Collect kata configuration from containers
-    let has_kata = challenge.spec.containers.iter().any(|c| c.kata.is_some());
-    let kata_kernel = challenge
-        .spec
-        .containers
-        .iter()
-        .find_map(|c| c.kata.as_ref().and_then(|k| k.kernel.clone()));
-
-    let mut pod_annotations = BTreeMap::new();
-    if let Some(kernel_path) = &kata_kernel {
-        pod_annotations.insert(
-            "io.katacontainers.config.hypervisor.kernel".to_string(),
-            kernel_path.clone(),
-        );
-    }
-
-    let deployment = Deployment {
-        metadata: managed_resource_metadata(name.clone(), namespace.clone(), labels.clone()),
-        spec: Some(DeploymentSpec {
-            replicas: Some(deployment_config.replicas),
-            selector: LabelSelector {
-                match_labels: Some(labels.clone()),
-                ..Default::default()
-            },
-            template: PodTemplateSpec {
-                metadata: Some(ObjectMeta {
-                    labels: Some(labels.clone()),
-                    annotations: if pod_annotations.is_empty() {
-                        None
-                    } else {
-                        Some(pod_annotations)
-                    },
-                    ..Default::default()
-                }),
-                spec: Some(PodSpec {
-                    containers,
-                    runtime_class_name: if has_kata {
-                        Some("kata".to_string())
-                    } else {
-                        deployment_config.runtime_class_name.clone()
-                    },
-                    image_pull_secrets: state
-                        .config
-                        .runtime_config
-                        .instance
-                        .deployment
-                        .image_pull_secret
-                        .as_ref()
-                        .map(|s| {
-                            vec![LocalObjectReference {
-                                name: s.name.clone(),
-                            }]
-                        }),
-                    node_selector: {
-                        let mut ns = state
-                            .config
-                            .runtime_config
-                            .instance
-                            .deployment
-                            .node_selector
-                            .clone();
-                        if has_kata {
-                            ns.insert(
-                                "node-role.kubernetes.io/insecure-plane".to_string(),
-                                String::new(),
-                            );
-                        }
-                        if ns.is_empty() {
-                            None
-                        } else {
-                            Some(ns)
-                        }
-                    },
-                    ..Default::default()
-                }),
-            },
-            ..Default::default()
-        }),
-        ..Default::default()
-    };
-
-    // Check cache: skip API call if deployment already exists with matching spec
-    let dep_ref = ObjectRef::<Deployment>::new(&name).within(&namespace);
-    if let Some(cached) = state.deployments.get(&dep_ref) {
-        if cached.metadata.deletion_timestamp.is_none()
-            && cached.spec == deployment.spec
-            && cached.metadata.labels == deployment.metadata.labels
-        {
-            return Ok(());
-        }
-    }
-
-    Api::<Deployment>::namespaced(state.client.clone(), &namespace)
-        .patch(
-            &name,
-            &PatchParams::apply(InstanceReconciler::NAME).force(),
-            &Patch::Apply(&deployment),
-        )
-        .await?;
-
-    Ok(())
+        .collect()
 }
 
 async fn ensure_service(

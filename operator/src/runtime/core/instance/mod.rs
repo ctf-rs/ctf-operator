@@ -31,43 +31,44 @@ pub fn watcher(client: Client, namespaces: &[String]) -> Watcher<Instance> {
     Watcher::new_many(apis, Config::default(), 0xFFFF)
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "instance controller needs all related watchers for reconciliation"
-)]
+#[expect(missing_debug_implementations, reason = "Watcher doesn't impl Debug")]
+pub struct InstanceWatchers<'a> {
+    pub instance: &'a Watcher<Instance>,
+    pub ctf: &'a Watcher<Ctf>,
+    pub challenge: &'a Watcher<Challenge>,
+    pub flag: &'a Watcher<Flag>,
+    pub reservation_set: &'a Watcher<ReservationSet>,
+    pub port_claim: &'a Watcher<PortClaim>,
+    pub deployment: &'a Watcher<Deployment>,
+    pub service: &'a Watcher<Service>,
+}
+
 pub fn controller(
     ctx: Arc<CtfState>,
-    watcher: &Watcher<Instance>,
-    ctf_watcher: &Watcher<Ctf>,
-    challenge_watcher: &Watcher<Challenge>,
-    flag_watcher: &Watcher<Flag>,
-    reservation_set_watcher: &Watcher<ReservationSet>,
-    port_claim_watcher: &Watcher<PortClaim>,
-    deployment_watcher: &Watcher<Deployment>,
-    service_watcher: &Watcher<Service>,
+    watchers: &InstanceWatchers<'_>,
 ) -> CtfResult<Controller<InstanceReconciler>> {
-    Ok(Controller::new(Arc::clone(&ctx), watcher)?
-        .watches(ctf_watcher, {
+    Ok(Controller::new(Arc::clone(&ctx), watchers.instance)?
+        .watches(watchers.ctf, {
             let ctx = Arc::clone(&ctx);
             move |ctf| map_instances_for_ctf(ctf.as_ref(), ctx.instances.state())
         })?
-        .watches(challenge_watcher, {
+        .watches(watchers.challenge, {
             let ctx = ctx;
             move |challenge| map_instances_for_challenge(challenge.as_ref(), ctx.instances.state())
         })?
-        .watches(flag_watcher, |flag| {
+        .watches(watchers.flag, |flag| {
             resource_to_instance_ref(flag.metadata.labels.as_ref())
         })?
-        .watches(reservation_set_watcher, |reservation_set| {
+        .watches(watchers.reservation_set, |reservation_set| {
             resource_to_instance_ref(reservation_set.metadata.labels.as_ref())
         })?
-        .watches(port_claim_watcher, |port_claim| {
+        .watches(watchers.port_claim, |port_claim| {
             resource_to_instance_ref(port_claim.metadata.labels.as_ref())
         })?
-        .watches(deployment_watcher, |deployment| {
+        .watches(watchers.deployment, |deployment| {
             resource_to_instance_ref(deployment.metadata.labels.as_ref())
         })?
-        .watches(service_watcher, |service| {
+        .watches(watchers.service, |service| {
             resource_to_instance_ref(service.metadata.labels.as_ref())
         })?)
 }

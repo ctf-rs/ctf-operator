@@ -9,7 +9,10 @@ pub use state::*;
 
 use crate::util::{Waiter, Watcher};
 use ctf_cli::k8s::{PortClaim, ReservationSet};
-use k8s_openapi::api::{apps::v1::Deployment, core::v1::{Namespace, Secret, Service}};
+use k8s_openapi::api::{
+    apps::v1::Deployment,
+    core::v1::{Namespace, Secret, Service},
+};
 use kube::{runtime::watcher::Config, Client};
 use std::{collections::HashSet, path::PathBuf, sync::Arc};
 use tracing::info;
@@ -165,17 +168,19 @@ pub async fn run(
     let state = Arc::new(CtfState::new(
         client,
         operator_config,
-        crd.ctf.store(),
-        crd.challenge.store(),
-        crd.instance.store(),
-        crd.flag.store(),
-        res.reservation_set_store.store(),
-        res.port_claim_store.store(),
-        res.namespace.store(),
-        res.managed_secret.store(),
-        res.deployment.store(),
-        res.service.store(),
-        res.source_secret.store(),
+        CtfStores {
+            ctfs: crd.ctf.store(),
+            challenges: crd.challenge.store(),
+            instances: crd.instance.store(),
+            flags: crd.flag.store(),
+            reservation_sets: res.reservation_set_store.store(),
+            port_claims: res.port_claim_store.store(),
+            namespaces: res.namespace.store(),
+            managed_secrets: res.managed_secret.store(),
+            deployments: res.deployment.store(),
+            services: res.service.store(),
+            secrets: res.source_secret.store(),
+        },
     ));
 
     let ctf_controller = core::ctf::controller(Arc::clone(&state), &crd.ctf)?;
@@ -191,14 +196,16 @@ pub async fn run(
         core::port_claim::controller(Arc::clone(&state), &crd.port_claim, &crd.reservation_set)?;
     let instance_controller = core::instance::controller(
         Arc::clone(&state),
-        &crd.instance,
-        &crd.ctf,
-        &crd.challenge,
-        &crd.flag,
-        &crd.reservation_set,
-        &crd.port_claim,
-        &res.deployment,
-        &res.service,
+        &core::instance::InstanceWatchers {
+            instance: &crd.instance,
+            ctf: &crd.ctf,
+            challenge: &crd.challenge,
+            flag: &crd.flag,
+            reservation_set: &crd.reservation_set,
+            port_claim: &crd.port_claim,
+            deployment: &res.deployment,
+            service: &res.service,
+        },
     )?;
     let instance_cleaner_controller = core::instance_cleaner::controller(state, &crd.instance)?;
 

@@ -2,7 +2,10 @@ use std::collections::HashSet;
 
 use crate::runtime::OperatorRuntimeConfig;
 use ctf_cli::k8s::{Challenge, Ctf, Flag, Instance, PortClaim, ReservationSet};
-use k8s_openapi::api::{apps::v1::Deployment, core::v1::{Namespace, Secret, Service}};
+use k8s_openapi::api::{
+    apps::v1::Deployment,
+    core::v1::{Namespace, Secret, Service},
+};
 use kube::{runtime::reflector::Store, Client};
 
 #[derive(Debug, Clone)]
@@ -10,6 +13,24 @@ pub struct OperatorConfig {
     pub watched_namespaces: HashSet<String>,
     pub instance_namespace_prefix: String,
     pub runtime_config: OperatorRuntimeConfig,
+}
+
+#[expect(
+    missing_debug_implementations,
+    reason = "kube Store doesn't impl Debug"
+)]
+pub struct CtfStores {
+    pub ctfs: Store<Ctf>,
+    pub challenges: Store<Challenge>,
+    pub instances: Store<Instance>,
+    pub flags: Store<Flag>,
+    pub reservation_sets: Store<ReservationSet>,
+    pub port_claims: Store<PortClaim>,
+    pub namespaces: Store<Namespace>,
+    pub managed_secrets: Store<Secret>,
+    pub deployments: Store<Deployment>,
+    pub services: Store<Service>,
+    pub secrets: Store<Secret>,
 }
 
 #[expect(
@@ -33,40 +54,22 @@ pub struct CtfState {
 }
 
 impl CtfState {
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "constructor needs all store references"
-    )]
     #[must_use]
-    pub const fn new(
-        client: Client,
-        config: OperatorConfig,
-        ctfs: Store<Ctf>,
-        challenges: Store<Challenge>,
-        instances: Store<Instance>,
-        flags: Store<Flag>,
-        reservation_sets: Store<ReservationSet>,
-        port_claims: Store<PortClaim>,
-        namespaces: Store<Namespace>,
-        managed_secrets: Store<Secret>,
-        deployments: Store<Deployment>,
-        services: Store<Service>,
-        secrets: Store<Secret>,
-    ) -> Self {
+    pub fn new(client: Client, config: OperatorConfig, stores: CtfStores) -> Self {
         Self {
             client,
             config,
-            ctfs,
-            challenges,
-            instances,
-            flags,
-            reservation_sets,
-            port_claims,
-            namespaces,
-            managed_secrets,
-            deployments,
-            services,
-            secrets,
+            ctfs: stores.ctfs,
+            challenges: stores.challenges,
+            instances: stores.instances,
+            flags: stores.flags,
+            reservation_sets: stores.reservation_sets,
+            port_claims: stores.port_claims,
+            namespaces: stores.namespaces,
+            managed_secrets: stores.managed_secrets,
+            deployments: stores.deployments,
+            services: stores.services,
+            secrets: stores.secrets,
         }
     }
 
