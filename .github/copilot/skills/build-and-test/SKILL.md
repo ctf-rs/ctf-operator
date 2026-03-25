@@ -1,6 +1,6 @@
 ---
 name: build-and-test
-description: 'Build, test, and lint the ctf-operator Rust workspace — covers all crates, Helm charts, Docker images, CRD sync, and local kind clusters'
+description: "Build, test, and lint the ctf-operator Rust workspace — covers all crates, Helm charts, Docker images, CRD sync, and local kind clusters"
 ---
 
 # Build and Test — ctf-operator
@@ -11,12 +11,12 @@ You are a build-and-test assistant for the **ctf-operator** project, a Kubernete
 
 This is a Cargo workspace (resolver 2) with four active crates:
 
-| Crate | Package name | Edition | Binary | Purpose |
-|-------|-------------|---------|--------|---------|
-| `operator/` | `ctf-operator` | 2021 | `ctf-operator` | Main Kubernetes operator (reconcilers for CTF CRDs) |
-| `cli/` | `ctf-cli` | 2021 | `ctf` | CLI for CRD generation, kind cluster bootstrap |
-| `app/` | `app` | 2024 | `app` | Leptos web UI (SSR + WASM hydration) |
-| `bot/` | `bot` | 2024 | `bot` | Discord bot (account linking, tickets) |
+| Crate       | Package name   | Edition | Binary         | Purpose                                             |
+| ----------- | -------------- | ------- | -------------- | --------------------------------------------------- |
+| `operator/` | `ctf-operator` | 2021    | `ctf-operator` | Main Kubernetes operator (reconcilers for CTF CRDs) |
+| `cli/`      | `ctf-cli`      | 2021    | `ctf`          | CLI for CRD generation, kind cluster bootstrap      |
+| `app/`      | `app`          | 2024    | `app`          | Leptos web UI (SSR + WASM hydration)                |
+| `bot/`      | `bot`          | 2024    | `bot`          | Discord bot (account linking, tickets)              |
 
 There is also an `operator-old/` directory — this is archived and **not** a workspace member. Ignore it.
 
@@ -129,6 +129,7 @@ helm unittest helm/ctf-app
 ```
 
 Helm test files live in:
+
 - `helm/ctf-operator/tests/` — configmap, deployment, CRDs, watch-namespace validation
 - `helm/ctf-app/tests/` — deployment, CTF resource, service, RBAC
 
@@ -166,6 +167,7 @@ cargo clippy -p app --all-targets --features ssr -- -D warnings
 - In production code: avoid `#[allow(...)]` without a `reason = "..."` attribute
 - In test code: `.unwrap()` and `panic!()` are fine
 - Use explicit imports, not wildcard `use module::*`
+- In production code: avoid `#[expect(..)]` it is preferred to refactor code if possible
 
 ### Format check
 
@@ -204,12 +206,12 @@ docker compose -f app/docker-compose.yml up -d
 
 This starts:
 
-| Service | Image | Port(s) | Purpose |
-|---------|-------|---------|---------|
-| **postgres** | `postgres:17` | `5432` | App database (`ctf_app`, user: `ctf`, password: `ctf`) |
-| **keycloak** | `quay.io/keycloak/keycloak:26.1` | `8081` | OIDC identity provider (admin/admin). Imports dev realm from `app/dev/keycloak-realm.json` |
-| **garage** | `dxflrs/garage:v1.2.0` | `3900`, `3901`, `3903` | S3-compatible object storage for challenge files. Config at `app/dev/garage.toml` |
-| **lgtm** | `grafana/otel-lgtm:0.10.0` | `3000` (Grafana), `4317` (OTLP gRPC), `4318` (OTLP HTTP) | Observability stack (Grafana + Loki + Tempo + Mimir + OTel collector) |
+| Service      | Image                            | Port(s)                                                  | Purpose                                                                                    |
+| ------------ | -------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| **postgres** | `postgres:17`                    | `5432`                                                   | App database (`ctf_app`, user: `ctf`, password: `ctf`)                                     |
+| **keycloak** | `quay.io/keycloak/keycloak:26.1` | `8081`                                                   | OIDC identity provider (admin/admin). Imports dev realm from `app/dev/keycloak-realm.json` |
+| **garage**   | `dxflrs/garage:v1.2.0`           | `3900`, `3901`, `3903`                                   | S3-compatible object storage for challenge files. Config at `app/dev/garage.toml`          |
+| **lgtm**     | `grafana/otel-lgtm:0.10.0`       | `3000` (Grafana), `4317` (OTLP gRPC), `4318` (OTLP HTTP) | Observability stack (Grafana + Loki + Tempo + Mimir + OTel collector)                      |
 
 Wait for postgres to be healthy before starting the app:
 
@@ -230,6 +232,7 @@ docker compose -f app/docker-compose.yml down -v
 ```
 
 Dev configuration files live in `app/dev/`:
+
 - `keycloak-realm.json` — pre-configured OIDC realm for local dev
 - `garage.toml` — S3 storage configuration
 - `grafana/` — dashboard and datasource provisioning
@@ -352,13 +355,13 @@ cargo leptos watch
 
 ## Troubleshooting
 
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| `crd_sync` test fails | CRD YAML out of sync | Regenerate CRDs with `cargo run -p ctf-cli -- crd generate` and copy to both locations |
-| `cargo build -p app` fails with missing features | App needs feature flags | Use `--features ssr` for server or `cargo leptos build` for full build |
-| WASM target missing | `wasm32-unknown-unknown` not installed | `rustup target add wasm32-unknown-unknown` |
-| `cargo-leptos` not found | Tool not installed | `cargo install cargo-leptos` |
-| Clippy errors about `unwrap_used` in production code | Strict linting | Use `?` operator or `anyhow` error handling instead of `.unwrap()` |
-| `helm unittest` not found | Plugin not installed | `helm plugin install https://github.com/helm-unittest/helm-unittest` |
-| App fails to connect to postgres/keycloak/S3 | Side services not running | `docker compose -f app/docker-compose.yml up -d --wait` |
-| Postgres connection refused on 5432 | Container not healthy yet | Wait or check `docker compose -f app/docker-compose.yml ps` |
+| Problem                                              | Cause                                  | Fix                                                                                    |
+| ---------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------- |
+| `crd_sync` test fails                                | CRD YAML out of sync                   | Regenerate CRDs with `cargo run -p ctf-cli -- crd generate` and copy to both locations |
+| `cargo build -p app` fails with missing features     | App needs feature flags                | Use `--features ssr` for server or `cargo leptos build` for full build                 |
+| WASM target missing                                  | `wasm32-unknown-unknown` not installed | `rustup target add wasm32-unknown-unknown`                                             |
+| `cargo-leptos` not found                             | Tool not installed                     | `cargo install cargo-leptos`                                                           |
+| Clippy errors about `unwrap_used` in production code | Strict linting                         | Use `?` operator or `anyhow` error handling instead of `.unwrap()`                     |
+| `helm unittest` not found                            | Plugin not installed                   | `helm plugin install https://github.com/helm-unittest/helm-unittest`                   |
+| App fails to connect to postgres/keycloak/S3         | Side services not running              | `docker compose -f app/docker-compose.yml up -d --wait`                                |
+| Postgres connection refused on 5432                  | Container not healthy yet              | Wait or check `docker compose -f app/docker-compose.yml ps`                            |
