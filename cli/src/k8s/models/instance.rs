@@ -4,6 +4,7 @@ use k8s_openapi::apimachinery;
 use kube::CustomResource;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::Conditions;
 
@@ -117,6 +118,55 @@ pub enum InstanceTimeLeft {
     Remaining(Duration),
     /// The instance has expired.
     Expired,
+}
+
+/// Errors when computing instance time left.
+#[derive(Debug, Clone, Error)]
+pub enum InstanceTimeError {
+    #[error("instance has no status")]
+    NoStatus,
+    #[error("instance status has no ready_since timestamp")]
+    NoReadySince,
+    #[error("instance spec has no duration_seconds")]
+    NoDuration,
+    #[error("ready_since timestamp is not a valid unix epoch")]
+    InvalidReadySince,
+}
+
+impl Instance {
+    /// Compute time left from `status.ready_since` + `spec.duration_seconds`.
+    ///
+    /// Unlike [`InstanceStatus::time_left`] which reads `status.expires_at`
+    /// (set asynchronously by the operator), this derives the expiry directly
+    /// from the spec and the timer start, making it consistent with any
+    /// pending spec patches that the operator hasn't reconciled yet.
+    pub fn computed_time_left(&self) -> Result<InstanceTimeLeft, InstanceTimeError> {
+        let status = self.status.as_ref().ok_or(InstanceTimeError::NoStatus)?;
+        let ready_since = status
+            .ready_since
+            .as_ref()
+            .ok_or(InstanceTimeError::NoReadySince)?;
+        let duration = self
+            .spec
+            .duration_seconds
+            .ok_or(InstanceTimeError::NoDuration)?;
+
+        let ready_since_unix = u64::try_from(ready_since.0.as_second())
+            .map_err(|_| InstanceTimeError::InvalidReadySince)?;
+        let expires_unix = ready_since_unix.saturating_add(duration);
+
+        let now_unix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+
+        if now_unix >= expires_unix {
+            Ok(InstanceTimeLeft::Expired)
+        } else {
+            Ok(InstanceTimeLeft::Remaining(Duration::from_secs(
+                expires_unix - now_unix,
+            )))
+        }
+    }
 }
 
 impl InstanceStatus {

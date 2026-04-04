@@ -10,7 +10,7 @@ use axum::{
     },
 };
 // Note: Extension + State + Path are still used by the manual `instance_state` handler.
-use ctf_cli::k8s::{Instance, InstanceSpec, InstanceUser};
+use ctf_cli::k8s::{Instance, InstanceSpec, InstanceTimeLeft, InstanceUser};
 use kube::ResourceExt;
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -239,8 +239,19 @@ pub async fn extend_instance(challenge_name: String) -> Result<(), ServerFnError
     let extension_duration =
         resolve_instance_duration_seconds(&state, &instance_ns, ctf_name, &challenge_name).await;
 
-    // Only allow extending in the last 5 minutes.
-    let time_left_secs = instance_time_left_seconds(&instance).unwrap_or(0);
+    // Compute time left from ready_since + spec.duration_seconds instead of
+    // status.expires_at, which lags behind spec patches and allows race
+    // conditions when the button is clicked rapidly.
+    let time_left_secs = match instance.computed_time_left() {
+        Ok(InstanceTimeLeft::Remaining(dur)) => dur.as_secs(),
+        Ok(InstanceTimeLeft::Expired) => 0,
+        Err(err) => {
+            warn!(error = %err, "cannot compute instance time left for extend guard");
+            redirect_with("bad", "instance is not ready yet");
+            return Ok(());
+        }
+    };
+
     if time_left_secs > 300 {
         redirect_with("bad", "extension is available only in the last 5 minutes");
         return Ok(());
