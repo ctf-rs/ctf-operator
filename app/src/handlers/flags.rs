@@ -194,14 +194,18 @@ pub async fn submit_flag(
             Ok(Some(origin)) => {
                 let same_user = origin.user_id == Some(user.id);
                 let same_challenge = origin.challenge_name == challenge_name;
+                let same_flag = origin.flag_name == flag_name;
 
-                match (same_user, same_challenge) {
-                    // Own flag from an older instance, same challenge → accept
-                    (true, true) => (true, false, Some(origin.id)),
+                match (same_user, same_challenge, same_flag) {
+                    // Own flag from an older instance, same challenge + flag slot → accept
+                    (true, true, true) => (true, false, Some(origin.id)),
+                    // Own flag, same challenge but wrong flag slot → reject (not cheating,
+                    // just submitting a flag value into the wrong form)
+                    (true, true, false) => (false, false, None),
                     // Own flag from a different challenge → just wrong input
-                    (true, false) => (false, false, None),
-                    // Another user's flag, same challenge → accept + cheated
-                    (false, true) => {
+                    (true, false, _) => (false, false, None),
+                    // Another user's flag, same challenge + flag slot → accept + cheated
+                    (false, true, true) => {
                         warn!(
                             user_id = user.id,
                             origin_user_id = ?origin.user_id,
@@ -210,8 +214,18 @@ pub async fn submit_flag(
                         );
                         (true, true, Some(origin.id))
                     }
+                    // Another user's flag, same challenge but wrong flag slot → reject + cheated
+                    (false, true, false) => {
+                        warn!(
+                            user_id = user.id,
+                            origin_user_id = ?origin.user_id,
+                            instance_flag_id = origin.id,
+                            "CHEAT DETECTED: flag from another user's instance (wrong flag slot)"
+                        );
+                        (false, true, Some(origin.id))
+                    }
                     // Another user's flag, different challenge → reject + cheated
-                    (false, false) => {
+                    (false, false, _) => {
                         warn!(
                             user_id = user.id,
                             origin_user_id = ?origin.user_id,

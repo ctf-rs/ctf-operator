@@ -40,6 +40,8 @@ pub struct FlagOrigin {
     pub user_id: Option<i64>,
     /// The challenge the flag was generated for.
     pub challenge_name: String,
+    /// The flag slot name (e.g. "flag-a") this value was generated for.
+    pub flag_name: String,
 }
 
 /// Look up a submitted flag value in `instance_flags` to determine its origin.
@@ -61,6 +63,7 @@ pub async fn check_flag_origin(
         id: m.id,
         user_id: m.user_id,
         challenge_name: m.challenge_name,
+        flag_name: m.flag_name,
     }))
 }
 
