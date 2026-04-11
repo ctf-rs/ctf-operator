@@ -20,7 +20,7 @@ jobs:
               mirrors = ["registry.ctf.rs/docker-hub"]
 
       - name: Build image (pre-push)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile.app
