@@ -41,7 +41,7 @@ jobs:
 
       - name: Read Harbor creds for image push
         id: vault_image
-        uses: hashicorp/vault-action@v3
+        uses: hashicorp/vault-action@v4
         with:
           url: http://vault.vault:8200
           method: kubernetes
@@ -65,7 +65,7 @@ jobs:
 
       - name: Read Harbor creds for Helm push
         id: vault_helm
-        uses: hashicorp/vault-action@v3
+        uses: hashicorp/vault-action@v4
         with:
           url: http://vault.vault:8200
           method: kubernetes
