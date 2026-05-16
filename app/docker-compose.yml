@@ -37,7 +37,7 @@ services:
       - "3903:3903"
 
   lgtm:
-    image: grafana/otel-lgtm:0.10.0
+    image: grafana/otel-lgtm:0.28.0
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
