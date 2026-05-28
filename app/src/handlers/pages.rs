@@ -585,7 +585,7 @@ pub async fn scoreboard(
             .then_with(|| a.flag_name.cmp(&b.flag_name))
     });
 
-    // Gather per-challenge solve data: who solved what and first blood
+    // Gather per-flag solve data: who solved what and first blood
     let solve_data = get_scoreboard_solve_data(&state.db, &ctf_name).await;
     let first_blood = compute_first_blood(&solve_data);
 
