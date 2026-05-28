@@ -81,7 +81,8 @@ pub struct InstanceTeam {
 pub struct InstanceSpec {
     pub ctf: String,
     pub challenge: String,
-    /// The user who spawned this instance (audit trail).
+    /// The user associated with this instance.
+    /// In solo mode this is the owner; in team mode this records who spawned it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user: Option<InstanceUser>,
     /// The team that owns this instance (team mode).
