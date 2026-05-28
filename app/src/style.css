@@ -138,7 +138,7 @@ a { color: #93c5fd; }
 .nav-buttons { display: flex; align-items: center; gap: .5rem; }
 
 /* Scoreboard */
-.scoreboard-container { width: 100%; margin: 0 auto; padding: 0 0.5rem; }
+.scoreboard-container { width: 100%; margin: 0 auto; padding: 0; margin-left: calc(-50vw + 50%); width: 100vw; padding: 0 1rem; box-sizing: border-box; }
 .scoreboard-container h1 { margin: 0 0 1.5rem 0; font-size: 1.8rem; text-align: center; }
 .scoreboard-table { border-collapse: collapse; background: #2a2f38; border-radius: 8px; overflow: hidden; width: 100%; table-layout: fixed; }
 .scoreboard-table thead { background: #232830; }
