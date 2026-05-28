@@ -87,6 +87,21 @@ pub struct ScoreboardPageData {
     pub solve_grid: Vec<Vec<SolveStatus>>,
     /// Whether any user has a team (enables "Team" column header instead of "Player").
     pub has_teams: bool,
+    /// CTF timing information for the progress bar timer.
+    pub timer: Option<ScoreboardTimer>,
+}
+
+/// Timing data for the scoreboard progress bar timer.
+#[derive(Debug, Clone)]
+pub struct ScoreboardTimer {
+    /// Unix timestamp (seconds) when the CTF started/opens.
+    pub start_ts: u64,
+    /// Unix timestamp (seconds) when the CTF ends.
+    pub end_ts: u64,
+    /// Current time as unix timestamp (seconds).
+    pub now_ts: u64,
+    /// Unix timestamp (seconds) when the scoreboard freezes (if set).
+    pub freeze_ts: Option<u64>,
 }
 
 /// One column in the scoreboard challenge grid.

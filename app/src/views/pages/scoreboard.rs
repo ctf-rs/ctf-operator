@@ -1,6 +1,90 @@
 use leptos::prelude::*;
 
-use super::super::{ScoreboardPageData, SolveStatus, layout::PageShell};
+use super::super::{ScoreboardPageData, ScoreboardTimer, SolveStatus, layout::PageShell};
+
+/// Format seconds into a human-readable string like "2h 15m" or "45m 30s".
+fn format_duration(total_secs: u64) -> String {
+    let d = total_secs / 86400;
+    let h = (total_secs % 86400) / 3600;
+    let m = (total_secs % 3600) / 60;
+    let s = total_secs % 60;
+    if d > 0 {
+        format!("{d}d {h}h {m}m")
+    } else if h > 0 {
+        format!("{h}h {m}m {s}s")
+    } else if m > 0 {
+        format!("{m}m {s}s")
+    } else {
+        format!("{s}s")
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Timer progress bar component
+// ---------------------------------------------------------------------------
+
+#[component]
+fn TimerBar(timer: ScoreboardTimer) -> impl IntoView {
+    let total = timer.end_ts.saturating_sub(timer.start_ts);
+    if total == 0 {
+        return view! { <div></div> }.into_any();
+    }
+
+    let elapsed = timer.now_ts.saturating_sub(timer.start_ts).min(total);
+    let progress_pct = (elapsed as f64 / total as f64 * 100.0).min(100.0);
+    let remaining = timer.end_ts.saturating_sub(timer.now_ts);
+
+    let freeze_pct = timer.freeze_ts.map(|ft| {
+        let freeze_offset = ft.saturating_sub(timer.start_ts).min(total);
+        (freeze_offset as f64 / total as f64 * 100.0).min(100.0)
+    });
+
+    let is_frozen = timer.freeze_ts.is_some_and(|ft| timer.now_ts >= ft);
+    let is_ended = timer.now_ts >= timer.end_ts;
+
+    let status_text = if is_ended {
+        "CTF has ended".to_string()
+    } else if is_frozen {
+        format!("Scoreboard frozen — {} remaining", format_duration(remaining))
+    } else {
+        format!("{} remaining", format_duration(remaining))
+    };
+
+    // Progress bar color: green up to freeze point, yellow/orange after
+    let bar_style = if let Some(fp) = freeze_pct {
+        if progress_pct <= fp {
+            // Haven't reached freeze point yet — all green
+            format!("width:{progress_pct:.2}%;background:linear-gradient(90deg,#22c55e,#4ade80);")
+        } else {
+            // Past freeze point — green up to freeze, amber after
+            format!(
+                "width:{progress_pct:.2}%;background:linear-gradient(90deg,#22c55e 0%,#4ade80 {fp:.2}%,#f59e0b {fp:.2}%,#ef4444 100%);",
+            )
+        }
+    } else {
+        format!("width:{progress_pct:.2}%;background:linear-gradient(90deg,#22c55e,#4ade80);")
+    };
+
+    view! {
+        <div class="timer-bar-container"
+             data-start-ts={timer.start_ts.to_string()}
+             data-end-ts={timer.end_ts.to_string()}
+             data-freeze-ts={timer.freeze_ts.map(|f| f.to_string()).unwrap_or_default()}>
+            <div class="timer-bar-header">
+                <span class="timer-status">{status_text}</span>
+            </div>
+            <div class="timer-bar-track">
+                <div class="timer-bar-fill" style={bar_style}></div>
+                {freeze_pct.map(|fp| view! {
+                    <div class="timer-bar-freeze-marker" style={format!("left:{fp:.2}%;")}
+                         title="Scoreboard freeze point">
+                        <span class="freeze-label">{"\u{2744}\u{fe0f}"}</span>
+                    </div>
+                })}
+            </div>
+        </div>
+    }.into_any()
+}
 
 // ---------------------------------------------------------------------------
 // Scoreboard page
@@ -33,6 +117,7 @@ pub fn ScoreboardPage(data: ScoreboardPageData) -> impl IntoView {
                         "\u{2744}\u{fe0f} Scoreboard is frozen — scores may not reflect latest solves."
                     </p>
                 })}
+                {data.timer.map(|timer| view! { <TimerBar timer=timer/> })}
                 {if data.leaderboard.is_empty() {
                     view! {
                         <p class="muted" style="text-align:center;margin-top:2rem;">"No solves yet. Be the first!"</p>

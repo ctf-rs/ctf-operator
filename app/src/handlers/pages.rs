@@ -613,6 +613,24 @@ pub async fn scoreboard(
 
     let has_teams = state.config.mode.is_team();
 
+    // Build timer data from schedule + scoreboard config
+    let schedule = get_ctf_schedule(&state);
+    let timer = match (&schedule.open_time, &schedule.end_time) {
+        (Some(open), Some(end)) => {
+            let start_ts = open.0.as_second() as u64;
+            let end_ts = end.0.as_second() as u64;
+            let now_ts = crate::helpers::now_unix_seconds();
+            let freeze_ts = sb_config.freeze_time.as_ref().map(|t| t.0.as_second() as u64);
+            Some(views::ScoreboardTimer {
+                start_ts,
+                end_ts,
+                now_ts,
+                freeze_ts,
+            })
+        }
+        _ => None,
+    };
+
     let page_data = views::ScoreboardPageData {
         ctf_title,
         user_label,
@@ -621,6 +639,7 @@ pub async fn scoreboard(
         challenge_columns,
         solve_grid,
         has_teams,
+        timer,
     };
 
     let html = views::render_to_html(move || {
