@@ -5,13 +5,13 @@ use std::task::{Context, Poll};
 use axum::body::Body;
 use axum::extract::{Request, State};
 use axum::middleware::Next;
-use axum::response::{IntoResponse, Redirect, Response};
+use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum_extra::extract::cookie::CookieJar;
 use http::header;
 use tokio::sync::Mutex;
 use tower::{Layer, Service};
 
-use crate::{db, helpers, state::AppState};
+use crate::{db, helpers, state::AppState, views};
 
 // ---------------------------------------------------------------------------
 // HTTP metrics layer  (OTel semantic conventions)
@@ -179,6 +179,21 @@ pub async fn require_auth(
             if !state.config.mode.is_team() {
                 user.team_id = None;
                 user.team_name = None;
+            }
+            // In team mode, block users without a team
+            if state.config.mode.is_team() && user.team_id.is_none() {
+                let ctf_title = helpers::get_ctf_full_name(&state);
+                let user_label = user
+                    .name
+                    .clone()
+                    .or(user.email.clone())
+                    .unwrap_or_else(|| user.sub.clone());
+                let html = views::render_to_html(move || {
+                    leptos::prelude::view! {
+                        <views::NoTeamPage ctf_title=ctf_title user_label=user_label/>
+                    }
+                });
+                return Html(html).into_response();
             }
             request.extensions_mut().insert(user);
             next.run(request).await

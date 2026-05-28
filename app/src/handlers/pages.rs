@@ -108,6 +108,17 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         return Html(html).into_response();
     }
 
+    // Gate on team membership in team mode
+    if state.config.mode.is_team() && user.team_id.is_none() {
+        let user_label = build_user_label(&user);
+        let html = views::render_to_html(move || {
+            leptos::prelude::view! {
+                <views::NoTeamPage ctf_title=ctf_title user_label=user_label/>
+            }
+        });
+        return Html(html).into_response();
+    }
+
     // Gate on CTF open status
     let schedule = get_ctf_schedule(&state);
     if !is_ctf_open(&schedule) {

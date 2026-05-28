@@ -7,5 +7,5 @@ mod scoreboard;
 pub use challenge::ChallengeDetailPage;
 pub use index::IndexPage;
 pub use login::LoginPage;
-pub use not_open::{AccessDeniedPage, CtfNotOpenPage};
+pub use not_open::{AccessDeniedPage, CtfNotOpenPage, NoTeamPage};
 pub use scoreboard::{ScoreboardHiddenPage, ScoreboardPage};

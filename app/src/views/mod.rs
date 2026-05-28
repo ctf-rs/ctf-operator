@@ -4,7 +4,7 @@ mod pages;
 mod scripts;
 
 pub use pages::{
-    AccessDeniedPage, ChallengeDetailPage, CtfNotOpenPage, IndexPage, LoginPage,
+    AccessDeniedPage, ChallengeDetailPage, CtfNotOpenPage, IndexPage, LoginPage, NoTeamPage,
     ScoreboardHiddenPage, ScoreboardPage,
 };
 
