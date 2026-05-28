@@ -137,6 +137,7 @@ pub async fn spawn_instance(challenge_name: String) -> Result<(), ServerFnError>
                 id: user.id,
                 username: user_label,
             }),
+            team: None,
             duration_seconds: Some(duration_seconds),
         },
     );

@@ -121,6 +121,7 @@ pub fn instance_from_refs(
             ctf: ctf_name.to_owned(),
             challenge: challenge_name.to_owned(),
             user: None,
+            team: None,
             duration_seconds: None,
         },
     );

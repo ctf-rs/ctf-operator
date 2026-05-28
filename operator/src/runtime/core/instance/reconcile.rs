@@ -180,8 +180,11 @@ fn recompute_expires_at(
         return;
     };
 
-    // Global instances (user=None, duration=None) never expire.
-    if instance.spec.duration_seconds.is_none() && instance.spec.user.is_none() {
+    // Global instances (user=None, team=None, duration=None) never expire.
+    if instance.spec.duration_seconds.is_none()
+        && instance.spec.user.is_none()
+        && instance.spec.team.is_none()
+    {
         status.expires_at = None;
         return;
     }
@@ -372,8 +375,11 @@ fn initialize_ready_timer(
     let now_unix = now_unix_seconds();
     status.ready_since = unix_seconds_to_time(now_unix);
 
-    // Global instances (user=None, duration=None) never expire.
-    if instance.spec.duration_seconds.is_none() && instance.spec.user.is_none() {
+    // Global instances (user=None, team=None, duration=None) never expire.
+    if instance.spec.duration_seconds.is_none()
+        && instance.spec.user.is_none()
+        && instance.spec.team.is_none()
+    {
         status.expires_at = None;
     } else {
         let duration = instance.spec.duration_seconds.unwrap_or(default_duration);
@@ -1532,6 +1538,7 @@ mod tests {
                 ctf: "ctf-1".to_string(),
                 challenge: "chall-1".to_string(),
                 user: None,
+                team: None,
                 duration_seconds: None,
             },
         );

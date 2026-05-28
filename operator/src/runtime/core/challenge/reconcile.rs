@@ -130,6 +130,7 @@ async fn ensure_global_instance(
             ctf: ctf_name,
             challenge: challenge_name,
             user: None,
+            team: None,
             duration_seconds: None,
         },
         status: None,
