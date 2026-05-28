@@ -86,6 +86,16 @@ pub async fn spawn_instance(challenge_name: String) -> Result<(), ServerFnError>
         return Ok(());
     }
 
+    // Block solo users in team mode
+    if state.config.mode.is_team() && user.team_id.is_none() {
+        leptos_axum::redirect(&format!(
+            "{}?message={}",
+            challenge_route(&challenge_name),
+            urlencoding::encode("you must be on a team to spawn instances"),
+        ));
+        return Ok(());
+    }
+
     // ---- Guard: instance already exists --------------------------------
     let team_id = user.team_id.as_deref();
     if k8s_instances::get_instance_for_user(&state, user.id, team_id, &challenge_name, ctf_name)

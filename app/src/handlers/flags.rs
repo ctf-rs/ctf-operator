@@ -66,6 +66,12 @@ pub async fn submit_flag(
         return Ok(());
     }
 
+    // Block solo users in team mode
+    if state.config.mode.is_team() && user.team_id.is_none() {
+        redirect_with("bad", "you must be on a team to submit flags");
+        return Ok(());
+    }
+
     if db::is_challenge_solved(&state.db, user.id, user.team_id.as_deref(), &challenge_name, ctf_name)
         .await
         .unwrap_or(false)

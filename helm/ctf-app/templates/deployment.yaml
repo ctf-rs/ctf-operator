@@ -72,6 +72,10 @@ spec:
             - name: MAX_INSTANCES_PER_TEAM
               value: {{ .Values.maxInstancesPerTeam | quote }}
             {{- end }}
+            {{- if and .Values.appMode (ne .Values.appMode "user") }}
+            - name: APP_MODE
+              value: {{ .Values.appMode | quote }}
+            {{- end }}
             - name: SESSION_COOKIE_NAME
               value: {{ .Values.session.cookieName | default "ctf_app_session" | quote }}
             {{- if .Values.s3.endpoint }}

@@ -51,6 +51,10 @@ maxInstancesPerUser: 2
 # Defaults to maxInstancesPerUser when not set.
 maxInstancesPerTeam: ""
 
+# Application mode: "user" (default) or "team".
+# In team mode only users with a team can submit flags and spawn instances.
+appMode: "user"
+
 database:
   url: ""
   # Use an existing Secret instead of a plain-text url.

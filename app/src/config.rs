@@ -1,5 +1,23 @@
 use anyhow::{Context, Result};
 
+/// Application mode: determines whether the CTF runs with individual
+/// players or requires team membership.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AppMode {
+    /// Default — every player competes individually.
+    User,
+    /// Team mode — only users with a team can submit flags, spawn
+    /// instances, etc.  Solo users are shown an error.
+    Team,
+}
+
+impl AppMode {
+    /// Returns `true` when running in team mode.
+    pub const fn is_team(self) -> bool {
+        matches!(self, Self::Team)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct AppConfig {
     pub bind_addr: String,
@@ -43,6 +61,8 @@ pub struct AppConfig {
     /// Used instead of `max_instances_per_user` when the user belongs to a
     /// team.  Defaults to the same value as `max_instances_per_user`.
     pub max_instances_per_team: usize,
+    /// Application mode — `User` (default) or `Team`.
+    pub mode: AppMode,
 }
 
 #[derive(Clone, Debug)]
@@ -159,6 +179,16 @@ impl AppConfig {
             .filter(|value| *value > 0)
             .unwrap_or(max_instances_per_user);
 
+        let mode = match std::env::var("APP_MODE")
+            .unwrap_or_default()
+            .trim()
+            .to_lowercase()
+            .as_str()
+        {
+            "team" | "teams" => AppMode::Team,
+            _ => AppMode::User,
+        };
+
         Ok(Self {
             bind_addr,
             database_url,
@@ -188,6 +218,7 @@ impl AppConfig {
             player_role,
             max_instances_per_user,
             max_instances_per_team,
+            mode,
         })
     }
 }

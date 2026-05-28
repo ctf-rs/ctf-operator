@@ -504,8 +504,12 @@ pub async fn scoreboard(
     // Get leaderboard + challenge points from scoreboard cache in one read
     let (leaderboard, challenge_points_cache) = {
         let scoreboard = state.scoreboard.read().await;
-        let lb = scoreboard.get_leaderboard(&ctf_name);
+        let mut lb = scoreboard.get_leaderboard(&ctf_name);
         let cp = scoreboard.challenge_points.clone();
+        // In team mode, only show teams on the scoreboard
+        if state.config.mode.is_team() {
+            lb.retain(|e| e.team_id.is_some());
+        }
         (lb, cp)
     };
 
@@ -578,7 +582,7 @@ pub async fn scoreboard(
         })
         .collect();
 
-    let has_teams = leaderboard.iter().any(|e| e.team_id.is_some());
+    let has_teams = state.config.mode.is_team();
 
     let page_data = views::ScoreboardPageData {
         ctf_title,
