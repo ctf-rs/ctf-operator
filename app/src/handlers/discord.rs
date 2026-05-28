@@ -83,7 +83,13 @@ pub async fn discord_link(
     };
 
     let user = match db::get_user_by_session(&state.db, &token).await {
-        Ok(Some(u)) => u,
+        Ok(Some(mut u)) => {
+            if !state.config.mode.is_team() {
+                u.team_id = None;
+                u.team_name = None;
+            }
+            u
+        }
         _ => {
             return (
                 axum::http::StatusCode::UNAUTHORIZED,

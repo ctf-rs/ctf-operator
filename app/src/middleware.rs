@@ -107,7 +107,12 @@ where
             };
 
             match db::get_user_by_session(&state.db, &token).await {
-                Ok(Some(user)) => {
+                Ok(Some(mut user)) => {
+                    // In user mode, ignore team fields from Keycloak
+                    if !state.config.mode.is_team() {
+                        user.team_id = None;
+                        user.team_name = None;
+                    }
                     req.extensions_mut().insert(user);
                     let mut svc = inner.lock().await;
                     svc.call(req).await
@@ -169,7 +174,12 @@ pub async fn require_auth(
     };
 
     match db::get_user_by_session(&state.db, &token).await {
-        Ok(Some(user)) => {
+        Ok(Some(mut user)) => {
+            // In user mode, ignore team fields from Keycloak
+            if !state.config.mode.is_team() {
+                user.team_id = None;
+                user.team_name = None;
+            }
             request.extensions_mut().insert(user);
             next.run(request).await
         }

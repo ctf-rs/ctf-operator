@@ -68,10 +68,15 @@ async fn server_fn_handler(req: Request<Body>) -> Response {
 /// Look up the authenticated user from the session cookie (if present).
 async fn resolve_user(state: &AppState, headers: &http::HeaderMap) -> Option<db::User> {
     let token = extract_session_cookie(headers, &state.config.session_cookie_name)?;
-    db::get_user_by_session(&state.db, &token)
+    let mut user = db::get_user_by_session(&state.db, &token)
         .await
         .ok()
-        .flatten()
+        .flatten()?;
+    if !state.config.mode.is_team() {
+        user.team_id = None;
+        user.team_name = None;
+    }
+    Some(user)
 }
 
 /// Build the application router with all routes wired to their handlers.

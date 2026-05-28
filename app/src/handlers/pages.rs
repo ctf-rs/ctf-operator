@@ -71,7 +71,14 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
     // Resolve user from session cookie (index is public, so user may not exist)
     let user = match jar.get(&state.config.session_cookie_name) {
         Some(cookie) => match db::get_user_by_session(&state.db, cookie.value()).await {
-            Ok(user) => user,
+            Ok(Some(mut u)) => {
+                if !state.config.mode.is_team() {
+                    u.team_id = None;
+                    u.team_name = None;
+                }
+                Some(u)
+            }
+            Ok(None) => None,
             Err(err) => {
                 warn!(error = %err, "failed to read current user");
                 None
