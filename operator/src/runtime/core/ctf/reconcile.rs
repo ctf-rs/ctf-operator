@@ -132,6 +132,8 @@ fn validate_spec(resource: &Ctf, status: &mut CtfStatus) {
         }
     }
 
+    // Remove Ready before checking so it doesn't block its own recovery.
+    status.conditions.remove("Ready");
     if status.conditions.all_true() {
         status
             .conditions

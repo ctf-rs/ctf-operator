@@ -231,6 +231,8 @@ fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
         }
     }
 
+    // Remove Ready before checking so it doesn't block its own recovery.
+    status.conditions.remove("Ready");
     if status.conditions.all_true() {
         status
             .conditions

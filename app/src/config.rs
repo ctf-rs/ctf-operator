@@ -68,7 +68,7 @@ pub struct AppConfig {
     pub max_instances_per_user: usize,
     /// Maximum number of simultaneously spawned instances per team.
     /// Used instead of `max_instances_per_user` when the user belongs to a
-    /// team.  Defaults to the same value as `max_instances_per_user`.
+    /// team.  Defaults to 5.
     pub max_instances_per_team: usize,
     /// Application mode — `User` (default) or `Team`.
     pub mode: AppMode,
@@ -186,7 +186,7 @@ impl AppConfig {
             .ok()
             .and_then(|value| value.parse::<usize>().ok())
             .filter(|value| *value > 0)
-            .unwrap_or(max_instances_per_user);
+            .unwrap_or(5);
 
         let mode = AppMode::parse(&std::env::var("APP_MODE").unwrap_or_default());
 
