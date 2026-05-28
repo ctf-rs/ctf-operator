@@ -19,6 +19,18 @@ fn format_duration(total_secs: u64) -> String {
     }
 }
 
+/// Format a unix timestamp as "May 28, 22:00 UTC".
+fn format_timestamp(ts: u64) -> String {
+    let ts = jiff::Timestamp::from_second(ts as i64).unwrap_or(jiff::Timestamp::UNIX_EPOCH);
+    let dt = ts.to_zoned(jiff::tz::TimeZone::UTC);
+    let month = match dt.month() {
+        1 => "Jan", 2 => "Feb", 3 => "Mar", 4 => "Apr",
+        5 => "May", 6 => "Jun", 7 => "Jul", 8 => "Aug",
+        9 => "Sep", 10 => "Oct", 11 => "Nov", _ => "Dec",
+    };
+    format!("{} {:02}, {:02}:{:02} UTC", month, dt.day(), dt.hour(), dt.minute())
+}
+
 // ---------------------------------------------------------------------------
 // Timer progress bar component
 // ---------------------------------------------------------------------------
@@ -53,10 +65,8 @@ fn TimerBar(timer: ScoreboardTimer) -> impl IntoView {
     // Progress bar color: green up to freeze point, yellow/orange after
     let bar_style = if let Some(fp) = freeze_pct {
         if progress_pct <= fp {
-            // Haven't reached freeze point yet — all green
             format!("width:{progress_pct:.2}%;background:linear-gradient(90deg,#22c55e,#4ade80);")
         } else {
-            // Past freeze point — green up to freeze, amber after
             format!(
                 "width:{progress_pct:.2}%;background:linear-gradient(90deg,#22c55e 0%,#4ade80 {fp:.2}%,#f59e0b {fp:.2}%,#ef4444 100%);",
             )
@@ -64,6 +74,10 @@ fn TimerBar(timer: ScoreboardTimer) -> impl IntoView {
     } else {
         format!("width:{progress_pct:.2}%;background:linear-gradient(90deg,#22c55e,#4ade80);")
     };
+
+    let start_label = format_timestamp(timer.start_ts);
+    let end_label = format_timestamp(timer.end_ts);
+    let freeze_label = timer.freeze_ts.map(format_timestamp);
 
     view! {
         <div class="timer-bar-container"
@@ -78,9 +92,21 @@ fn TimerBar(timer: ScoreboardTimer) -> impl IntoView {
                 {freeze_pct.map(|fp| view! {
                     <div class="timer-bar-freeze-marker" style={format!("left:{fp:.2}%;")}
                          title="Scoreboard freeze point">
-                        <span class="freeze-label">{"\u{2744}\u{fe0f}"}</span>
+                        <span class="freeze-icon">{"\u{2744}\u{fe0f}"}</span>
                     </div>
                 })}
+            </div>
+            <div class="timer-bar-timestamps">
+                <span class="ts-start">{start_label}</span>
+                {freeze_label.map(|fl| {
+                    let fp = freeze_pct.unwrap_or(50.0);
+                    view! {
+                        <span class="ts-freeze" style={format!("left:{fp:.2}%;")}>
+                            {"\u{2744}\u{fe0f} "}{fl}
+                        </span>
+                    }
+                })}
+                <span class="ts-end">{end_label}</span>
             </div>
         </div>
     }.into_any()

@@ -50,6 +50,7 @@ rand = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 rustls = { workspace = true, features = ["ring", "std"], optional = true }
 sea-orm = { workspace = true, features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-chrono", "with-json"], optional = true }
+jiff = { workspace = true }
 sha2 = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["full"], optional = true }
 tokio-stream = { workspace = true, optional = true }
