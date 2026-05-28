@@ -16,6 +16,15 @@ impl AppMode {
     pub const fn is_team(self) -> bool {
         matches!(self, Self::Team)
     }
+
+    /// Parse an `AppMode` from a raw string value (e.g. from an env var).
+    /// Returns `Team` for "team"/"teams" (case-insensitive), `User` otherwise.
+    pub fn parse(value: &str) -> Self {
+        match value.trim().to_lowercase().as_str() {
+            "team" | "teams" => Self::Team,
+            _ => Self::User,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -179,15 +188,7 @@ impl AppConfig {
             .filter(|value| *value > 0)
             .unwrap_or(max_instances_per_user);
 
-        let mode = match std::env::var("APP_MODE")
-            .unwrap_or_default()
-            .trim()
-            .to_lowercase()
-            .as_str()
-        {
-            "team" | "teams" => AppMode::Team,
-            _ => AppMode::User,
-        };
+        let mode = AppMode::parse(&std::env::var("APP_MODE").unwrap_or_default());
 
         Ok(Self {
             bind_addr,
@@ -220,5 +221,33 @@ impl AppConfig {
             max_instances_per_team,
             mode,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_mode_parse_team() {
+        assert_eq!(AppMode::parse("team"), AppMode::Team);
+        assert_eq!(AppMode::parse("teams"), AppMode::Team);
+        assert_eq!(AppMode::parse("Team"), AppMode::Team);
+        assert_eq!(AppMode::parse("TEAMS"), AppMode::Team);
+        assert_eq!(AppMode::parse("  team  "), AppMode::Team);
+    }
+
+    #[test]
+    fn app_mode_parse_user() {
+        assert_eq!(AppMode::parse("user"), AppMode::User);
+        assert_eq!(AppMode::parse(""), AppMode::User);
+        assert_eq!(AppMode::parse("solo"), AppMode::User);
+        assert_eq!(AppMode::parse("anything"), AppMode::User);
+    }
+
+    #[test]
+    fn app_mode_is_team() {
+        assert!(AppMode::Team.is_team());
+        assert!(!AppMode::User.is_team());
     }
 }

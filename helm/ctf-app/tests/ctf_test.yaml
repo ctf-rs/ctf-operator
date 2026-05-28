@@ -159,6 +159,27 @@ tests:
           path: spec.scoreboard.frozen
           value: false
 
+  - it: renders scoreboard public field
+    set:
+      ctf:
+        name: my-ctf
+        install: true
+        fullName: "Test CTF"
+        challenges:
+          - ch1
+        flag:
+          prefix: CTF
+        network:
+          ports:
+            start: 12000
+            end: 13000
+        scoreboard:
+          public: true
+    asserts:
+      - equal:
+          path: spec.scoreboard.public
+          value: true
+
   - it: renders schedule section
     set:
       ctf:

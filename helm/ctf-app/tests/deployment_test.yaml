@@ -444,3 +444,20 @@ tests:
             operator: Equal
             value: ctf
             effect: NoSchedule
+
+  - it: omits APP_MODE when appMode is user (default)
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_MODE
+
+  - it: sets APP_MODE when appMode is team
+    set:
+      appMode: "team"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_MODE
+            value: "team"

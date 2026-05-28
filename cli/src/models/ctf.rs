@@ -242,3 +242,54 @@ impl Ctf {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scoreboard_default_values() {
+        let sb = CtfScoreboard::default();
+        assert!(sb.visible);
+        assert!(!sb.public);
+        assert!(sb.frozen.is_none());
+        assert!(sb.freeze_time.is_none());
+    }
+
+    #[test]
+    fn scoreboard_deserialize_empty_object() {
+        let sb: CtfScoreboard = serde_json::from_str("{}").unwrap();
+        assert!(sb.visible);
+        assert!(!sb.public);
+        assert!(sb.frozen.is_none());
+    }
+
+    #[test]
+    fn scoreboard_deserialize_public_true() {
+        let sb: CtfScoreboard = serde_json::from_str(r#"{"public": true}"#).unwrap();
+        assert!(sb.public);
+        assert!(sb.visible);
+    }
+
+    #[test]
+    fn scoreboard_roundtrip() {
+        let sb = CtfScoreboard {
+            frozen: Some(true),
+            visible: false,
+            freeze_time: None,
+            public: true,
+        };
+        let json = serde_json::to_string(&sb).unwrap();
+        let deserialized: CtfScoreboard = serde_json::from_str(&json).unwrap();
+        assert_eq!(sb, deserialized);
+    }
+
+    #[test]
+    fn schedule_default_values() {
+        let sched = CtfSchedule::default();
+        assert!(sched.open.is_none());
+        assert!(sched.ended.is_none());
+        assert!(sched.open_time.is_none());
+        assert!(sched.end_time.is_none());
+    }
+}
