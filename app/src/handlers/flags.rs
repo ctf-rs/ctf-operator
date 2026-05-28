@@ -66,7 +66,7 @@ pub async fn submit_flag(
         return Ok(());
     }
 
-    if db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, ctf_name)
+    if db::is_challenge_solved(&state.db, user.id, user.team_id.as_deref(), &challenge_name, ctf_name)
         .await
         .unwrap_or(false)
     {
@@ -90,6 +90,7 @@ pub async fn submit_flag(
             state: &state,
             challenge_crd: &challenge_crd,
             user_id: user.id,
+            team_id: user.team_id.as_deref(),
             challenge_name: &challenge_name,
             ctf_name,
             flag_name: &flag_name,
@@ -114,6 +115,7 @@ pub async fn submit_flag(
         persist_flag_submission(
             &state,
             user.id,
+            user.team_id.as_deref(),
             &challenge_name,
             ctf_name,
             &flag_name,
@@ -134,6 +136,7 @@ pub async fn submit_flag(
         persist_flag_submission(
             &state,
             user.id,
+            user.team_id.as_deref(),
             &challenge_name,
             ctf_name,
             &flag_name,
@@ -151,6 +154,7 @@ pub async fn submit_flag(
         persist_flag_submission(
             &state,
             user.id,
+            user.team_id.as_deref(),
             &challenge_name,
             ctf_name,
             &flag_name,
@@ -198,45 +202,53 @@ pub async fn submit_flag(
         // Check if the submitted value matches any previously generated flag
         match db::check_flag_origin(&state.db, submitted_flag_trimmed, ctf_name).await {
             Ok(Some(origin)) => {
-                let same_user = origin.user_id == Some(user.id);
+                // In team mode, "same entity" means same team; in solo mode, same user.
+                let same_entity = if let Some(ref tid) = user.team_id {
+                    origin.team_id.as_deref() == Some(tid.as_str())
+                } else {
+                    origin.user_id == Some(user.id)
+                };
                 let same_challenge = origin.challenge_name == challenge_name;
                 let same_flag = origin.flag_name == flag_name;
 
-                match (same_user, same_challenge, same_flag) {
-                    // Own flag from an older instance, same challenge + flag slot → accept
+                match (same_entity, same_challenge, same_flag) {
+                    // Own (or teammate's) flag from an older instance, same challenge + flag slot → accept
                     (true, true, true) => (true, false, Some(origin.id)),
                     // Own flag, same challenge but wrong flag slot → reject (not cheating,
                     // just submitting a flag value into the wrong form)
                     (true, true, false) => (false, false, None),
                     // Own flag from a different challenge → just wrong input
                     (true, false, _) => (false, false, None),
-                    // Another user's flag, same challenge + flag slot → accept + cheated
+                    // Another entity's flag, same challenge + flag slot → accept + cheated
                     (false, true, true) => {
                         warn!(
                             user_id = user.id,
                             origin_user_id = ?origin.user_id,
+                            origin_team_id = ?origin.team_id,
                             instance_flag_id = origin.id,
-                            "CHEAT DETECTED: flag from another user's instance"
+                            "CHEAT DETECTED: flag from another entity's instance"
                         );
                         (true, true, Some(origin.id))
                     }
-                    // Another user's flag, same challenge but wrong flag slot → reject + cheated
+                    // Another entity's flag, same challenge but wrong flag slot → reject + cheated
                     (false, true, false) => {
                         warn!(
                             user_id = user.id,
                             origin_user_id = ?origin.user_id,
+                            origin_team_id = ?origin.team_id,
                             instance_flag_id = origin.id,
-                            "CHEAT DETECTED: flag from another user's instance (wrong flag slot)"
+                            "CHEAT DETECTED: flag from another entity's instance (wrong flag slot)"
                         );
                         (false, true, Some(origin.id))
                     }
-                    // Another user's flag, different challenge → reject + cheated
+                    // Another entity's flag, different challenge → reject + cheated
                     (false, false, _) => {
                         warn!(
                             user_id = user.id,
                             origin_user_id = ?origin.user_id,
+                            origin_team_id = ?origin.team_id,
                             instance_flag_id = origin.id,
-                            "CHEAT DETECTED: flag from another user's different challenge"
+                            "CHEAT DETECTED: flag from another entity's different challenge"
                         );
                         (false, true, Some(origin.id))
                     }
@@ -254,6 +266,7 @@ pub async fn submit_flag(
     if let Err(err) = db::add_flag_submission(
         &state.db,
         user.id,
+        user.team_id.as_deref(),
         &challenge_name,
         ctf_name,
         &flag_name,
@@ -293,7 +306,7 @@ pub async fn submit_flag(
 
         // Check if all flags are now solved
         let solved_flag_count =
-            db::count_solved_flags_for_user(&state.db, user.id, &challenge_name, ctf_name)
+            db::count_solved_flags(&state.db, user.id, user.team_id.as_deref(), &challenge_name, ctf_name)
                 .await
                 .unwrap_or(0) as usize;
 
@@ -356,6 +369,7 @@ struct StaticFlagSubmission<'a> {
     state: &'a Arc<AppState>,
     challenge_crd: &'a Option<std::sync::Arc<ctf_cli::k8s::Challenge>>,
     user_id: i64,
+    team_id: Option<&'a str>,
     challenge_name: &'a str,
     ctf_name: &'a str,
     flag_name: &'a str,
@@ -369,6 +383,7 @@ async fn submit_static_flag(sub: StaticFlagSubmission<'_>) -> (String, String) {
         persist_flag_submission(
             sub.state,
             sub.user_id,
+            sub.team_id,
             sub.challenge_name,
             sub.ctf_name,
             sub.flag_name,
@@ -428,6 +443,7 @@ async fn submit_static_flag(sub: StaticFlagSubmission<'_>) -> (String, String) {
     if let Err(err) = db::add_flag_submission(
         &sub.state.db,
         sub.user_id,
+        sub.team_id,
         sub.challenge_name,
         sub.ctf_name,
         sub.flag_name,
@@ -455,9 +471,10 @@ async fn submit_static_flag(sub: StaticFlagSubmission<'_>) -> (String, String) {
         );
 
         // Check if all flags are now solved
-        let solved_flag_count = db::count_solved_flags_for_user(
+        let solved_flag_count = db::count_solved_flags(
             &sub.state.db,
             sub.user_id,
+            sub.team_id,
             sub.challenge_name,
             sub.ctf_name,
         )
@@ -502,6 +519,7 @@ async fn submit_static_flag(sub: StaticFlagSubmission<'_>) -> (String, String) {
 async fn persist_flag_submission(
     state: &Arc<AppState>,
     user_id: i64,
+    team_id: Option<&str>,
     challenge_name: &str,
     ctf_name: &str,
     flag_name: &str,
@@ -513,6 +531,7 @@ async fn persist_flag_submission(
     if let Err(err) = db::add_flag_submission(
         &state.db,
         user_id,
+        team_id,
         challenge_name,
         ctf_name,
         flag_name,

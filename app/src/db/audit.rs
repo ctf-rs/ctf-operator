@@ -3,27 +3,34 @@ use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 
 use super::entity::{downloads, instance_actions, instance_flags};
 
+/// Parameters for recording a generated flag.
+pub struct FlagGenerationParams<'a> {
+    pub instance_name: &'a str,
+    pub user_id: Option<i64>,
+    pub team_id: Option<&'a str>,
+    pub challenge_name: &'a str,
+    pub ctf_name: &'a str,
+    pub flag_name: &'a str,
+    pub generated_flag: &'a str,
+    pub ignore_case: bool,
+    pub ignore_random: bool,
+}
+
 /// Record a generated flag from K8s Flag resource
 pub async fn log_flag_generation(
     db: &DatabaseConnection,
-    instance_name: &str,
-    user_id: Option<i64>,
-    challenge_name: &str,
-    ctf_name: &str,
-    flag_name: &str,
-    generated_flag: &str,
-    ignore_case: bool,
-    ignore_random: bool,
+    params: &FlagGenerationParams<'_>,
 ) -> Result<()> {
     let model = instance_flags::ActiveModel {
-        instance_name: Set(instance_name.to_owned()),
-        user_id: Set(user_id),
-        challenge_name: Set(challenge_name.to_owned()),
-        ctf_name: Set(ctf_name.to_owned()),
-        flag_name: Set(flag_name.to_owned()),
-        generated_flag: Set(generated_flag.to_owned()),
-        ignore_case: Set(ignore_case),
-        ignore_random: Set(ignore_random),
+        instance_name: Set(params.instance_name.to_owned()),
+        user_id: Set(params.user_id),
+        team_id: Set(params.team_id.map(ToOwned::to_owned)),
+        challenge_name: Set(params.challenge_name.to_owned()),
+        ctf_name: Set(params.ctf_name.to_owned()),
+        flag_name: Set(params.flag_name.to_owned()),
+        generated_flag: Set(params.generated_flag.to_owned()),
+        ignore_case: Set(params.ignore_case),
+        ignore_random: Set(params.ignore_random),
         ..Default::default()
     };
 
@@ -38,6 +45,8 @@ pub struct FlagOrigin {
     pub id: i64,
     /// The user who owned the instance that generated this flag (if known).
     pub user_id: Option<i64>,
+    /// The team that owned the instance that generated this flag (if known).
+    pub team_id: Option<String>,
     /// The challenge the flag was generated for.
     pub challenge_name: String,
     /// The flag slot name (e.g. "flag-a") this value was generated for.
@@ -62,6 +71,7 @@ pub async fn check_flag_origin(
     Ok(row.map(|m| FlagOrigin {
         id: m.id,
         user_id: m.user_id,
+        team_id: m.team_id,
         challenge_name: m.challenge_name,
         flag_name: m.flag_name,
     }))

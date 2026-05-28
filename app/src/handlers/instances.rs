@@ -230,7 +230,7 @@ pub async fn extend_instance(challenge_name: String) -> Result<(), ServerFnError
         ));
     };
 
-    if db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, ctf_name)
+    if db::is_challenge_solved(&state.db, user.id, user.team_id.as_deref(), &challenge_name, ctf_name)
         .await
         .unwrap_or(false)
     {
@@ -349,7 +349,7 @@ pub async fn instance_state(
         return (axum::http::StatusCode::FORBIDDEN, "forbidden").into_response();
     }
 
-    let solved = db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, ctf_name)
+    let solved = db::is_challenge_solved(&state.db, user.id, user.team_id.as_deref(), &challenge_name, ctf_name)
         .await
         .unwrap_or(false);
 
@@ -600,7 +600,7 @@ pub async fn instance_events(
 
     let stream = async_stream::stream! {
         // Send the initial state immediately so the client doesn't start blind.
-        let solved = db::is_challenge_solved_for_user(&state.db, user_id, &challenge_name_owned, &ctf_name)
+        let solved = db::is_challenge_solved(&state.db, user_id, team_id.as_deref(), &challenge_name_owned, &ctf_name)
             .await
             .unwrap_or(false);
         let snap = compute_instance_state(&state, user_id, team_id.as_deref(), &challenge_name_owned, solved);
@@ -613,7 +613,7 @@ pub async fn instance_events(
         loop {
             interval.tick().await;
 
-            let solved = db::is_challenge_solved_for_user(&state.db, user_id, &challenge_name_owned, &ctf_name)
+            let solved = db::is_challenge_solved(&state.db, user_id, team_id.as_deref(), &challenge_name_owned, &ctf_name)
                 .await
                 .unwrap_or(false);
             let snap = compute_instance_state(&state, user_id, team_id.as_deref(), &challenge_name_owned, solved);

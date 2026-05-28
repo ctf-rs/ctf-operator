@@ -144,25 +144,31 @@ fn spawn_flag_watcher(
                             .strip_prefix(&format!("{}-", instance_name))
                             .unwrap_or(&flag_k8s_name);
 
-                        // Look up the instance to get user_id
+                        // Look up the instance to get user_id and team_id
                         let instance_key =
                             kube::runtime::reflector::ObjectRef::<Instance>::new(instance_name)
                                 .within(flag_ns);
-                        let user_id = state
-                            .instances
-                            .get(&instance_key)
+                        let instance_ref = state.instances.get(&instance_key);
+                        let user_id = instance_ref
+                            .as_ref()
                             .and_then(|inst| inst.spec.user.as_ref().map(|u| u.id));
+                        let team_id = instance_ref
+                            .as_ref()
+                            .and_then(|inst| inst.spec.team.as_ref().map(|t| t.id.clone()));
 
                         if let Err(err) = db::log_flag_generation(
                             &state.db,
-                            instance_name,
-                            user_id,
-                            challenge_name,
-                            &ctf_name,
-                            flag_part,
-                            generated_flag,
-                            flag.spec.options.ignore_case,
-                            flag.spec.options.ignore_random,
+                            &db::FlagGenerationParams {
+                                instance_name,
+                                user_id,
+                                team_id: team_id.as_deref(),
+                                challenge_name,
+                                ctf_name: &ctf_name,
+                                flag_name: flag_part,
+                                generated_flag,
+                                ignore_case: flag.spec.options.ignore_case,
+                                ignore_random: flag.spec.options.ignore_random,
+                            },
                         )
                         .await
                         {
@@ -175,6 +181,7 @@ fn spawn_flag_watcher(
                             info!(
                                 flag = %flag_k8s_name,
                                 user_id = ?user_id,
+                                team_id = ?team_id,
                                 challenge = %challenge_name,
                                 "logged flag generation for audit"
                             );

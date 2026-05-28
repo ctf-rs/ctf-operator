@@ -111,7 +111,7 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         .filter(|challenge| has_ctf_access(&user, challenge, &state.config))
         .collect::<Vec<_>>();
 
-    let solved_keys = db::list_solved_challenges_for_user(&state.db, user.id)
+    let solved_keys = db::list_solved_challenges(&state.db, user.id, user.team_id.as_deref())
         .await
         .unwrap_or_default()
         .into_iter()
@@ -119,7 +119,7 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         .collect::<HashSet<_>>();
 
     // Get partial solve counts to detect challenges with some flags submitted
-    let partial_solve_counts = db::get_partial_solve_counts_for_user(&state.db, user.id)
+    let partial_solve_counts = db::get_partial_solve_counts(&state.db, user.id, user.team_id.as_deref())
         .await
         .unwrap_or_default();
 
@@ -273,8 +273,8 @@ pub async fn challenge_page(
 
     let instancing = challenge.instancing;
 
-    // Mark which flags are already solved by this user
-    let solved_flags = db::get_solved_flags_for_user(&state.db, user.id, &challenge_name, ctf_name)
+    // Mark which flags are already solved by this user/team
+    let solved_flags = db::get_solved_flags(&state.db, user.id, user.team_id.as_deref(), &challenge_name, ctf_name)
         .await
         .unwrap_or_default();
     let mut challenge = challenge;
@@ -283,7 +283,7 @@ pub async fn challenge_page(
     }
 
     let mut solved =
-        db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, ctf_name)
+        db::is_challenge_solved(&state.db, user.id, user.team_id.as_deref(), &challenge_name, ctf_name)
             .await
             .unwrap_or(false);
 
