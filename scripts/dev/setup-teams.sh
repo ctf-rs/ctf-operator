@@ -27,7 +27,7 @@ kc_get() { curl -sf -H "${AUTH}" "${KC_URL}/admin/realms/${KC_REALM}$1"; }
 # Helper: POST with auth
 kc_post() { curl -sf -X POST -H "${AUTH}" -H "Content-Type: application/json" -d "$2" "${KC_URL}/admin/realms/${KC_REALM}$1"; }
 # Helper: PUT with auth
-kc_put() { curl -sf -X PUT -H "${AUTH}" -H "Content-Type: application/json" -d "$2" "${KC_URL}/admin/realms/${KC_REALM}$1"; }
+kc_put() { curl -sf -o /dev/null -X PUT -H "${AUTH}" -H "Content-Type: application/json" -d "$2" "${KC_URL}/admin/realms/${KC_REALM}$1"; }
 
 echo ""
 echo "=== Setting up protocol mappers for team claims ==="
