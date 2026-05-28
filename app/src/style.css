@@ -168,6 +168,7 @@ a { color: #93c5fd; }
 /* Rotated challenge column headers */
 .rotated-header { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; min-height: 80px; display: flex; align-items: center; gap: 0.2rem; font-size: 0.65rem; }
 .rotated-header .ch-name { font-weight: 600; }
+.rotated-header .ch-flag { font-weight: 400; color: #93c5fd; font-size: 0.55rem; }
 .rotated-header .ch-cat { font-weight: 400; color: #9ca3af; font-size: 0.55rem; }
 
 /* Challenge column colours by category */
