@@ -4,6 +4,7 @@ use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use super::entity::{downloads, instance_actions, instance_flags};
 
 /// Parameters for recording a generated flag.
+#[derive(Debug)]
 pub struct FlagGenerationParams<'a> {
     pub instance_name: &'a str,
     pub user_id: Option<i64>,

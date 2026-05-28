@@ -1,12 +1,12 @@
 services:
   postgres:
-    image: postgres:18
+    image: docker.io/library/postgres:18
     environment:
       POSTGRES_USER: ctf
       POSTGRES_PASSWORD: ctf
       POSTGRES_DB: ctf_app
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ctf -d ctf_app"]
       interval: 5s
@@ -27,7 +27,7 @@ services:
       - "8081:8081"
 
   garage:
-    image: dxflrs/garage:v2.3.0
+    image: docker.io/dxflrs/garage:v2.3.0
     volumes:
       - ./dev/garage.toml:/etc/garage.toml:ro
       - garage_data:/var/lib/garage
@@ -37,7 +37,7 @@ services:
       - "3903:3903"
 
   lgtm:
-    image: grafana/otel-lgtm:0.28.0
+    image: docker.io/grafana/otel-lgtm:0.28.0
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
