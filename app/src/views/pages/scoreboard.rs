@@ -40,13 +40,12 @@ pub fn ScoreboardPage(data: ScoreboardPageData) -> impl IntoView {
                 } else {
                     let columns = data.challenge_columns.clone();
                     view! {
-                        <div class="scoreboard-scroll">
-                            <table class="scoreboard-table grid-table">
+                            <table class="scoreboard-table">
                                 <thead>
                                     <tr>
-                                        <th class="rank sticky-col">"#"</th>
-                                        <th class="username sticky-col">{player_header}</th>
-                                        <th class="points sticky-col">"Score"</th>
+                                        <th class="rank">"#"</th>
+                                        <th class="username">{player_header}</th>
+                                        <th class="points">"Score"</th>
                                         {columns.iter().map(|ch| {
                                             let cat = ch.category.label();
                                             let cat_class = format!("challenge-col cat-{}", ch.category.sort_key());
@@ -73,9 +72,9 @@ pub fn ScoreboardPage(data: ScoreboardPageData) -> impl IntoView {
                                         };
                                         view! {
                                             <tr>
-                                                <td class={format!("{rank_class} sticky-col")}>{rank}</td>
-                                                <td class="username sticky-col">{entry.username}</td>
-                                                <td class="points sticky-col">{entry.total_points}</td>
+                                                <td class={format!("{rank_class}")}>{rank}</td>
+                                                <td class="username">{entry.username}</td>
+                                                <td class="points">{entry.total_points}</td>
                                                 {solves.into_iter().enumerate().map(|(j, status)| {
                                                     let cat_class = format!("solve-cell cat-{}", columns[j].category.sort_key());
                                                     match status {
@@ -95,7 +94,6 @@ pub fn ScoreboardPage(data: ScoreboardPageData) -> impl IntoView {
                                     }).collect_view()}
                                 </tbody>
                             </table>
-                        </div>
                         <div class="scoreboard-legend">
                             <span class="legend-item"><span class="legend-icon first-blood">{"\u{1fa78}"}</span>" First blood (first to solve)"</span>
                             <span class="legend-item"><span class="legend-icon solved">{"\u{1f6a9}"}</span>" Solved"</span>

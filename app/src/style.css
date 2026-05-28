@@ -138,41 +138,27 @@ a { color: #93c5fd; }
 .nav-buttons { display: flex; align-items: center; gap: .5rem; }
 
 /* Scoreboard */
-.scoreboard-container { max-width: 100%; margin: 0 auto; padding: 0 1rem; }
+.scoreboard-container { width: 100%; margin: 0 auto; padding: 0 0.5rem; }
 .scoreboard-container h1 { margin: 0 0 1.5rem 0; font-size: 1.8rem; text-align: center; }
-.scoreboard-scroll { overflow-x: auto; max-width: 100%; }
-.scoreboard-table { border-collapse: collapse; background: #2a2f38; border-radius: 8px; overflow: hidden; }
-.scoreboard-table.grid-table { width: max-content; min-width: 100%; }
+.scoreboard-table { border-collapse: collapse; background: #2a2f38; border-radius: 8px; overflow: hidden; width: 100%; table-layout: fixed; }
 .scoreboard-table thead { background: #232830; }
-.scoreboard-table th { padding: 0.5rem; text-align: center; font-weight: 600; color: #93c5fd; border-bottom: 2px solid #3a404a; vertical-align: bottom; }
-.scoreboard-table td { padding: 0.4rem 0.5rem; border-bottom: 1px solid #3a404a; text-align: center; }
+.scoreboard-table th { padding: 0.3rem 0.2rem; text-align: center; font-weight: 600; color: #93c5fd; border-bottom: 2px solid #3a404a; vertical-align: bottom; }
+.scoreboard-table td { padding: 0.3rem 0.2rem; border-bottom: 1px solid #3a404a; text-align: center; }
 .scoreboard-table tbody tr:hover { background: #323842; }
-.scoreboard-table .rank { width: 40px; text-align: center; font-weight: 700; }
+.scoreboard-table .rank { width: 2rem; text-align: center; font-weight: 700; }
 .scoreboard-table .rank.gold { color: #fbbf24; }
 .scoreboard-table .rank.silver { color: #d1d5db; }
 .scoreboard-table .rank.bronze { color: #d97706; }
-.scoreboard-table .username { font-weight: 500; text-align: left; white-space: nowrap; }
-.scoreboard-table .points { font-weight: 600; color: #a7f3d0; }
-
-/* Sticky first columns (rank, username, score) */
-.scoreboard-table .sticky-col { position: sticky; background: inherit; z-index: 2; }
-.scoreboard-table thead .sticky-col { z-index: 3; background: #232830; }
-.scoreboard-table tbody .sticky-col { background: #2a2f38; }
-.scoreboard-table tbody tr:hover .sticky-col { background: #323842; }
-.scoreboard-table th.rank.sticky-col,
-.scoreboard-table td.rank.sticky-col { left: 0; }
-.scoreboard-table th.username.sticky-col,
-.scoreboard-table td.username.sticky-col { left: 40px; }
-.scoreboard-table th.points.sticky-col,
-.scoreboard-table td.points.sticky-col { left: 200px; border-right: 2px solid #3a404a; }
+.scoreboard-table .username { font-weight: 500; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 10rem; }
+.scoreboard-table .points { font-weight: 600; color: #a7f3d0; width: 3.5rem; border-right: 2px solid #3a404a; }
 
 /* Rotated challenge column headers */
-.rotated-header { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; min-height: 100px; display: flex; align-items: center; gap: 0.2rem; font-size: 0.75rem; }
+.rotated-header { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; min-height: 80px; display: flex; align-items: center; gap: 0.2rem; font-size: 0.65rem; }
 .rotated-header .ch-name { font-weight: 600; }
-.rotated-header .ch-cat { font-weight: 400; color: #9ca3af; font-size: 0.65rem; }
+.rotated-header .ch-cat { font-weight: 400; color: #9ca3af; font-size: 0.55rem; }
 
 /* Challenge column colours by category */
-.challenge-col, .solve-cell { min-width: 32px; }
+.challenge-col, .solve-cell { }
 .cat-0 { border-left: 2px solid #6ee7b7; } /* Welcome */
 .cat-1 { border-left: 2px solid #60a5fa; } /* Web */
 .cat-2 { border-left: 2px solid #f87171; } /* Pwn */
