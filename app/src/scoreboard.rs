@@ -1,13 +1,11 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, DatabaseConnection, DbBackend, EntityTrait, QueryFilter,
-    QuerySelect, Statement, sea_query::Expr,
+    ConnectionTrait, DatabaseConnection, DbBackend, Statement,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
 
-use crate::db::entity::flag_submissions;
 use crate::{metrics, state::AppState};
 
 /// Key for flag in scoreboard: (ctf_name, challenge_name, flag_name)
@@ -16,8 +14,11 @@ pub type FlagKey = (String, String, String);
 /// Key for challenge in scoreboard: (ctf_name, challenge_name)
 pub type ChallengeKey = (String, String);
 
-/// Key for user score: (ctf_name, user_id)
-pub type UserScoreKey = (String, i64);
+/// Key for score entry: `(ctf_name, entity_id)`.
+///
+/// `entity_id` is `team_id` when the user is on a team, otherwise `user_id`
+/// stringified.  This lets us aggregate per-team or per-user in one map.
+pub type ScoreEntryKey = (String, String);
 
 /// Cached flag scoring data
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,10 +62,18 @@ impl FlagScore {
     }
 }
 
-/// User's score entry for leaderboard
+/// Score entry for the leaderboard.
+///
+/// In solo mode, one entry = one user.  In team mode, one entry = one team
+/// with scores aggregated across all members (flag solves de-duplicated).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserScore {
+    /// Deterministic identifier: `team_id` for team entries, `user_id.to_string()` for solo.
+    #[serde(default)]
+    pub entity_id: String,
+    /// Original user id (meaningful in solo mode; first seen member in team mode).
     pub user_id: i64,
+    /// Display name: team name (team mode) or username (solo mode).
     pub username: String,
     /// Team ID (if user is on a team).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -81,8 +90,8 @@ pub struct Scoreboard {
     pub flag_scores: HashMap<FlagKey, FlagScore>,
     /// Total points per challenge: (ctf, challenge) -> total_points
     pub challenge_points: HashMap<ChallengeKey, u32>,
-    /// User scores per CTF: (ctf, user_id) -> UserScore
-    pub user_scores: HashMap<UserScoreKey, UserScore>,
+    /// User/team scores per CTF: (ctf, entity_id) -> UserScore
+    pub user_scores: HashMap<ScoreEntryKey, UserScore>,
     /// Sorted leaderboard per CTF: ctf_name -> sorted vec of UserScore
     pub leaderboards: HashMap<String, Vec<UserScore>>,
 }
@@ -181,7 +190,7 @@ impl Scoreboard {
 
         // Restore user scores
         for us in &snap.user_scores {
-            let key = (ctf_name.to_string(), us.user_id);
+            let key = (ctf_name.to_string(), us.entity_id.clone());
             self.user_scores.insert(key, us.clone());
         }
 
@@ -191,9 +200,12 @@ impl Scoreboard {
 }
 
 /// Persist the current scoreboard cache to the database.
+///
+/// `cache_key` is typically `ctf_name` for the visible cache and
+/// `{ctf_name}::live` for the always-fresh live cache.
 async fn save_scoreboard_cache(
     db: &DatabaseConnection,
-    ctf_name: &str,
+    cache_key: &str,
     snapshot: &ScoreboardSnapshot,
 ) -> anyhow::Result<()> {
     let json = serde_json::to_value(snapshot)?;
@@ -202,7 +214,7 @@ async fn save_scoreboard_cache(
         r#"INSERT INTO scoreboard_cache (ctf_name, data, updated_at)
            VALUES ($1, $2, now())
            ON CONFLICT (ctf_name) DO UPDATE SET data = $2, updated_at = now()"#,
-        [ctf_name.into(), json.into()],
+        [cache_key.into(), json.into()],
     ))
     .await?;
     Ok(())
@@ -211,13 +223,13 @@ async fn save_scoreboard_cache(
 /// Load a previously persisted scoreboard snapshot from the database.
 async fn load_scoreboard_cache(
     db: &DatabaseConnection,
-    ctf_name: &str,
+    cache_key: &str,
 ) -> anyhow::Result<Option<ScoreboardSnapshot>> {
     let row = db
         .query_one_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
             r#"SELECT data FROM scoreboard_cache WHERE ctf_name = $1"#,
-            [ctf_name.into()],
+            [cache_key.into()],
         ))
         .await?;
     match row {
@@ -235,19 +247,37 @@ pub fn spawn_scoreboard_worker(state: Arc<AppState>) -> tokio::task::JoinHandle<
     tokio::spawn(async move {
         info!("scoreboard worker started");
 
-        // Seed the in-memory cache from DB so a restart while frozen keeps old scores.
         let ctf_name = &state.config.ctf_name;
+
+        // Seed the visible in-memory cache from DB so a restart while frozen
+        // keeps old scores.
         match load_scoreboard_cache(&state.db, ctf_name).await {
             Ok(Some(snap)) => {
                 let mut cache = state.scoreboard.write().await;
                 cache.apply_snapshot(ctf_name, snap);
-                info!("scoreboard cache restored from database");
+                info!("visible scoreboard cache restored from database");
             }
             Ok(None) => {
-                info!("no persisted scoreboard cache found, starting fresh");
+                info!("no persisted visible scoreboard cache found, starting fresh");
             }
             Err(err) => {
-                warn!(error = %err, "failed to load scoreboard cache from database");
+                warn!(error = %err, "failed to load visible scoreboard cache from database");
+            }
+        }
+
+        // Seed the live cache from DB as well.
+        let live_key = format!("{ctf_name}::live");
+        match load_scoreboard_cache(&state.db, &live_key).await {
+            Ok(Some(snap)) => {
+                let mut cache = state.live_scoreboard.write().await;
+                cache.apply_snapshot(ctf_name, snap);
+                info!("live scoreboard cache restored from database");
+            }
+            Ok(None) => {
+                info!("no persisted live scoreboard cache found, starting fresh");
+            }
+            Err(err) => {
+                warn!(error = %err, "failed to load live scoreboard cache from database");
             }
         }
 
@@ -287,7 +317,11 @@ fn update_instance_gauges(state: &AppState) {
         .record(active_user_ids.len() as u64, &m.attrs(&[]));
 }
 
-/// Refresh the scoreboard cache from database
+/// Refresh the scoreboard cache from database.
+///
+/// The **visible** cache freezes when the scoreboard is frozen (reloading
+/// the last-persisted snapshot).  The **live** cache always recomputes
+/// fresh scores from the database, regardless of freeze state.
 async fn refresh_scoreboard(state: &AppState) -> anyhow::Result<()> {
     let sb_config = crate::helpers::get_ctf_scoreboard_config(state);
     let frozen = crate::helpers::is_scoreboard_frozen(&sb_config);
@@ -295,7 +329,27 @@ async fn refresh_scoreboard(state: &AppState) -> anyhow::Result<()> {
     let db = &state.db;
     let ctf_name = &state.config.ctf_name;
 
-    // ── Frozen: reload the last-persisted snapshot from DB and return ──
+    // Always compute fresh scores for the live cache.
+    let live_result = compute_scoreboard_data(state, db, ctf_name).await;
+    if let Ok(Some((flag_scores, challenge_points, user_scores, leaderboard))) = &live_result {
+        let mut live = state.live_scoreboard.write().await;
+        live.flag_scores.clone_from(flag_scores);
+        live.challenge_points.clone_from(challenge_points);
+        live.user_scores.clone_from(user_scores);
+        live.leaderboards
+            .insert(ctf_name.to_string(), leaderboard.clone());
+
+        let snapshot = live.snapshot(ctf_name);
+        drop(live);
+        let live_key = format!("{ctf_name}::live");
+        if let Err(err) = save_scoreboard_cache(db, &live_key, &snapshot).await {
+            warn!(error = %err, "failed to persist live scoreboard cache");
+        }
+    } else if let Err(ref err) = live_result {
+        warn!(error = %err, "failed to compute live scoreboard");
+    }
+
+    // ── Frozen: reload the last-persisted visible snapshot from DB ──
     if frozen {
         match load_scoreboard_cache(db, ctf_name).await {
             Ok(Some(snap)) => {
@@ -303,9 +357,14 @@ async fn refresh_scoreboard(state: &AppState) -> anyhow::Result<()> {
                 cache.apply_snapshot(ctf_name, snap);
             }
             Ok(None) => {
-                // No snapshot yet — fall through and compute one so the
-                // page is not blank on the very first freeze.
-                return compute_and_persist(state, db, ctf_name).await;
+                // No snapshot yet — compute one so the page is not blank on
+                // the very first freeze.
+                if let Ok(Some((flag_scores, challenge_points, user_scores, leaderboard))) =
+                    compute_scoreboard_data(state, db, ctf_name).await
+                {
+                    apply_and_persist(state, db, ctf_name, flag_scores, challenge_points, user_scores, leaderboard)
+                        .await?;
+                }
             }
             Err(err) => {
                 warn!(error = %err, "failed to reload scoreboard cache while frozen");
@@ -314,30 +373,41 @@ async fn refresh_scoreboard(state: &AppState) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // ── Not frozen: compute fresh scores and persist ──
-    compute_and_persist(state, db, ctf_name).await
+    // ── Not frozen: reuse the live computation for the visible cache ──
+    if let Ok(Some((flag_scores, challenge_points, user_scores, leaderboard))) = live_result {
+        apply_and_persist(state, db, ctf_name, flag_scores, challenge_points, user_scores, leaderboard)
+            .await?;
+    }
+
+    Ok(())
 }
 
-/// Compute flag scores, challenge points, leaderboard and persist to DB.
-async fn compute_and_persist(
+/// Computed scoreboard tuple returned by [`compute_scoreboard_data`].
+type ScoreboardData = (
+    HashMap<FlagKey, FlagScore>,
+    HashMap<ChallengeKey, u32>,
+    HashMap<ScoreEntryKey, UserScore>,
+    Vec<UserScore>,
+);
+
+/// Compute flag scores, challenge points, and the leaderboard from the
+/// current database state.  Returns `None` only when the k8s Challenge
+/// store hasn't populated yet (right after startup).
+async fn compute_scoreboard_data(
     state: &AppState,
     db: &DatabaseConnection,
     ctf_name: &str,
-) -> anyhow::Result<()> {
-    // Get flag configurations from sync cache
+) -> anyhow::Result<Option<ScoreboardData>> {
     let flag_configs = get_flag_configs(state).await;
 
-    // If the k8s Challenge store hasn't populated yet (e.g. right after
-    // startup) we'd compute zero points for everything and overwrite a
-    // perfectly good DB cache.  Skip this cycle instead.
+    // If the k8s Challenge store hasn't populated yet we'd compute zero
+    // points for everything and overwrite a perfectly good DB cache.
     if flag_configs.is_empty() {
-        return Ok(());
+        return Ok(None);
     }
 
-    // Get solve counts per flag from database
     let solve_counts = get_flag_solve_counts(db, ctf_name).await?;
 
-    // Calculate flag scores
     let mut flag_scores: HashMap<FlagKey, FlagScore> = HashMap::new();
     let mut challenge_points: HashMap<ChallengeKey, u32> = HashMap::new();
 
@@ -355,13 +425,11 @@ async fn compute_and_persist(
         );
         flag_scores.insert(key, score.clone());
 
-        // Accumulate challenge points
         let ch_key = (ctf_name.to_string(), challenge_name.clone());
         *challenge_points.entry(ch_key).or_insert(0) += score.current_points;
     }
 
-    // Calculate user scores & leaderboard
-    let user_scores = calculate_user_scores(db, ctf_name, &flag_scores).await?;
+    let user_scores = calculate_scores(db, ctf_name, &flag_scores).await?;
 
     let mut leaderboard: Vec<UserScore> = user_scores.values().cloned().collect();
     leaderboard.sort_by(|a, b| {
@@ -370,14 +438,26 @@ async fn compute_and_persist(
             .then_with(|| a.last_solve_at.cmp(&b.last_solve_at))
     });
 
-    // Update in-memory cache
+    Ok(Some((flag_scores, challenge_points, user_scores, leaderboard)))
+}
+
+/// Apply computed data to the visible in-memory cache and persist to DB.
+async fn apply_and_persist(
+    state: &AppState,
+    db: &DatabaseConnection,
+    ctf_name: &str,
+    flag_scores: HashMap<FlagKey, FlagScore>,
+    challenge_points: HashMap<ChallengeKey, u32>,
+    user_scores: HashMap<ScoreEntryKey, UserScore>,
+    leaderboard: Vec<UserScore>,
+) -> anyhow::Result<()> {
     let mut cache = state.scoreboard.write().await;
     cache.flag_scores = flag_scores;
     cache.challenge_points = challenge_points;
     cache.user_scores = user_scores;
-    cache.leaderboards.insert(ctf_name.to_string(), leaderboard);
+    cache.leaderboards
+        .insert(ctf_name.to_string(), leaderboard);
 
-    // Persist to DB so a restart while frozen preserves the pre-freeze scores.
     let snapshot = cache.snapshot(ctf_name);
     drop(cache);
     if let Err(err) = save_scoreboard_cache(db, ctf_name, &snapshot).await {
@@ -405,68 +485,97 @@ async fn get_flag_configs(state: &AppState) -> HashMap<(String, String), (u32, u
     configs
 }
 
-/// Get solve counts per flag from database (excludes admin submissions)
+/// Get solve counts per flag from database (excludes admin submissions).
+///
+/// Counts **distinct scoring entities** — i.e. distinct teams (or distinct
+/// solo users).  This is used for dynamic scoring decay so that a team of
+/// 5 solving the same flag still counts as 1 solve for scoring purposes.
 async fn get_flag_solve_counts(
     db: &DatabaseConnection,
     ctf_name: &str,
 ) -> anyhow::Result<HashMap<(String, String), u32>> {
-    let rows: Vec<(String, String, i64)> = flag_submissions::Entity::find()
-        .select_only()
-        .column(flag_submissions::Column::ChallengeName)
-        .column(flag_submissions::Column::FlagName)
-        .column_as(Expr::cust("COUNT(DISTINCT user_id)"), "solve_count")
-        .filter(flag_submissions::Column::CtfName.eq(ctf_name))
-        .filter(flag_submissions::Column::Accepted.eq(true))
-        .filter(flag_submissions::Column::AdminSubmission.eq(false))
-        .group_by(flag_submissions::Column::ChallengeName)
-        .group_by(flag_submissions::Column::FlagName)
-        .into_tuple()
-        .all(db)
-        .await?;
-
-    Ok(rows
-        .into_iter()
-        .map(|(ch, fl, cnt)| ((ch, fl), cnt as u32))
-        .collect())
-}
-
-/// Calculate user scores based on their solves (excludes admin submissions)
-async fn calculate_user_scores(
-    db: &DatabaseConnection,
-    ctf_name: &str,
-    flag_scores: &HashMap<FlagKey, FlagScore>,
-) -> anyhow::Result<HashMap<UserScoreKey, UserScore>> {
-    // Get all accepted submissions with user info (excluding admin submissions)
     let rows = db
         .query_all_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
             r#"
-            SELECT DISTINCT ON (s.user_id, s.challenge_name, s.flag_name)
-                s.user_id,
-                COALESCE(u.name, u.sub) as username,
-                s.challenge_name,
-                s.flag_name,
-                s.created_at,
-                u.team_id
+            SELECT s.challenge_name,
+                   s.flag_name,
+                   COUNT(DISTINCT COALESCE(s.team_id, s.user_id::text)) AS solve_count
             FROM flag_submissions s
-            JOIN users u ON u.id = s.user_id
             WHERE s.ctf_name = $1 AND s.accepted = true AND s.admin_submission = false
-            ORDER BY s.user_id, s.challenge_name, s.flag_name, s.created_at
+            GROUP BY s.challenge_name, s.flag_name
             "#,
             [ctf_name.into()],
         ))
         .await?;
 
-    let mut user_scores: HashMap<UserScoreKey, UserScore> = HashMap::new();
+    let mut result = HashMap::new();
+    for row in &rows {
+        let ch: String = row.try_get_by_index(0)?;
+        let fl: String = row.try_get_by_index(1)?;
+        let cnt: i64 = row.try_get_by_index(2)?;
+        result.insert((ch, fl), cnt as u32);
+    }
+    Ok(result)
+}
+
+/// Calculate scores grouped by scoring entity (team or solo user).
+///
+/// For team mode: solves are grouped by `team_id`; duplicate flag solves
+/// within the same team are de-duplicated so a flag only counts once per
+/// team.  The display name is the team name.
+///
+/// For solo mode: identical to the previous per-user grouping.
+async fn calculate_scores(
+    db: &DatabaseConnection,
+    ctf_name: &str,
+    flag_scores: &HashMap<FlagKey, FlagScore>,
+) -> anyhow::Result<HashMap<ScoreEntryKey, UserScore>> {
+    // Fetch all accepted, non-admin submissions.  De-duplicate per
+    // (entity, challenge, flag) so a team only gets each flag once.
+    let rows = db
+        .query_all_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            r#"
+            SELECT entity_id, display_name, challenge_name, flag_name, first_solve, first_user_id, team_id
+            FROM (
+                SELECT
+                    COALESCE(u.team_id, u.id::text) AS entity_id,
+                    COALESCE(u.team_name, u.name, u.sub) AS display_name,
+                    s.challenge_name,
+                    s.flag_name,
+                    MIN(s.created_at) AS first_solve,
+                    MIN(s.user_id) AS first_user_id,
+                    u.team_id,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY COALESCE(u.team_id, u.id::text), s.challenge_name, s.flag_name
+                        ORDER BY MIN(s.created_at)
+                    ) AS rn
+                FROM flag_submissions s
+                JOIN users u ON u.id = s.user_id
+                WHERE s.ctf_name = $1 AND s.accepted = true AND s.admin_submission = false
+                GROUP BY COALESCE(u.team_id, u.id::text),
+                         COALESCE(u.team_name, u.name, u.sub),
+                         s.challenge_name, s.flag_name, u.team_id
+            ) sub
+            WHERE rn = 1
+            "#,
+            [ctf_name.into()],
+        ))
+        .await?;
+
+    let mut scores: HashMap<ScoreEntryKey, UserScore> = HashMap::new();
 
     for row in &rows {
-        let user_id: i64 = row.try_get_by_index(0)?;
-        let username: String = row.try_get_by_index(1)?;
+        let entity_id: String = row.try_get_by_index(0)?;
+        let display_name: String = row.try_get_by_index(1)?;
         let challenge_name: String = row.try_get_by_index(2)?;
         let flag_name: String = row.try_get_by_index(3)?;
         let solved_at: chrono::DateTime<chrono::Utc> = row.try_get_by_index(4)?;
-        let team_id: Option<String> = row.try_get_by_index(5).unwrap_or(None);
-        let key = (ctf_name.to_string(), user_id);
+        let first_user_id: i64 = row.try_get_by_index(5)?;
+        let team_id: Option<String> = row.try_get_by_index(6).unwrap_or(None);
+
+        let key = (ctf_name.to_string(), entity_id.clone());
         let flag_key = (ctf_name.to_string(), challenge_name, flag_name);
 
         let points = flag_scores
@@ -474,9 +583,10 @@ async fn calculate_user_scores(
             .map(|s| s.current_points)
             .unwrap_or(0);
 
-        let entry = user_scores.entry(key).or_insert_with(|| UserScore {
-            user_id,
-            username: username.clone(),
+        let entry = scores.entry(key).or_insert_with(|| UserScore {
+            entity_id: entity_id.clone(),
+            user_id: first_user_id,
+            username: display_name.clone(),
             team_id: team_id.clone(),
             total_points: 0,
             solves: 0,
@@ -492,5 +602,5 @@ async fn calculate_user_scores(
         }
     }
 
-    Ok(user_scores)
+    Ok(scores)
 }

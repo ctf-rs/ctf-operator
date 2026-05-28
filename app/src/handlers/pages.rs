@@ -562,9 +562,9 @@ pub async fn scoreboard(
                 .map(|ch| {
                     let is_first = first_blood
                         .get(&ch.name)
-                        .is_some_and(|fb_id| *fb_id == entry.user_id);
+                        .is_some_and(|fb_id| *fb_id == entry.entity_id);
                     let is_solved = solve_data
-                        .get(&(entry.user_id, ch.name.clone()))
+                        .get(&(entry.entity_id.clone(), ch.name.clone()))
                         .is_some();
                     if is_first {
                         views::SolveStatus::FirstBlood
@@ -601,19 +601,26 @@ pub async fn scoreboard(
 // Scoreboard helpers — solve grid + first blood
 // ---------------------------------------------------------------------------
 
-/// Per-challenge solve data: `(user_id, challenge_name) -> earliest_solve_timestamp`.
+/// Per-challenge solve data: `(entity_id, challenge_name) -> earliest_solve_timestamp`.
+///
+/// `entity_id` = `team_id` when the user is on a team, otherwise the
+/// stringified `user_id`.  This matches the scoring entity used in the
+/// leaderboard so the solve grid aligns.
 async fn get_scoreboard_solve_data(
     db: &sea_orm::DatabaseConnection,
     ctf_name: &str,
-) -> HashMap<(i64, String), chrono::DateTime<chrono::Utc>> {
+) -> HashMap<(String, String), chrono::DateTime<chrono::Utc>> {
     let rows = db
         .query_all_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
             r#"
-            SELECT s.user_id, s.challenge_name, MIN(s.created_at) AS first_solve
+            SELECT COALESCE(u.team_id, s.user_id::text) AS entity_id,
+                   s.challenge_name,
+                   MIN(s.created_at) AS first_solve
             FROM flag_submissions s
+            JOIN users u ON u.id = s.user_id
             WHERE s.ctf_name = $1 AND s.accepted = true AND s.admin_submission = false
-            GROUP BY s.user_id, s.challenge_name
+            GROUP BY COALESCE(u.team_id, s.user_id::text), s.challenge_name
             "#,
             [ctf_name.into()],
         ))
@@ -625,35 +632,35 @@ async fn get_scoreboard_solve_data(
 
     let mut result = HashMap::new();
     for row in &rows {
-        let user_id: i64 = row.try_get_by_index(0).unwrap_or(0);
+        let entity_id: String = row.try_get_by_index(0).unwrap_or_default();
         let challenge: String = row.try_get_by_index(1).unwrap_or_default();
         let ts: chrono::DateTime<chrono::Utc> = match row.try_get_by_index(2) {
             Ok(t) => t,
             Err(_) => continue,
         };
-        result.insert((user_id, challenge), ts);
+        result.insert((entity_id, challenge), ts);
     }
     result
 }
 
-/// Compute first blood: `challenge_name -> user_id` of the first solver.
+/// Compute first blood: `challenge_name -> entity_id` of the first solver.
 fn compute_first_blood(
-    solve_data: &HashMap<(i64, String), chrono::DateTime<chrono::Utc>>,
-) -> HashMap<String, i64> {
-    let mut first: HashMap<String, (i64, chrono::DateTime<chrono::Utc>)> = HashMap::new();
-    for ((user_id, challenge), ts) in solve_data {
+    solve_data: &HashMap<(String, String), chrono::DateTime<chrono::Utc>>,
+) -> HashMap<String, String> {
+    let mut first: HashMap<String, (String, chrono::DateTime<chrono::Utc>)> = HashMap::new();
+    for ((entity_id, challenge), ts) in solve_data {
         first
             .entry(challenge.clone())
-            .and_modify(|(fb_uid, fb_ts)| {
+            .and_modify(|(fb_eid, fb_ts)| {
                 if ts < fb_ts {
-                    *fb_uid = *user_id;
+                    fb_eid.clone_from(entity_id);
                     *fb_ts = *ts;
                 }
             })
-            .or_insert((*user_id, *ts));
+            .or_insert((entity_id.clone(), *ts));
     }
     first
         .into_iter()
-        .map(|(ch, (uid, _))| (ch, uid))
+        .map(|(ch, (eid, _))| (ch, eid))
         .collect()
 }

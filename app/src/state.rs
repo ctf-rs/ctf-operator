@@ -26,6 +26,13 @@ pub struct AppState {
     pub challenges: Store<Challenge>,
     /// Store of Ctf resources from k8s watcher
     pub ctfs: Store<Ctf>,
-    /// Scoreboard cache (points, leaderboard)
+    /// Scoreboard cache (points, leaderboard) — visible to players.
+    ///
+    /// When the scoreboard is frozen this cache stops updating and serves
+    /// the last pre-freeze snapshot.
     pub scoreboard: Arc<RwLock<Scoreboard>>,
+    /// Live scoreboard cache — always fresh, never freezes.
+    ///
+    /// Only accessible to admins via `/scoreboard/live`.
+    pub live_scoreboard: Arc<RwLock<Scoreboard>>,
 }
