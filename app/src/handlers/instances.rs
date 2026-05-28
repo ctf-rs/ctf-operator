@@ -97,13 +97,17 @@ pub async fn spawn_instance(challenge_name: String) -> Result<(), ServerFnError>
 
     // ---- Guard: max instances per user/team -----------------------------
     let user_instances = k8s_instances::list_instances_for_user(&state, user.id, team_id);
-    if user_instances.len() >= state.config.max_instances_per_user {
+    let max_instances = if team_id.is_some() {
+        state.config.max_instances_per_team
+    } else {
+        state.config.max_instances_per_user
+    };
+    if user_instances.len() >= max_instances {
         leptos_axum::redirect(&format!(
             "{}?message={}",
             challenge_route(&challenge_name),
             urlencoding::encode(&format!(
-                "maximum number of instances ({}) reached, stop an existing instance first",
-                state.config.max_instances_per_user
+                "maximum number of instances ({max_instances}) reached, stop an existing instance first",
             ))
         ));
         return Ok(());

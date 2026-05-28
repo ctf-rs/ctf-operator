@@ -47,6 +47,10 @@ instanceNamePrefix: ctf-inst
 # Maximum number of simultaneously spawned instances per user.
 maxInstancesPerUser: 2
 
+# Maximum number of simultaneously spawned instances per team.
+# Defaults to maxInstancesPerUser when not set.
+maxInstancesPerTeam: ""
+
 database:
   url: ""
   # Use an existing Secret instead of a plain-text url.

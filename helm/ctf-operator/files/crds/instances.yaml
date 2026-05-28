@@ -49,7 +49,9 @@ spec:
                 - name
                 type: object
               user:
-                description: The user who spawned this instance (audit trail).
+                description: |-
+                  The user associated with this instance.
+                  In solo mode this is the owner; in team mode this records who spawned it.
                 nullable: true
                 properties:
                   id:

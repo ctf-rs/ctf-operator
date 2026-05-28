@@ -39,6 +39,10 @@ pub struct AppConfig {
     /// Maximum number of simultaneously spawned instances per user.
     /// Defaults to 2.
     pub max_instances_per_user: usize,
+    /// Maximum number of simultaneously spawned instances per team.
+    /// Used instead of `max_instances_per_user` when the user belongs to a
+    /// team.  Defaults to the same value as `max_instances_per_user`.
+    pub max_instances_per_team: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -149,6 +153,12 @@ impl AppConfig {
             .filter(|value| *value > 0)
             .unwrap_or(2);
 
+        let max_instances_per_team = std::env::var("MAX_INSTANCES_PER_TEAM")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .filter(|value| *value > 0)
+            .unwrap_or(max_instances_per_user);
+
         Ok(Self {
             bind_addr,
             database_url,
@@ -177,6 +187,7 @@ impl AppConfig {
             admin_role,
             player_role,
             max_instances_per_user,
+            max_instances_per_team,
         })
     }
 }
