@@ -155,8 +155,8 @@ a { color: #93c5fd; }
 .scoreboard-table .points { font-weight: 600; color: #a7f3d0; }
 
 /* Sticky first columns (rank, username, score) */
-.scoreboard-table .sticky-col { position: sticky; background: inherit; z-index: 1; }
-.scoreboard-table thead .sticky-col { z-index: 2; background: #232830; }
+.scoreboard-table .sticky-col { position: sticky; background: inherit; z-index: 2; }
+.scoreboard-table thead .sticky-col { z-index: 3; background: #232830; }
 .scoreboard-table tbody .sticky-col { background: #2a2f38; }
 .scoreboard-table tbody tr:hover .sticky-col { background: #323842; }
 .scoreboard-table th.rank.sticky-col,
@@ -186,4 +186,11 @@ a { color: #93c5fd; }
 /* Solve status cells */
 .solve-cell { font-size: 1rem; }
 .solve-cell.first-blood { background: rgba(251, 191, 36, 0.15); }
-.solve-cell.solved { background: rgba(167, 243, 208, 0.08); }
+.solve-cell.solved { background: rgba(167, 243, 208, 0.08); color: #4ade80; font-weight: 700; }
+
+/* Legend below scoreboard */
+.scoreboard-legend { display: flex; gap: 1.5rem; justify-content: center; margin: 0.75rem 0 0; padding: 0.5rem 0; color: #9ca3af; font-size: 0.8rem; }
+.legend-item { display: inline-flex; align-items: center; gap: 0.3rem; }
+.legend-icon { font-size: 1rem; }
+.legend-icon.first-blood { color: inherit; }
+.legend-icon.solved { color: #4ade80; font-weight: 700; }

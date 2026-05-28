@@ -80,10 +80,10 @@ pub fn ScoreboardPage(data: ScoreboardPageData) -> impl IntoView {
                                                     let cat_class = format!("solve-cell cat-{}", columns[j].category.sort_key());
                                                     match status {
                                                         SolveStatus::FirstBlood => view! {
-                                                            <td class={format!("{cat_class} first-blood")} title="First blood!">{"\u{1f6a9}"}</td>
+                                                            <td class={format!("{cat_class} first-blood")} title="First blood — first team/player to solve">{"\u{1f6a9}"}</td>
                                                         }.into_any(),
                                                         SolveStatus::Solved => view! {
-                                                            <td class={format!("{cat_class} solved")} title="Solved">{"\u{2705}"}</td>
+                                                            <td class={format!("{cat_class} solved")} title="Solved">{"\u{2714}"}</td>
                                                         }.into_any(),
                                                         SolveStatus::Unsolved => view! {
                                                             <td class={cat_class}></td>
@@ -95,6 +95,10 @@ pub fn ScoreboardPage(data: ScoreboardPageData) -> impl IntoView {
                                     }).collect_view()}
                                 </tbody>
                             </table>
+                        </div>
+                        <div class="scoreboard-legend">
+                            <span class="legend-item"><span class="legend-icon first-blood">{"\u{1f6a9}"}</span>" First blood (first to solve)"</span>
+                            <span class="legend-item"><span class="legend-icon solved">{"\u{2714}"}</span>" Solved"</span>
                         </div>
                     }.into_any()
                 }}
