@@ -124,7 +124,8 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         .unwrap_or_default();
 
     // Get all instances for this user from Store
-    let instances = crate::k8s::instances::list_instances_for_user(&state, user.id);
+    let instances =
+        crate::k8s::instances::list_instances_for_user(&state, user.id, user.team_id.as_deref());
 
     // Build a map of (ctf_name, challenge_name) -> time_left_seconds
     let mut instance_times: std::collections::HashMap<(String, String), Option<u64>> =
@@ -306,6 +307,7 @@ pub async fn challenge_page(
     let instance = crate::k8s::instances::get_instance_for_challenge(
         &state,
         user.id,
+        user.team_id.as_deref(),
         &challenge_name,
         ctf_name,
     );

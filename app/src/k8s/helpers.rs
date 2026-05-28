@@ -57,9 +57,16 @@ pub fn instance_expires_at_epoch(instance: &Instance) -> Option<u64> {
     u64::try_from(expires_at.0.as_second()).ok()
 }
 
-/// Does the instance belong to the given user (by spec)?
-/// Global instances (user = None) are considered accessible by everyone.
+/// Does the instance belong to the given user or their team?
+/// - Team instance: any teammate is considered the owner.
+/// - User instance (no team): only the exact user.
+/// - Global instances (no user, no team): accessible by everyone.
 pub fn is_instance_owned_by_user(instance: &Instance, user: &User) -> bool {
+    // Team-owned instance: check team_id match
+    if let Some(team) = &instance.spec.team {
+        return user.team_id.as_ref().is_some_and(|tid| tid == &team.id);
+    }
+    // User-owned or global instance
     match &instance.spec.user {
         Some(u) => u.id == user.id,
         None => true, // global instance — shared by all users

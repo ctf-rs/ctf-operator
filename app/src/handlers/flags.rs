@@ -103,7 +103,13 @@ pub async fn submit_flag(
     }
 
     let Some(instance) =
-        k8s_instances::get_instance_for_challenge(&state, user.id, &challenge_name, ctf_name)
+        k8s_instances::get_instance_for_challenge(
+            &state,
+            user.id,
+            user.team_id.as_deref(),
+            &challenge_name,
+            ctf_name,
+        )
     else {
         persist_flag_submission(
             &state,
