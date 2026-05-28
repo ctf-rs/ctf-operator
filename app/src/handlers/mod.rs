@@ -22,7 +22,8 @@ use tower_http::services::ServeDir;
 use crate::{
     db,
     middleware::{
-        extract_session_cookie, http_metrics, require_auth, require_ctf_exists, require_ctf_open,
+        extract_session_cookie, http_metrics, optional_auth, require_auth, require_ctf_exists,
+        require_ctf_open,
     },
     state::AppState,
 };
@@ -83,7 +84,6 @@ async fn resolve_user(state: &AppState, headers: &http::HeaderMap) -> Option<db:
 pub fn router(state: Arc<AppState>) -> Router {
     // Protected page routes (auth checked via axum middleware)
     let protected_pages = Router::new()
-        .route("/scoreboard", get(pages::scoreboard))
         .route("/challenge/{challenge_name}/", get(pages::challenge_page))
         .route(
             "/challenge/{challenge_name}/instance-state",
@@ -100,6 +100,15 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route_layer(axum_mw::from_fn_with_state(state.clone(), require_ctf_open))
         .route_layer(axum_mw::from_fn_with_state(state.clone(), require_auth));
 
+    // Scoreboard uses optional_auth so it can serve anonymous visitors
+    // when the CRD's scoreboard.public is true (checked at request time).
+    let scoreboard_route = Router::new()
+        .route("/scoreboard", get(pages::scoreboard))
+        .route_layer(axum_mw::from_fn_with_state(
+            state.clone(),
+            optional_auth,
+        ));
+
     // Public routes (no auth required)
     let public = Router::new()
         .route("/", get(pages::index))
@@ -112,6 +121,7 @@ pub fn router(state: Arc<AppState>) -> Router {
             get(server_fn_handler).post(server_fn_handler),
         )
         .merge(protected_pages)
+        .merge(scoreboard_route)
         .merge(public)
         // Require CTF resource to exist for all routes above
         .route_layer(axum_mw::from_fn_with_state(

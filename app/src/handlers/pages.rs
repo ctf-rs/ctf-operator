@@ -3,7 +3,7 @@ use std::{collections::{HashMap, HashSet}, sync::Arc};
 use axum::{
     Extension,
     extract::{Path, Query, State},
-    response::{Html, IntoResponse, Response},
+    response::{Html, IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::cookie::CookieJar;
 use ctf_cli::ChallengeCategory;
@@ -460,44 +460,55 @@ pub async fn challenge_page(
 
 pub async fn scoreboard(
     State(state): State<Arc<AppState>>,
-    Extension(user): Extension<db::User>,
+    user_ext: Option<Extension<db::User>>,
 ) -> Response {
+    let user = user_ext.map(|Extension(u)| u);
+    let sb_config = crate::helpers::get_ctf_scoreboard_config(&state);
+
+    // Anonymous visitor on a non-public scoreboard → redirect to login
+    if user.is_none() && !sb_config.public {
+        return Redirect::to("/login").into_response();
+    }
+
     let ctf_name = state.config.ctf_name.clone();
     let ctf_title = crate::helpers::get_ctf_full_name(&state);
 
-    // Gate on non-public CTF access
-    let ctf_public = is_ctf_public(&state);
-    if !has_ctf_level_access(&user, ctf_public, &state.config) {
-        let user_label = build_user_label(&user);
-        let html = views::render_to_html(move || {
-            leptos::prelude::view! {
-                <views::AccessDeniedPage ctf_title=ctf_title user_label=user_label/>
-            }
-        });
-        return Html(html).into_response();
+    // Gate on non-public CTF access (skip for anonymous visitors on public scoreboard)
+    if let Some(ref user) = user {
+        let ctf_public = is_ctf_public(&state);
+        if !has_ctf_level_access(user, ctf_public, &state.config) {
+            let user_label = build_user_label(user);
+            let html = views::render_to_html(move || {
+                leptos::prelude::view! {
+                    <views::AccessDeniedPage ctf_title=ctf_title user_label=user_label/>
+                }
+            });
+            return Html(html).into_response();
+        }
     }
 
-    // Gate on CTF open status
-    let schedule = get_ctf_schedule(&state);
-    if !is_ctf_open(&schedule) {
-        let seconds_until_open = schedule.open_time.as_ref().map(seconds_until_time);
-        let user_label = build_user_label(&user);
-        let html = views::render_to_html(move || {
-            leptos::prelude::view! {
-                <views::CtfNotOpenPage
-                    ctf_title=ctf_title
-                    user_label=user_label
-                    seconds_until_open=seconds_until_open
-                />
-            }
-        });
-        return Html(html).into_response();
+    // Gate on CTF open status (skip for anonymous visitors on public scoreboard)
+    if let Some(ref user) = user {
+        let schedule = get_ctf_schedule(&state);
+        if !is_ctf_open(&schedule) {
+            let seconds_until_open = schedule.open_time.as_ref().map(seconds_until_time);
+            let user_label = build_user_label(user);
+            let html = views::render_to_html(move || {
+                leptos::prelude::view! {
+                    <views::CtfNotOpenPage
+                        ctf_title=ctf_title
+                        user_label=user_label
+                        seconds_until_open=seconds_until_open
+                    />
+                }
+            });
+            return Html(html).into_response();
+        }
     }
 
     // Gate on scoreboard visibility
-    let sb_config = crate::helpers::get_ctf_scoreboard_config(&state);
     if !sb_config.visible {
-        let user_label = build_user_label(&user);
+        let user_label = user.as_ref().map(|u| build_user_label(u)).unwrap_or_default();
         let html = views::render_to_html(move || {
             leptos::prelude::view! {
                 <views::ScoreboardHiddenPage ctf_title=ctf_title user_label=user_label/>
@@ -506,7 +517,7 @@ pub async fn scoreboard(
         return Html(html).into_response();
     }
 
-    let user_label = build_user_label(&user);
+    let user_label = user.as_ref().map(|u| build_user_label(u)).unwrap_or_default();
 
     // Get leaderboard + challenge points from scoreboard cache in one read
     let (leaderboard, challenge_points_cache) = {

@@ -150,6 +150,7 @@ spec:
                 default:
                   freezeTime: null
                   frozen: null
+                  public: false
                   visible: true
                 description: Scoreboard display configuration.
                 properties:
@@ -163,6 +164,10 @@ spec:
                       When `true` the scoreboard is frozen — scores are still recorded but
                       the public ranking stops updating.
                     nullable: true
+                    type: boolean
+                  public:
+                    default: false
+                    description: "When `true` the scoreboard is accessible without logging in (default: `false`)."
                     type: boolean
                   visible:
                     default: true

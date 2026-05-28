@@ -114,6 +114,10 @@ pub struct CtfScoreboard {
     #[serde(default, rename = "freezeTime")]
     #[garde(skip)]
     pub freeze_time: Option<Time>,
+    /// When `true` the scoreboard is accessible without logging in (default: `false`).
+    #[serde(default)]
+    #[garde(skip)]
+    pub public: bool,
 }
 
 impl Default for CtfScoreboard {
@@ -122,6 +126,7 @@ impl Default for CtfScoreboard {
             frozen: None,
             visible: true,
             freeze_time: None,
+            public: false,
         }
     }
 }

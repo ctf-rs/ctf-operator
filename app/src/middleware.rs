@@ -187,6 +187,28 @@ pub async fn require_auth(
     }
 }
 
+/// Axum middleware that loads the user from the session cookie when
+/// present but does **not** redirect to `/login` when anonymous.
+/// The handler receives `Option<Extension<db::User>>`.
+pub async fn optional_auth(
+    State(state): State<Arc<AppState>>,
+    jar: CookieJar,
+    mut request: Request,
+    next: Next,
+) -> Response {
+    if let Some(cookie) = jar.get(&state.config.session_cookie_name) {
+        let token = cookie.value().to_owned();
+        if let Ok(Some(mut user)) = db::get_user_by_session(&state.db, &token).await {
+            if !state.config.mode.is_team() {
+                user.team_id = None;
+                user.team_name = None;
+            }
+            request.extensions_mut().insert(user);
+        }
+    }
+    next.run(request).await
+}
+
 /// Axum middleware that returns 500 Internal Server Error when the
 /// configured CTF resource does not exist in the cluster.
 pub async fn require_ctf_exists(
