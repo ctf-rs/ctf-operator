@@ -149,7 +149,7 @@ a { color: #93c5fd; }
 .scoreboard-table .rank.gold { color: #fbbf24; }
 .scoreboard-table .rank.silver { color: #d1d5db; }
 .scoreboard-table .rank.bronze { color: #d97706; }
-.scoreboard-table .username { font-weight: 500; text-align: left; word-break: break-word; }
+.scoreboard-table .username { font-weight: 500; text-align: left; word-break: break-word; width: 12rem; min-width: 10rem; }
 .scoreboard-table .points { font-weight: 600; color: #a7f3d0; width: 3.5rem; border-right: 2px solid #3a404a; }
 
 /* Rotated challenge column headers */

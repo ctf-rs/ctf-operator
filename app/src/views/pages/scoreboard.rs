@@ -9,7 +9,7 @@ use super::super::{ScoreboardPageData, SolveStatus, layout::PageShell};
 #[component]
 pub fn ScoreboardPage(data: ScoreboardPageData) -> impl IntoView {
     let ctf_title = data.ctf_title.clone();
-    let player_header = if data.has_teams { "Team / Player" } else { "Player" };
+    let player_header = if data.has_teams { "Team" } else { "Player" };
 
     view! {
         <PageShell title=format!("{} - Scoreboard", ctf_title.clone())>
