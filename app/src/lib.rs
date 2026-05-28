@@ -25,9 +25,12 @@ pub mod views;
 
 #[cfg(feature = "hydrate")]
 mod instance_live;
+#[cfg(feature = "hydrate")]
+mod scoreboard_live;
 
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn hydrate() {
     instance_live::init();
+    scoreboard_live::init();
 }
