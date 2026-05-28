@@ -8,7 +8,7 @@ pub use pages::{
     ScoreboardHiddenPage, ScoreboardPage,
 };
 
-use ctf_cli::ChallengeCategory;
+use ctf_cli::{ChallengeCategory, ChallengeDifficulty};
 use leptos::prelude::*;
 
 use crate::db::ChallengeView;
@@ -80,6 +80,34 @@ pub struct ScoreboardPageData {
     pub user_label: String,
     pub leaderboard: Vec<UserScore>,
     pub frozen: bool,
+    /// Columns for the challenge-level grid (sorted by category then difficulty).
+    pub challenge_columns: Vec<ScoreboardChallenge>,
+    /// Per-entry solve details: `leaderboard[i].solved_challenges[j]` corresponds
+    /// to `challenge_columns[j]`.
+    pub solve_grid: Vec<Vec<SolveStatus>>,
+    /// Whether any user has a team (enables "Team" column header instead of "Player").
+    pub has_teams: bool,
+}
+
+/// One column in the scoreboard challenge grid.
+#[derive(Debug, Clone)]
+pub struct ScoreboardChallenge {
+    pub name: String,
+    pub full_name: String,
+    pub category: ChallengeCategory,
+    pub difficulty: Option<ChallengeDifficulty>,
+    pub points: u32,
+}
+
+/// Solve status for a single (entry, challenge) cell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SolveStatus {
+    /// Not solved.
+    Unsolved,
+    /// Solved (but not first blood).
+    Solved,
+    /// First blood — this entry solved the challenge first.
+    FirstBlood,
 }
 
 // ---------------------------------------------------------------------------

@@ -70,14 +70,37 @@ echo "=== Creating namespace and CTF resources ==="
 kubectl create namespace "${CTF_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -n "${CTF_NAMESPACE}" -f examples/ctf-crd.yaml
 
-# Apply challenges that pass validation
-for f in examples/misc-sanity.yaml examples/misc-trivia.yaml examples/web-hello.yaml; do
-    kubectl apply -n "${CTF_NAMESPACE}" -f "$f" 2>/dev/null && \
-        echo "  Applied $(basename "$f")" || true
+# Apply challenges — mix of categories and difficulties
+CHALLENGE_FILES=(
+    examples/misc-sanity.yaml
+    examples/misc-trivia.yaml
+    examples/crypto-caesar.yaml
+    examples/crypto-rsa.yaml
+    examples/crypto-aes.yaml
+    examples/rev-strings.yaml
+    examples/rev-xor.yaml
+    examples/foren-pcap.yaml
+    examples/foren-stego.yaml
+    examples/pwn-overflow.yaml
+    examples/web-hello.yaml
+    examples/web-xss.yaml
+)
+CHALLENGE_NAMES=()
+for f in "${CHALLENGE_FILES[@]}"; do
+    if kubectl apply -n "${CTF_NAMESPACE}" -f "$f" 2>/dev/null; then
+        name=$(basename "$f" .yaml)
+        CHALLENGE_NAMES+=("$name")
+        echo "  Applied ${name}"
+    fi
 done
 
-# Update CTF to reference only the challenges we applied
-cat <<'EOF' | kubectl apply -n "${CTF_NAMESPACE}" -f -
+# Update CTF to reference all applied challenges
+CHALLENGES_YAML=""
+for name in "${CHALLENGE_NAMES[@]}"; do
+    CHALLENGES_YAML="${CHALLENGES_YAML}    - ${name}\n"
+done
+
+cat <<EOF | kubectl apply -n "${CTF_NAMESPACE}" -f -
 apiVersion: operator.ctf.rs/v1alpha1
 kind: Ctf
 metadata:
@@ -97,10 +120,7 @@ spec:
       start: 12000
       end: 12020
   challenges:
-    - misc-sanity
-    - misc-trivia
-    - web-hello
-EOF
+$(echo -e "${CHALLENGES_YAML}")EOF
 
 # ── Enable direct access grants for testing ──────────────────────────
 echo ""
@@ -146,8 +166,12 @@ echo "  Done."
 
 # ── Build ────────────────────────────────────────────────────────────
 echo ""
-echo "=== Building operator and app ==="
-cargo build -p ctf-operator -p app --features ssr 2>&1 | tail -3
+echo "=== Building operator ==="
+cargo build -p ctf-operator 2>&1 | tail -3
+
+echo ""
+echo "=== Building app (SSR + WASM hydration) ==="
+cargo leptos build 2>&1 | tail -5
 
 # ── Start operator in background ─────────────────────────────────────
 echo ""
@@ -208,5 +232,7 @@ export INSTANCE_NAME_PREFIX="ctf-inst"
 export OIDC_ADMIN_ROLE="ctf-admin"
 export OIDC_PLAYER_ROLE="ctf-player"
 export RUST_LOG="info,app=debug"
+export LEPTOS_SITE_ROOT="target/site"
+export LEPTOS_SITE_PKG_DIR="pkg"
 
-exec cargo run -p app --features ssr
+exec cargo leptos serve

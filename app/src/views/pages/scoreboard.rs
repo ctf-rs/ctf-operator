@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 
-use super::super::{ScoreboardPageData, layout::PageShell};
+use super::super::{ScoreboardPageData, SolveStatus, layout::PageShell};
 
 // ---------------------------------------------------------------------------
 // Scoreboard page
@@ -9,6 +9,8 @@ use super::super::{ScoreboardPageData, layout::PageShell};
 #[component]
 pub fn ScoreboardPage(data: ScoreboardPageData) -> impl IntoView {
     let ctf_title = data.ctf_title.clone();
+    let player_header = if data.has_teams { "Team / Player" } else { "Player" };
+
     view! {
         <PageShell title=format!("{} - Scoreboard", ctf_title.clone())>
             <header class="topbar">
@@ -36,36 +38,64 @@ pub fn ScoreboardPage(data: ScoreboardPageData) -> impl IntoView {
                         <p class="muted" style="text-align:center;margin-top:2rem;">"No solves yet. Be the first!"</p>
                     }.into_any()
                 } else {
+                    let columns = data.challenge_columns.clone();
                     view! {
-                        <table class="scoreboard-table">
-                            <thead>
-                                <tr>
-                                    <th class="rank">"#"</th>
-                                    <th class="username">"Player"</th>
-                                    <th class="points">"Points"</th>
-                                    <th class="solves">"Solves"</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {data.leaderboard.into_iter().enumerate().map(|(i, entry)| {
-                                    let rank = i + 1;
-                                    let rank_class = match rank {
-                                        1 => "rank gold",
-                                        2 => "rank silver",
-                                        3 => "rank bronze",
-                                        _ => "rank",
-                                    };
-                                    view! {
-                                        <tr>
-                                            <td class={rank_class}>{rank}</td>
-                                            <td class="username">{entry.username}</td>
-                                            <td class="points">{entry.total_points}</td>
-                                            <td class="solves">{entry.solves}</td>
-                                        </tr>
-                                    }
-                                }).collect_view()}
-                            </tbody>
-                        </table>
+                        <div class="scoreboard-scroll">
+                            <table class="scoreboard-table grid-table">
+                                <thead>
+                                    <tr>
+                                        <th class="rank sticky-col">"#"</th>
+                                        <th class="username sticky-col">{player_header}</th>
+                                        <th class="points sticky-col">"Score"</th>
+                                        {columns.iter().map(|ch| {
+                                            let cat = ch.category.label();
+                                            let cat_class = format!("challenge-col cat-{}", ch.category.sort_key());
+                                            let title = format!("{} ({}pts)", ch.full_name, ch.points);
+                                            view! {
+                                                <th class={cat_class} title={title}>
+                                                    <div class="rotated-header">
+                                                        <span class="ch-name">{ch.full_name.clone()}</span>
+                                                        <span class="ch-cat">{cat}</span>
+                                                    </div>
+                                                </th>
+                                            }
+                                        }).collect_view()}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {data.leaderboard.into_iter().zip(data.solve_grid.into_iter()).enumerate().map(|(i, (entry, solves))| {
+                                        let rank = i + 1;
+                                        let rank_class = match rank {
+                                            1 => "rank gold",
+                                            2 => "rank silver",
+                                            3 => "rank bronze",
+                                            _ => "rank",
+                                        };
+                                        view! {
+                                            <tr>
+                                                <td class={format!("{rank_class} sticky-col")}>{rank}</td>
+                                                <td class="username sticky-col">{entry.username}</td>
+                                                <td class="points sticky-col">{entry.total_points}</td>
+                                                {solves.into_iter().enumerate().map(|(j, status)| {
+                                                    let cat_class = format!("solve-cell cat-{}", columns[j].category.sort_key());
+                                                    match status {
+                                                        SolveStatus::FirstBlood => view! {
+                                                            <td class={format!("{cat_class} first-blood")} title="First blood!">{"\u{1f6a9}"}</td>
+                                                        }.into_any(),
+                                                        SolveStatus::Solved => view! {
+                                                            <td class={format!("{cat_class} solved")} title="Solved">{"\u{2705}"}</td>
+                                                        }.into_any(),
+                                                        SolveStatus::Unsolved => view! {
+                                                            <td class={cat_class}></td>
+                                                        }.into_any(),
+                                                    }
+                                                }).collect_view()}
+                                            </tr>
+                                        }
+                                    }).collect_view()}
+                                </tbody>
+                            </table>
+                        </div>
                     }.into_any()
                 }}
             </div>

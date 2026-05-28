@@ -66,6 +66,9 @@ impl FlagScore {
 pub struct UserScore {
     pub user_id: i64,
     pub username: String,
+    /// Team ID (if user is on a team).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub team_id: Option<String>,
     pub total_points: u32,
     pub solves: u32,
     pub last_solve_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -443,7 +446,8 @@ async fn calculate_user_scores(
                 COALESCE(u.name, u.sub) as username,
                 s.challenge_name,
                 s.flag_name,
-                s.created_at
+                s.created_at,
+                u.team_id
             FROM flag_submissions s
             JOIN users u ON u.id = s.user_id
             WHERE s.ctf_name = $1 AND s.accepted = true AND s.admin_submission = false
@@ -461,6 +465,7 @@ async fn calculate_user_scores(
         let challenge_name: String = row.try_get_by_index(2)?;
         let flag_name: String = row.try_get_by_index(3)?;
         let solved_at: chrono::DateTime<chrono::Utc> = row.try_get_by_index(4)?;
+        let team_id: Option<String> = row.try_get_by_index(5).unwrap_or(None);
         let key = (ctf_name.to_string(), user_id);
         let flag_key = (ctf_name.to_string(), challenge_name, flag_name);
 
@@ -472,6 +477,7 @@ async fn calculate_user_scores(
         let entry = user_scores.entry(key).or_insert_with(|| UserScore {
             user_id,
             username: username.clone(),
+            team_id: team_id.clone(),
             total_points: 0,
             solves: 0,
             last_solve_at: None,

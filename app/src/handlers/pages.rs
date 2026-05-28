@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::{HashMap, HashSet}, sync::Arc};
 
 use axum::{
     Extension,
@@ -8,6 +8,7 @@ use axum::{
 use axum_extra::extract::cookie::CookieJar;
 use ctf_cli::ChallengeCategory;
 use kube::ResourceExt;
+use sea_orm::{ConnectionTrait, DbBackend, Statement};
 use serde::Deserialize;
 use tracing::warn;
 
@@ -28,6 +29,27 @@ use crate::{
     state::AppState,
     views,
 };
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// Build the display label for the current user.
+///
+/// Shows `"DisplayName [TeamName]"` in team mode, or just `"DisplayName"` in
+/// solo mode.
+fn build_user_label(user: &db::User) -> String {
+    let name = user
+        .name
+        .clone()
+        .or(user.email.clone())
+        .unwrap_or_else(|| user.sub.clone());
+
+    match user.team_name.as_deref() {
+        Some(team) if !team.is_empty() => format!("{name} [{team}]"),
+        _ => name,
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Request types
@@ -70,11 +92,7 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
     // Gate on non-public CTF access
     let ctf_public = is_ctf_public(&state);
     if !has_ctf_level_access(&user, ctf_public, &state.config) {
-        let user_label = user
-            .name
-            .clone()
-            .or(user.email.clone())
-            .unwrap_or_else(|| user.sub.clone());
+        let user_label = build_user_label(&user);
         let html = views::render_to_html(move || {
             leptos::prelude::view! {
                 <views::AccessDeniedPage ctf_title=ctf_title user_label=user_label/>
@@ -87,11 +105,7 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
     let schedule = get_ctf_schedule(&state);
     if !is_ctf_open(&schedule) {
         let seconds_until_open = schedule.open_time.as_ref().map(seconds_until_time);
-        let user_label = user
-            .name
-            .clone()
-            .or(user.email.clone())
-            .unwrap_or_else(|| user.sub.clone());
+        let user_label = build_user_label(&user);
         let html = views::render_to_html(move || {
             leptos::prelude::view! {
                 <views::CtfNotOpenPage
@@ -226,11 +240,7 @@ pub async fn index(State(state): State<Arc<AppState>>, jar: CookieJar) -> Respon
         .collect();
     sections.sort_by_key(|s| s.category.sort_key());
 
-    let user_label = user
-        .name
-        .clone()
-        .or(user.email.clone())
-        .unwrap_or_else(|| user.sub.clone());
+    let user_label = build_user_label(&user);
 
     let ctf_title = crate::helpers::get_ctf_full_name(&state);
     let html = views::render_to_html(move || {
@@ -361,11 +371,7 @@ pub async fn challenge_page(
         }
     }
 
-    let user_label = user
-        .name
-        .clone()
-        .or(user.email.clone())
-        .unwrap_or_else(|| user.sub.clone());
+    let user_label = build_user_label(&user);
 
     let submit_feedback = views::parse_submission_feedback(
         query.submit.as_deref(),
@@ -455,11 +461,7 @@ pub async fn scoreboard(
     // Gate on non-public CTF access
     let ctf_public = is_ctf_public(&state);
     if !has_ctf_level_access(&user, ctf_public, &state.config) {
-        let user_label = user
-            .name
-            .clone()
-            .or(user.email.clone())
-            .unwrap_or_else(|| user.sub.clone());
+        let user_label = build_user_label(&user);
         let html = views::render_to_html(move || {
             leptos::prelude::view! {
                 <views::AccessDeniedPage ctf_title=ctf_title user_label=user_label/>
@@ -472,11 +474,7 @@ pub async fn scoreboard(
     let schedule = get_ctf_schedule(&state);
     if !is_ctf_open(&schedule) {
         let seconds_until_open = schedule.open_time.as_ref().map(seconds_until_time);
-        let user_label = user
-            .name
-            .clone()
-            .or(user.email.clone())
-            .unwrap_or_else(|| user.sub.clone());
+        let user_label = build_user_label(&user);
         let html = views::render_to_html(move || {
             leptos::prelude::view! {
                 <views::CtfNotOpenPage
@@ -492,11 +490,7 @@ pub async fn scoreboard(
     // Gate on scoreboard visibility
     let sb_config = crate::helpers::get_ctf_scoreboard_config(&state);
     if !sb_config.visible {
-        let user_label = user
-            .name
-            .clone()
-            .or(user.email.clone())
-            .unwrap_or_else(|| user.sub.clone());
+        let user_label = build_user_label(&user);
         let html = views::render_to_html(move || {
             leptos::prelude::view! {
                 <views::ScoreboardHiddenPage ctf_title=ctf_title user_label=user_label/>
@@ -505,25 +499,95 @@ pub async fn scoreboard(
         return Html(html).into_response();
     }
 
-    let user_label = user
-        .name
-        .clone()
-        .or(user.email.clone())
-        .unwrap_or_else(|| user.sub.clone());
+    let user_label = build_user_label(&user);
 
-    // Get leaderboard from scoreboard cache
-    let leaderboard = {
+    // Get leaderboard + challenge points from scoreboard cache in one read
+    let (leaderboard, challenge_points_cache) = {
         let scoreboard = state.scoreboard.read().await;
-        scoreboard.get_leaderboard(&ctf_name)
+        let lb = scoreboard.get_leaderboard(&ctf_name);
+        let cp = scoreboard.challenge_points.clone();
+        (lb, cp)
     };
 
     let frozen = crate::helpers::is_scoreboard_frozen(&sb_config);
+
+    // Build challenge columns (sorted by category, then difficulty)
+    let all_challenges = challenges::list_challenges_for_ctf(&state);
+    let mut challenge_columns: Vec<views::ScoreboardChallenge> = all_challenges
+        .iter()
+        .map(|ch| {
+            // Pick the hardest difficulty from all flags, or None
+            let difficulty = ch
+                .flags
+                .iter()
+                .filter_map(|f| f.difficulty)
+                .max_by_key(|d| d.sort_key());
+            let category = ch.categories.first().copied().unwrap_or(ChallengeCategory::Misc);
+            let points = challenge_points_cache
+                .get(&(ctf_name.clone(), ch.name.clone()))
+                .copied()
+                .unwrap_or(0);
+            views::ScoreboardChallenge {
+                name: ch.name.clone(),
+                full_name: ch.full_name.clone(),
+                category,
+                difficulty,
+                points,
+            }
+        })
+        .collect();
+    challenge_columns.sort_by(|a, b| {
+        a.category
+            .sort_key()
+            .cmp(&b.category.sort_key())
+            .then_with(|| {
+                a.difficulty
+                    .map(|d| d.sort_key())
+                    .unwrap_or(255)
+                    .cmp(&b.difficulty.map(|d| d.sort_key()).unwrap_or(255))
+            })
+            .then_with(|| a.name.cmp(&b.name))
+    });
+
+    // Gather per-challenge solve data: who solved what and first blood
+    let solve_data = get_scoreboard_solve_data(&state.db, &ctf_name).await;
+    let first_blood = compute_first_blood(&solve_data);
+
+    // Build the solve grid: one row per leaderboard entry, one cell per challenge column
+    let solve_grid: Vec<Vec<views::SolveStatus>> = leaderboard
+        .iter()
+        .map(|entry| {
+            challenge_columns
+                .iter()
+                .map(|ch| {
+                    let is_first = first_blood
+                        .get(&ch.name)
+                        .is_some_and(|fb_id| *fb_id == entry.user_id);
+                    let is_solved = solve_data
+                        .get(&(entry.user_id, ch.name.clone()))
+                        .is_some();
+                    if is_first {
+                        views::SolveStatus::FirstBlood
+                    } else if is_solved {
+                        views::SolveStatus::Solved
+                    } else {
+                        views::SolveStatus::Unsolved
+                    }
+                })
+                .collect()
+        })
+        .collect();
+
+    let has_teams = leaderboard.iter().any(|e| e.team_id.is_some());
 
     let page_data = views::ScoreboardPageData {
         ctf_title,
         user_label,
         leaderboard,
         frozen,
+        challenge_columns,
+        solve_grid,
+        has_teams,
     };
 
     let html = views::render_to_html(move || {
@@ -531,4 +595,65 @@ pub async fn scoreboard(
     });
 
     Html(html).into_response()
+}
+
+// ---------------------------------------------------------------------------
+// Scoreboard helpers — solve grid + first blood
+// ---------------------------------------------------------------------------
+
+/// Per-challenge solve data: `(user_id, challenge_name) -> earliest_solve_timestamp`.
+async fn get_scoreboard_solve_data(
+    db: &sea_orm::DatabaseConnection,
+    ctf_name: &str,
+) -> HashMap<(i64, String), chrono::DateTime<chrono::Utc>> {
+    let rows = db
+        .query_all_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            r#"
+            SELECT s.user_id, s.challenge_name, MIN(s.created_at) AS first_solve
+            FROM flag_submissions s
+            WHERE s.ctf_name = $1 AND s.accepted = true AND s.admin_submission = false
+            GROUP BY s.user_id, s.challenge_name
+            "#,
+            [ctf_name.into()],
+        ))
+        .await;
+
+    let Ok(rows) = rows else {
+        return HashMap::new();
+    };
+
+    let mut result = HashMap::new();
+    for row in &rows {
+        let user_id: i64 = row.try_get_by_index(0).unwrap_or(0);
+        let challenge: String = row.try_get_by_index(1).unwrap_or_default();
+        let ts: chrono::DateTime<chrono::Utc> = match row.try_get_by_index(2) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        result.insert((user_id, challenge), ts);
+    }
+    result
+}
+
+/// Compute first blood: `challenge_name -> user_id` of the first solver.
+fn compute_first_blood(
+    solve_data: &HashMap<(i64, String), chrono::DateTime<chrono::Utc>>,
+) -> HashMap<String, i64> {
+    let mut first: HashMap<String, (i64, chrono::DateTime<chrono::Utc>)> = HashMap::new();
+    for ((user_id, challenge), ts) in solve_data {
+        first
+            .entry(challenge.clone())
+            .and_modify(|(fb_uid, fb_ts)| {
+                if ts < fb_ts {
+                    *fb_uid = *user_id;
+                    *fb_ts = *ts;
+                }
+            })
+            .or_insert((*user_id, *ts));
+    }
+    first
+        .into_iter()
+        .map(|(ch, (uid, _))| (ch, uid))
+        .collect()
 }

@@ -4,7 +4,7 @@ storage:
 instance:
   deployment:
     replicas: 1
-    imagePullPolicy: Never
+    imagePullPolicy: IfNotPresent
     useHostPort: true
   service:
     type: ClusterIP
