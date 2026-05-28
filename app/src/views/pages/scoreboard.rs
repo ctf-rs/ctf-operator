@@ -93,19 +93,12 @@ fn TimerBar(timer: ScoreboardTimer) -> impl IntoView {
                     <div class="timer-bar-freeze-marker" style={format!("left:{fp:.2}%;")}
                          title="Scoreboard freeze point">
                         <span class="freeze-icon">{"\u{2744}\u{fe0f}"}</span>
+                        <span class="freeze-time-label">{freeze_label.clone().unwrap_or_default()}</span>
                     </div>
                 })}
             </div>
             <div class="timer-bar-timestamps">
                 <span class="ts-start">{start_label}</span>
-                {freeze_label.map(|fl| {
-                    let fp = freeze_pct.unwrap_or(50.0);
-                    view! {
-                        <span class="ts-freeze" style={format!("left:{fp:.2}%;")}>
-                            {"\u{2744}\u{fe0f} "}{fl}
-                        </span>
-                    }
-                })}
                 <span class="ts-end">{end_label}</span>
             </div>
         </div>
