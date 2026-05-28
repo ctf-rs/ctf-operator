@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use axum::{Json, Router, extract::State, response::IntoResponse, routing::post};
 use base64::Engine;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use serde::Deserialize;
 use sha2::Sha256;
 use tracing::{error, info, warn};

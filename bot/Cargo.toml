@@ -29,7 +29,7 @@ serenity = { version = "0.12", default-features = false, features = [
     "rustls_backend",
 ] }
 sha2 = { workspace = true }
-sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres"] }
+sqlx = { workspace = true, features = ["runtime-tokio", "postgres"] }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }

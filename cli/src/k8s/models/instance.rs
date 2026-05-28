@@ -152,7 +152,7 @@ impl Instance {
             .ok_or(InstanceTimeError::NoDuration)?;
 
         let ready_since_unix = u64::try_from(ready_since.0.as_second())
-            .map_err(|_| InstanceTimeError::InvalidReadySince)?;
+            .map_err(|_e| InstanceTimeError::InvalidReadySince)?;
         let expires_unix = ready_since_unix.saturating_add(duration);
 
         let now_unix = SystemTime::now()
