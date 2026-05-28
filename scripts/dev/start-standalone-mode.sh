@@ -70,21 +70,12 @@ echo "=== Creating namespace and CTF resources ==="
 kubectl create namespace "${CTF_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -n "${CTF_NAMESPACE}" -f examples/ctf-crd.yaml
 
-# Apply challenges — mix of categories and difficulties
-CHALLENGE_FILES=(
-    examples/misc-sanity.yaml
-    examples/misc-trivia.yaml
-    examples/crypto-caesar.yaml
-    examples/crypto-rsa.yaml
-    examples/crypto-aes.yaml
-    examples/rev-strings.yaml
-    examples/rev-xor.yaml
-    examples/foren-pcap.yaml
-    examples/foren-stego.yaml
-    examples/pwn-overflow.yaml
-    examples/web-hello.yaml
-    examples/web-xss.yaml
-)
+# Apply ALL challenge YAML files (excluding non-challenge configs)
+CHALLENGE_FILES=()
+for f in examples/misc-*.yaml examples/crypto-*.yaml examples/web-*.yaml \
+         examples/foren-*.yaml examples/rev-*.yaml examples/pwn-*.yaml; do
+    [ -f "$f" ] && CHALLENGE_FILES+=("$f")
+done
 CHALLENGE_NAMES=()
 for f in "${CHALLENGE_FILES[@]}"; do
     if kubectl apply -n "${CTF_NAMESPACE}" -f "$f" 2>/dev/null; then
