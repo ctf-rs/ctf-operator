@@ -27,7 +27,7 @@ services:
       - "8081:8081"
 
   garage:
-    image: dxflrs/garage:v1.3.1
+    image: dxflrs/garage:v2.3.0
     volumes:
       - ./dev/garage.toml:/etc/garage.toml:ro
       - garage_data:/var/lib/garage
