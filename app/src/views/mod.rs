@@ -104,14 +104,26 @@ pub struct ScoreboardTimer {
     pub freeze_ts: Option<u64>,
 }
 
-/// One column in the scoreboard challenge grid.
+/// One column in the scoreboard grid.
+///
+/// For single-flag challenges, there is one column whose `flag_name` equals
+/// the challenge name.  For multi-flag challenges, each flag gets its own
+/// column so the grid shows per-flag solve status.
 #[derive(Debug, Clone)]
 pub struct ScoreboardChallenge {
+    /// Internal challenge name (k8s resource name).
     pub name: String,
+    /// Human-readable challenge name.
     pub full_name: String,
+    /// Flag name within the challenge (same as `name` for single-flag).
+    pub flag_name: String,
+    /// Human-readable flag label (only set for multi-flag challenges).
+    pub flag_label: Option<String>,
     pub category: ChallengeCategory,
     pub difficulty: Option<ChallengeDifficulty>,
     pub points: u32,
+    /// Whether this is part of a multi-flag challenge (affects header display).
+    pub multi_flag: bool,
 }
 
 /// Solve status for a single (entry, challenge) cell.

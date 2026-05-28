@@ -153,11 +153,20 @@ pub fn ScoreboardPage(data: ScoreboardPageData) -> impl IntoView {
                                         {columns.iter().map(|ch| {
                                             let cat = ch.category.label();
                                             let cat_class = format!("challenge-col cat-{}", ch.category.sort_key());
-                                            let title = format!("{} ({}pts)", ch.full_name, ch.points);
+                                            let display_name = if ch.multi_flag {
+                                                ch.flag_label.clone().unwrap_or_else(|| ch.flag_name.clone())
+                                            } else {
+                                                ch.full_name.clone()
+                                            };
+                                            let title = if ch.multi_flag {
+                                                format!("{} / {} ({}pts)", ch.full_name, display_name, ch.points)
+                                            } else {
+                                                format!("{} ({}pts)", ch.full_name, ch.points)
+                                            };
                                             view! {
                                                 <th class={cat_class} title={title}>
                                                     <div class="rotated-header">
-                                                        <span class="ch-name">{ch.full_name.clone()}</span>
+                                                        <span class="ch-name">{display_name}</span>
                                                         <span class="ch-cat">{cat}</span>
                                                     </div>
                                                 </th>

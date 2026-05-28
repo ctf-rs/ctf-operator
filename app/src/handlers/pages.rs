@@ -530,45 +530,47 @@ pub async fn scoreboard(
 
     let user_label = user.as_ref().map(|u| build_user_label(u)).unwrap_or_default();
 
-    // Get leaderboard + challenge points from scoreboard cache in one read
-    let (leaderboard, challenge_points_cache) = {
+    // Get leaderboard from scoreboard cache
+    let leaderboard = {
         let scoreboard = state.scoreboard.read().await;
         let mut lb = scoreboard.get_leaderboard(&ctf_name);
-        let cp = scoreboard.challenge_points.clone();
         // In team mode, only show teams on the scoreboard
         if state.config.mode.is_team() {
             lb.retain(|e| e.team_id.is_some());
         }
-        (lb, cp)
+        lb
     };
 
     let frozen = crate::helpers::is_scoreboard_frozen(&sb_config);
 
-    // Build challenge columns (sorted by category, then difficulty)
+    // Build per-flag columns (multi-flag challenges get one column per flag)
     let all_challenges = challenges::list_challenges_for_ctf(&state);
-    let mut challenge_columns: Vec<views::ScoreboardChallenge> = all_challenges
-        .iter()
-        .map(|ch| {
-            // Pick the hardest difficulty from all flags, or None
-            let difficulty = ch
-                .flags
-                .iter()
-                .filter_map(|f| f.difficulty)
-                .max_by_key(|d| d.sort_key());
-            let category = ch.categories.first().copied().unwrap_or(ChallengeCategory::Misc);
-            let points = challenge_points_cache
-                .get(&(ctf_name.clone(), ch.name.clone()))
-                .copied()
-                .unwrap_or(0);
-            views::ScoreboardChallenge {
+    let mut challenge_columns: Vec<views::ScoreboardChallenge> = Vec::new();
+    for ch in &all_challenges {
+        let category = ch.categories.first().copied().unwrap_or(ChallengeCategory::Misc);
+        let multi_flag = ch.flags.len() > 1;
+        for flag in &ch.flags {
+            let flag_key = (ctf_name.clone(), ch.name.clone(), flag.name.clone());
+            let points = {
+                let scoreboard = state.scoreboard.read().await;
+                scoreboard
+                    .flag_scores
+                    .get(&flag_key)
+                    .map(|s| s.current_points)
+                    .unwrap_or(0)
+            };
+            challenge_columns.push(views::ScoreboardChallenge {
                 name: ch.name.clone(),
                 full_name: ch.full_name.clone(),
+                flag_name: flag.name.clone(),
+                flag_label: flag.label.clone(),
                 category,
-                difficulty,
+                difficulty: flag.difficulty,
                 points,
-            }
-        })
-        .collect();
+                multi_flag,
+            });
+        }
+    }
     challenge_columns.sort_by(|a, b| {
         a.category
             .sort_key()
@@ -580,24 +582,27 @@ pub async fn scoreboard(
                     .cmp(&b.difficulty.map(|d| d.sort_key()).unwrap_or(255))
             })
             .then_with(|| a.name.cmp(&b.name))
+            .then_with(|| a.flag_name.cmp(&b.flag_name))
     });
 
     // Gather per-challenge solve data: who solved what and first blood
     let solve_data = get_scoreboard_solve_data(&state.db, &ctf_name).await;
     let first_blood = compute_first_blood(&solve_data);
 
-    // Build the solve grid: one row per leaderboard entry, one cell per challenge column
+    // Build the solve grid: one row per leaderboard entry, one cell per flag column
     let solve_grid: Vec<Vec<views::SolveStatus>> = leaderboard
         .iter()
         .map(|entry| {
             challenge_columns
                 .iter()
                 .map(|ch| {
+                    let fb_key = (ch.name.clone(), ch.flag_name.clone());
                     let is_first = first_blood
-                        .get(&ch.name)
+                        .get(&fb_key)
                         .is_some_and(|fb_id| *fb_id == entry.entity_id);
+                    let solve_key = (entry.entity_id.clone(), ch.name.clone(), ch.flag_name.clone());
                     let is_solved = solve_data
-                        .get(&(entry.entity_id.clone(), ch.name.clone()))
+                        .get(&solve_key)
                         .is_some();
                     if is_first {
                         views::SolveStatus::FirstBlood
@@ -653,7 +658,7 @@ pub async fn scoreboard(
 // Scoreboard helpers — solve grid + first blood
 // ---------------------------------------------------------------------------
 
-/// Per-challenge solve data: `(entity_id, challenge_name) -> earliest_solve_timestamp`.
+/// Per-flag solve data: `(entity_id, challenge_name, flag_name) -> earliest_solve_timestamp`.
 ///
 /// `entity_id` = `team_id` when the user is on a team, otherwise the
 /// stringified `user_id`.  This matches the scoring entity used in the
@@ -661,18 +666,19 @@ pub async fn scoreboard(
 async fn get_scoreboard_solve_data(
     db: &sea_orm::DatabaseConnection,
     ctf_name: &str,
-) -> HashMap<(String, String), chrono::DateTime<chrono::Utc>> {
+) -> HashMap<(String, String, String), chrono::DateTime<chrono::Utc>> {
     let rows = db
         .query_all_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
             r#"
             SELECT COALESCE(u.team_id, s.user_id::text) AS entity_id,
                    s.challenge_name,
+                   s.flag_name,
                    MIN(s.created_at) AS first_solve
             FROM flag_submissions s
             JOIN users u ON u.id = s.user_id
             WHERE s.ctf_name = $1 AND s.accepted = true AND s.admin_submission = false
-            GROUP BY COALESCE(u.team_id, s.user_id::text), s.challenge_name
+            GROUP BY COALESCE(u.team_id, s.user_id::text), s.challenge_name, s.flag_name
             "#,
             [ctf_name.into()],
         ))
@@ -686,23 +692,25 @@ async fn get_scoreboard_solve_data(
     for row in &rows {
         let entity_id: String = row.try_get_by_index(0).unwrap_or_default();
         let challenge: String = row.try_get_by_index(1).unwrap_or_default();
-        let ts: chrono::DateTime<chrono::Utc> = match row.try_get_by_index(2) {
+        let flag: String = row.try_get_by_index(2).unwrap_or_default();
+        let ts: chrono::DateTime<chrono::Utc> = match row.try_get_by_index(3) {
             Ok(t) => t,
             Err(_) => continue,
         };
-        result.insert((entity_id, challenge), ts);
+        result.insert((entity_id, challenge, flag), ts);
     }
     result
 }
 
-/// Compute first blood: `challenge_name -> entity_id` of the first solver.
+/// Compute first blood: `(challenge_name, flag_name) -> entity_id` of the first solver.
 fn compute_first_blood(
-    solve_data: &HashMap<(String, String), chrono::DateTime<chrono::Utc>>,
-) -> HashMap<String, String> {
-    let mut first: HashMap<String, (String, chrono::DateTime<chrono::Utc>)> = HashMap::new();
-    for ((entity_id, challenge), ts) in solve_data {
+    solve_data: &HashMap<(String, String, String), chrono::DateTime<chrono::Utc>>,
+) -> HashMap<(String, String), String> {
+    let mut first: HashMap<(String, String), (String, chrono::DateTime<chrono::Utc>)> = HashMap::new();
+    for ((entity_id, challenge, flag), ts) in solve_data {
+        let key = (challenge.clone(), flag.clone());
         first
-            .entry(challenge.clone())
+            .entry(key)
             .and_modify(|(fb_eid, fb_ts)| {
                 if ts < fb_ts {
                     fb_eid.clone_from(entity_id);
@@ -713,6 +721,6 @@ fn compute_first_blood(
     }
     first
         .into_iter()
-        .map(|(ch, (eid, _))| (ch, eid))
+        .map(|(key, (eid, _))| (key, eid))
         .collect()
 }
