@@ -29,18 +29,27 @@ pub async fn upsert_user(
     sub: &str,
     email: Option<&str>,
     name: Option<&str>,
+    team_id: Option<&str>,
+    team_name: Option<&str>,
 ) -> Result<User> {
     let model = users::ActiveModel {
         sub: Set(sub.to_owned()),
         email: Set(email.map(ToOwned::to_owned)),
         name: Set(name.map(ToOwned::to_owned)),
+        team_id: Set(team_id.map(ToOwned::to_owned)),
+        team_name: Set(team_name.map(ToOwned::to_owned)),
         ..Default::default()
     };
 
     let result = users::Entity::insert(model)
         .on_conflict(
             OnConflict::column(users::Column::Sub)
-                .update_columns([users::Column::Email, users::Column::Name])
+                .update_columns([
+                    users::Column::Email,
+                    users::Column::Name,
+                    users::Column::TeamId,
+                    users::Column::TeamName,
+                ])
                 .to_owned(),
         )
         .exec_with_returning(db)
@@ -53,6 +62,8 @@ pub async fn upsert_user(
         name: result.name,
         discord_id: result.discord_id,
         discord_username: result.discord_username,
+        team_id: result.team_id,
+        team_name: result.team_name,
         roles: Vec::new(),
     })
 }
@@ -107,6 +118,8 @@ pub async fn get_user_by_session(db: &DatabaseConnection, token: &str) -> Result
                 name: user.name,
                 discord_id: user.discord_id,
                 discord_username: user.discord_username,
+                team_id: user.team_id,
+                team_name: user.team_name,
                 roles,
             }))
         }

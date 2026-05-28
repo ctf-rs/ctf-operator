@@ -70,6 +70,8 @@ pub async fn oauth_callback(
         &claims.sub,
         claims.email.as_deref(),
         claims.name.as_deref(),
+        claims.team_id.as_deref(),
+        claims.team_name.as_deref(),
     )
     .await
     {

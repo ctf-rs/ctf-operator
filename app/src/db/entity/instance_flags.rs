@@ -16,6 +16,7 @@ pub struct Model {
     pub ignore_case: bool,
     #[sea_orm(default_value = "false")]
     pub ignore_random: bool,
+    pub team_id: Option<String>,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
     pub created_at: DateTimeWithTimeZone,
 

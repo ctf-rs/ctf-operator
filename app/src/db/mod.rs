@@ -152,5 +152,37 @@ pub async fn migrate(db: &DatabaseConnection) -> Result<()> {
     )
     .await?;
 
+    // -- team mode migrations --
+
+    db.execute_unprepared(
+        r#"ALTER TABLE users ADD COLUMN IF NOT EXISTS team_id TEXT"#,
+    )
+    .await?;
+    db.execute_unprepared(
+        r#"ALTER TABLE users ADD COLUMN IF NOT EXISTS team_name TEXT"#,
+    )
+    .await?;
+
+    db.execute_unprepared(
+        r#"ALTER TABLE flag_submissions ADD COLUMN IF NOT EXISTS team_id TEXT"#,
+    )
+    .await?;
+
+    db.execute_unprepared(
+        r#"ALTER TABLE instance_flags ADD COLUMN IF NOT EXISTS team_id TEXT"#,
+    )
+    .await?;
+
+    db.execute_unprepared(
+        r#"CREATE INDEX IF NOT EXISTS idx_users_team_id ON users(team_id)"#,
+    )
+    .await?;
+
+    db.execute_unprepared(
+        r#"CREATE INDEX IF NOT EXISTS idx_flag_submissions_team
+           ON flag_submissions(team_id, ctf_name)"#,
+    )
+    .await?;
+
     Ok(())
 }

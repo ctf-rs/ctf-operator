@@ -12,6 +12,8 @@ pub struct Model {
     pub name: Option<String>,
     pub discord_id: Option<String>,
     pub discord_username: Option<String>,
+    pub team_id: Option<String>,
+    pub team_name: Option<String>,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
     pub created_at: DateTimeWithTimeZone,
 
