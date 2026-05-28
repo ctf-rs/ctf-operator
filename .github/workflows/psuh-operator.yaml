@@ -52,7 +52,7 @@ jobs:
             harbor/creds/github-actions-ctf-rs robot_account_secret | HARBOR_PASS
 
       - name: Login for image push
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: registry.ctf.rs
           username: ${{ steps.vault_image.outputs.HARBOR_USER }}
