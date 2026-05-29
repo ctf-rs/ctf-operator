@@ -278,7 +278,8 @@ mod tests {
                     env: vec![],
                     flags: vec![ctf_cli::models::ContainerFlag {
                         name: "flag-1".to_string(),
-                        env: "FLAG".to_string(),
+                        env: Some("FLAG".to_string()),
+                        file: None,
                     }],
                     ports: vec![ctf_cli::models::ContainerPort {
                         name: "http".to_string(),

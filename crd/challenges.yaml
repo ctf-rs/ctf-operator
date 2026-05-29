@@ -60,7 +60,12 @@ spec:
                       items:
                         properties:
                           env:
-                            minLength: 1
+                            description: Inject the flag as an environment variable with this name.
+                            nullable: true
+                            type: string
+                          file:
+                            description: Inject the flag as a file at this absolute path (e.g. `/app/flag.txt`).
+                            nullable: true
                             type: string
                           name:
                             maxLength: 63
@@ -68,7 +73,6 @@ spec:
                             pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                             type: string
                         required:
-                        - env
                         - name
                         type: object
                       type: array
