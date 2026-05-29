@@ -1442,6 +1442,14 @@ async fn ensure_services(
                 selector: Some(selector_labels),
                 ports: Some(ports),
                 type_: Some(svc_type),
+                // Internal-only services are headless so DNS resolves to the pod IP
+                // directly, matching Docker Compose behavior where gethostbyname()
+                // returns the container's actual IP (needed for IP-based ACLs).
+                cluster_ip: if !has_exposed {
+                    Some("None".to_string())
+                } else {
+                    None
+                },
                 ..Default::default()
             }),
             ..Default::default()
@@ -1454,11 +1462,11 @@ async fn ensure_services(
                 && cached
                     .spec
                     .as_ref()
-                    .map(|s| (&s.selector, &s.ports, &s.type_))
+                    .map(|s| (&s.selector, &s.ports, &s.type_, &s.cluster_ip))
                     == service
                         .spec
                         .as_ref()
-                        .map(|s| (&s.selector, &s.ports, &s.type_))
+                        .map(|s| (&s.selector, &s.ports, &s.type_, &s.cluster_ip))
                 && cached.metadata.labels == service.metadata.labels
                 && cached.metadata.annotations == service.metadata.annotations
             {
