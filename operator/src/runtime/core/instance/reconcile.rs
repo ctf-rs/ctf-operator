@@ -1379,37 +1379,8 @@ async fn ensure_services(
         let mut selector_labels = base_labels(instance);
         selector_labels.insert("app.kubernetes.io/name".to_string(), name.clone());
 
-        // Collect all ports for this container
-        let mut ports = Vec::<ServicePort>::new();
-        let mut has_exposed = false;
-        for port in &container_spec.ports {
-            if port.expose {
-                has_exposed = true;
-                let Some(exposed_port) = allocated_ports.get(&port.name) else {
-                    continue;
-                };
-                ports.push(ServicePort {
-                    name: Some(port.name.clone()),
-                    port: i32::from(*exposed_port),
-                    target_port: Some(IntOrString::Int(i32::from(port.container_port))),
-                    protocol: Some("TCP".to_string()),
-                    ..Default::default()
-                });
-            } else {
-                // Internal port — use container_port as service port for DNS-based discovery
-                ports.push(ServicePort {
-                    name: Some(port.name.clone()),
-                    port: i32::from(port.container_port),
-                    target_port: Some(IntOrString::Int(i32::from(port.container_port))),
-                    protocol: Some("TCP".to_string()),
-                    ..Default::default()
-                });
-            }
-        }
-
-        if ports.is_empty() {
-            continue;
-        }
+        // Determine if this container has exposed ports
+        let has_exposed = container_spec.ports.iter().any(|p| p.expose);
 
         // Exposed containers get the configured service type + labels/annotations;
         // internal-only containers get a plain ClusterIP service for DNS resolution.
@@ -1425,6 +1396,39 @@ async fn ensure_services(
         } else {
             ("ClusterIP".to_string(), selector_labels.clone(), None)
         };
+
+        let supports_node_port = svc_type != "ClusterIP";
+
+        // Collect all ports for this container
+        let mut ports = Vec::<ServicePort>::new();
+        for port in &container_spec.ports {
+            let node_port = if port.expose && supports_node_port {
+                let Some(&allocated) = allocated_ports.get(&port.name) else {
+                    continue;
+                };
+                Some(i32::from(allocated))
+            } else {
+                if port.expose && allocated_ports.get(&port.name).is_none() {
+                    continue;
+                }
+                None
+            };
+            // Always use container_port as the service port so internal callers
+            // reach the container on its natural port (e.g. web-app:5000).
+            // External access uses nodePort (or hostPort on the Deployment).
+            ports.push(ServicePort {
+                name: Some(port.name.clone()),
+                port: i32::from(port.container_port),
+                target_port: Some(IntOrString::Int(i32::from(port.container_port))),
+                node_port,
+                protocol: Some("TCP".to_string()),
+                ..Default::default()
+            });
+        }
+
+        if ports.is_empty() {
+            continue;
+        }
 
         let service = Service {
             metadata: ObjectMeta {
