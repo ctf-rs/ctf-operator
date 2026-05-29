@@ -5,13 +5,13 @@ use std::task::{Context, Poll};
 use axum::body::Body;
 use axum::extract::{Request, State};
 use axum::middleware::Next;
-use axum::response::{IntoResponse, Redirect, Response};
+use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum_extra::extract::cookie::CookieJar;
 use http::header;
 use tokio::sync::Mutex;
 use tower::{Layer, Service};
 
-use crate::{db, helpers, state::AppState};
+use crate::{db, helpers, state::AppState, views};
 
 // ---------------------------------------------------------------------------
 // HTTP metrics layer  (OTel semantic conventions)
@@ -107,7 +107,12 @@ where
             };
 
             match db::get_user_by_session(&state.db, &token).await {
-                Ok(Some(user)) => {
+                Ok(Some(mut user)) => {
+                    // In user mode, ignore team fields from Keycloak
+                    if !state.config.mode.is_team() {
+                        user.team_id = None;
+                        user.team_name = None;
+                    }
                     req.extensions_mut().insert(user);
                     let mut svc = inner.lock().await;
                     svc.call(req).await
@@ -169,12 +174,54 @@ pub async fn require_auth(
     };
 
     match db::get_user_by_session(&state.db, &token).await {
-        Ok(Some(user)) => {
+        Ok(Some(mut user)) => {
+            // In user mode, ignore team fields from Keycloak
+            if !state.config.mode.is_team() {
+                user.team_id = None;
+                user.team_name = None;
+            }
+            // In team mode, block users without a team
+            if state.config.mode.is_team() && user.team_id.is_none() {
+                let ctf_title = helpers::get_ctf_full_name(&state);
+                let user_label = user
+                    .name
+                    .clone()
+                    .or(user.email.clone())
+                    .unwrap_or_else(|| user.sub.clone());
+                let html = views::render_to_html(move || {
+                    leptos::prelude::view! {
+                        <views::NoTeamPage ctf_title=ctf_title user_label=user_label/>
+                    }
+                });
+                return Html(html).into_response();
+            }
             request.extensions_mut().insert(user);
             next.run(request).await
         }
         Ok(None) | Err(_) => Redirect::to("/login").into_response(),
     }
+}
+
+/// Axum middleware that loads the user from the session cookie when
+/// present but does **not** redirect to `/login` when anonymous.
+/// The handler receives `Option<Extension<db::User>>`.
+pub async fn optional_auth(
+    State(state): State<Arc<AppState>>,
+    jar: CookieJar,
+    mut request: Request,
+    next: Next,
+) -> Response {
+    if let Some(cookie) = jar.get(&state.config.session_cookie_name) {
+        let token = cookie.value().to_owned();
+        if let Ok(Some(mut user)) = db::get_user_by_session(&state.db, &token).await {
+            if !state.config.mode.is_team() {
+                user.team_id = None;
+                user.team_name = None;
+            }
+            request.extensions_mut().insert(user);
+        }
+    }
+    next.run(request).await
 }
 
 /// Axum middleware that returns 500 Internal Server Error when the

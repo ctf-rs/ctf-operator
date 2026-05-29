@@ -16,3 +16,4 @@ Cargo.lock
 
 # Local app/runtime secrets
 .env
+rustc-ice-*.txt

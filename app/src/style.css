@@ -138,17 +138,59 @@ a { color: #93c5fd; }
 .nav-buttons { display: flex; align-items: center; gap: .5rem; }
 
 /* Scoreboard */
-.scoreboard-container { max-width: 800px; margin: 0 auto; }
+.scoreboard-container { width: 100%; margin: 0 auto; padding: 0; margin-left: calc(-50vw + 50%); width: 100vw; padding: 0 1rem; box-sizing: border-box; }
 .scoreboard-container h1 { margin: 0 0 1.5rem 0; font-size: 1.8rem; text-align: center; }
-.scoreboard-table { width: 100%; border-collapse: collapse; background: #2a2f38; border-radius: 8px; overflow: hidden; }
+
+/* Timer progress bar */
+.timer-bar-container { margin: 0 auto 1.5rem; max-width: 800px; }
+.timer-bar-header { display: flex; justify-content: center; margin-bottom: 0.4rem; }
+.timer-status { font-size: 0.85rem; color: #d1d5db; font-weight: 500; }
+.timer-bar-track { position: relative; height: 1.2rem; background: #1e2228; border-radius: 0.6rem; overflow: visible; border: 1px solid #3a404a; }
+.timer-bar-fill { height: 100%; border-radius: 0.6rem 0 0 0.6rem; transition: width 0.5s ease; min-width: 2px; }
+.timer-bar-freeze-marker { position: absolute; top: -0.3rem; bottom: -0.3rem; width: 2px; background: #93c5fd; transform: translateX(-50%); }
+.timer-bar-freeze-marker .freeze-icon { position: absolute; top: -1.3rem; left: 50%; transform: translateX(-50%); font-size: 0.75rem; white-space: nowrap; }
+.timer-bar-freeze-marker .freeze-time-label { position: absolute; bottom: calc(100% + 1.1rem); left: 50%; transform: translateX(-50%); font-size: 0.7rem; color: #93c5fd; white-space: nowrap; }
+.timer-bar-timestamps { display: flex; justify-content: space-between; margin-top: 0.3rem; font-size: 0.75rem; color: #9ca3af; }
+.timer-bar-timestamps .ts-start { text-align: left; }
+.timer-bar-timestamps .ts-end { text-align: right; }
+.scoreboard-table { border-collapse: collapse; background: #2a2f38; border-radius: 8px; overflow: hidden; width: 100%; table-layout: fixed; }
 .scoreboard-table thead { background: #232830; }
-.scoreboard-table th { padding: 1rem; text-align: left; font-weight: 600; color: #93c5fd; border-bottom: 2px solid #3a404a; }
-.scoreboard-table td { padding: .8rem 1rem; border-bottom: 1px solid #3a404a; }
+.scoreboard-table th { padding: 0.3rem 0.2rem; text-align: center; font-weight: 600; color: #93c5fd; border-bottom: 2px solid #3a404a; vertical-align: bottom; }
+.scoreboard-table td { padding: 0.3rem 0.2rem; border-bottom: 1px solid #3a404a; text-align: center; }
 .scoreboard-table tbody tr:hover { background: #323842; }
-.scoreboard-table .rank { width: 60px; text-align: center; font-weight: 700; }
+.scoreboard-table .rank { width: 2rem; text-align: center; font-weight: 700; }
 .scoreboard-table .rank.gold { color: #fbbf24; }
 .scoreboard-table .rank.silver { color: #d1d5db; }
 .scoreboard-table .rank.bronze { color: #d97706; }
-.scoreboard-table .username { font-weight: 500; }
-.scoreboard-table .points { font-weight: 600; color: #a7f3d0; }
-.scoreboard-table .solves { color: #9ca3af; }
+.scoreboard-table .username { font-weight: 500; text-align: left; word-break: break-word; width: 12rem; min-width: 10rem; }
+.scoreboard-table .points { font-weight: 600; color: #a7f3d0; width: 3.5rem; border-right: 2px solid #3a404a; }
+
+/* Rotated challenge column headers */
+.rotated-header { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; min-height: 80px; display: flex; align-items: center; gap: 0.2rem; font-size: 0.65rem; }
+.rotated-header .ch-name { font-weight: 600; }
+.rotated-header .ch-flag { font-weight: 400; color: #93c5fd; font-size: 0.55rem; }
+.rotated-header .ch-cat { font-weight: 400; color: #9ca3af; font-size: 0.55rem; }
+
+/* Challenge column colours by category */
+.challenge-col, .solve-cell { }
+.cat-0 { border-left: 2px solid #6ee7b7; } /* Welcome */
+.cat-1 { border-left: 2px solid #60a5fa; } /* Web */
+.cat-2 { border-left: 2px solid #f87171; } /* Pwn */
+.cat-3 { border-left: 2px solid #c084fc; } /* Crypto */
+.cat-4 { border-left: 2px solid #fb923c; } /* Rev */
+.cat-5 { border-left: 2px solid #22d3ee; } /* Foren */
+.cat-6 { border-left: 2px solid #a3a3a3; } /* Misc */
+.cat-7 { border-left: 2px solid #facc15; } /* Hw */
+.cat-8 { border-left: 2px solid #34d399; } /* Osint */
+
+/* Solve status cells */
+.solve-cell { font-size: 1rem; }
+.solve-cell.first-blood { background: rgba(239, 68, 68, 0.15); }
+.solve-cell.solved { background: rgba(167, 243, 208, 0.08); }
+
+/* Legend below scoreboard */
+.scoreboard-legend { display: flex; gap: 1.5rem; justify-content: center; margin: 0.75rem 0 0; padding: 0.5rem 0; color: #9ca3af; font-size: 0.8rem; }
+.legend-item { display: inline-flex; align-items: center; gap: 0.3rem; }
+.legend-icon { font-size: 1rem; }
+.legend-icon.first-blood { }
+.legend-icon.solved { }

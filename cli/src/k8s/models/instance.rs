@@ -56,6 +56,13 @@ pub struct InstanceUser {
     pub username: String,
 }
 
+/// Team that owns the instance (when running in team mode).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+pub struct InstanceTeam {
+    pub id: String,
+    pub name: String,
+}
+
 #[derive(CustomResource, Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[kube(
     group = "operator.ctf.rs",
@@ -74,9 +81,13 @@ pub struct InstanceUser {
 pub struct InstanceSpec {
     pub ctf: String,
     pub challenge: String,
-    /// The user who spawned this instance.
+    /// The user associated with this instance.
+    /// In solo mode this is the owner; in team mode this records who spawned it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user: Option<InstanceUser>,
+    /// The team that owns this instance (team mode).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub team: Option<InstanceTeam>,
     /// Requested lifetime in seconds.
     #[serde(
         default,

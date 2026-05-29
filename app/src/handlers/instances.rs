@@ -10,7 +10,7 @@ use axum::{
     },
 };
 // Note: Extension + State + Path are still used by the manual `instance_state` handler.
-use ctf_cli::k8s::{Instance, InstanceSpec, InstanceTimeLeft, InstanceUser};
+use ctf_cli::k8s::{Instance, InstanceSpec, InstanceTeam, InstanceTimeLeft, InstanceUser};
 use kube::ResourceExt;
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -86,34 +86,61 @@ pub async fn spawn_instance(challenge_name: String) -> Result<(), ServerFnError>
         return Ok(());
     }
 
+    // Block solo users in team mode
+    if state.config.mode.is_team() && user.team_id.is_none() {
+        leptos_axum::redirect(&format!(
+            "{}?message={}",
+            challenge_route(&challenge_name),
+            urlencoding::encode("you must be on a team to spawn instances"),
+        ));
+        return Ok(());
+    }
+
     // ---- Guard: instance already exists --------------------------------
-    if k8s_instances::get_instance_for_user(&state, user.id, &challenge_name, ctf_name).is_some() {
+    let team_id = user.team_id.as_deref();
+    if k8s_instances::get_instance_for_user(&state, user.id, team_id, &challenge_name, ctf_name)
+        .is_some()
+    {
         leptos_axum::redirect(&challenge_route(&challenge_name));
         return Ok(());
     }
 
-    // ---- Guard: max instances per user ---------------------------------
-    let user_instances = k8s_instances::list_instances_for_user(&state, user.id);
-    if user_instances.len() >= state.config.max_instances_per_user {
+    // ---- Guard: max instances per user/team -----------------------------
+    let user_instances = k8s_instances::list_instances_for_user(&state, user.id, team_id);
+    let max_instances = if team_id.is_some() {
+        state.config.max_instances_per_team
+    } else {
+        state.config.max_instances_per_user
+    };
+    if user_instances.len() >= max_instances {
         leptos_axum::redirect(&format!(
             "{}?message={}",
             challenge_route(&challenge_name),
             urlencoding::encode(&format!(
-                "maximum number of instances ({}) reached, stop an existing instance first",
-                state.config.max_instances_per_user
+                "maximum number of instances ({max_instances}) reached, stop an existing instance first",
             ))
         ));
         return Ok(());
     }
 
-    // ---- Deterministic name: prefix-ctf-challenge-userId --------------
-    let instance_name: String = format!(
-        "{}-{}-{}-u{}",
-        state.config.instance_name_prefix,
-        sanitize_k8s_name(ctf_name),
-        sanitize_k8s_name(&challenge_name),
-        user.id,
-    )
+    // ---- Deterministic name: prefix-ctf-challenge-t{teamId} or -u{userId}
+    let instance_name: String = if let Some(tid) = team_id {
+        format!(
+            "{}-{}-{}-t{}",
+            state.config.instance_name_prefix,
+            sanitize_k8s_name(ctf_name),
+            sanitize_k8s_name(&challenge_name),
+            sanitize_k8s_name(tid),
+        )
+    } else {
+        format!(
+            "{}-{}-{}-u{}",
+            state.config.instance_name_prefix,
+            sanitize_k8s_name(ctf_name),
+            sanitize_k8s_name(&challenge_name),
+            user.id,
+        )
+    }
     .chars()
     .take(63)
     .collect();
@@ -136,6 +163,10 @@ pub async fn spawn_instance(challenge_name: String) -> Result<(), ServerFnError>
             user: Some(InstanceUser {
                 id: user.id,
                 username: user_label,
+            }),
+            team: user.team_id.as_ref().map(|tid| InstanceTeam {
+                id: tid.clone(),
+                name: user.team_name.clone().unwrap_or_default(),
             }),
             duration_seconds: Some(duration_seconds),
         },
@@ -213,7 +244,7 @@ pub async fn extend_instance(challenge_name: String) -> Result<(), ServerFnError
         ));
     };
 
-    if db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, ctf_name)
+    if db::is_challenge_solved(&state.db, user.id, user.team_id.as_deref(), &challenge_name, ctf_name)
         .await
         .unwrap_or(false)
     {
@@ -222,14 +253,20 @@ pub async fn extend_instance(challenge_name: String) -> Result<(), ServerFnError
     }
 
     let Some(instance) =
-        k8s_instances::get_instance_for_challenge(&state, user.id, &challenge_name, ctf_name)
+        k8s_instances::get_instance_for_challenge(
+            &state,
+            user.id,
+            user.team_id.as_deref(),
+            &challenge_name,
+            ctf_name,
+        )
     else {
         redirect_with("bad", "spawn an instance first");
         return Ok(());
     };
 
     if !is_instance_owned_by_user(&instance, &user) {
-        redirect_with("bad", "instance belongs to a different user");
+        redirect_with("bad", "instance belongs to a different user or team");
         return Ok(());
     }
 
@@ -326,12 +363,18 @@ pub async fn instance_state(
         return (axum::http::StatusCode::FORBIDDEN, "forbidden").into_response();
     }
 
-    let solved = db::is_challenge_solved_for_user(&state.db, user.id, &challenge_name, ctf_name)
+    let solved = db::is_challenge_solved(&state.db, user.id, user.team_id.as_deref(), &challenge_name, ctf_name)
         .await
         .unwrap_or(false);
 
     let Some(instance) =
-        k8s_instances::get_instance_for_challenge(&state, user.id, &challenge_name, ctf_name)
+        k8s_instances::get_instance_for_challenge(
+            &state,
+            user.id,
+            user.team_id.as_deref(),
+            &challenge_name,
+            ctf_name,
+        )
     else {
         return Json(InstanceStateResponse {
             solved,
@@ -406,7 +449,13 @@ pub async fn stop_instance(challenge_name: String) -> Result<(), ServerFnError> 
     let redirect = || leptos_axum::redirect(&challenge_route(&challenge_name));
 
     let Some(instance) =
-        k8s_instances::get_instance_for_challenge(&state, user.id, &challenge_name, ctf_name)
+        k8s_instances::get_instance_for_challenge(
+            &state,
+            user.id,
+            user.team_id.as_deref(),
+            &challenge_name,
+            ctf_name,
+        )
     else {
         redirect();
         return Ok(());
@@ -473,6 +522,7 @@ fn instance_state_key(resp: &InstanceStateResponse) -> String {
 fn compute_instance_state(
     state: &AppState,
     user_id: i64,
+    team_id: Option<&str>,
     challenge_name: &str,
     solved: bool,
 ) -> InstanceStateResponse {
@@ -489,12 +539,12 @@ fn compute_instance_state(
 
     let ctf_name = &state.config.ctf_name;
     let Some(instance) =
-        k8s_instances::get_instance_for_challenge(state, user_id, challenge_name, ctf_name)
+        k8s_instances::get_instance_for_challenge(state, user_id, team_id, challenge_name, ctf_name)
     else {
         return no_instance;
     };
 
-    if !is_instance_owned_by_user_by_id(&instance, user_id) {
+    if !is_instance_owned_by_user_by_id(&instance, user_id, team_id) {
         return no_instance;
     }
 
@@ -520,9 +570,18 @@ fn compute_instance_state(
     }
 }
 
-/// Check instance ownership by user ID (used in SSE stream where we don't
-/// have the full `User` struct).
-fn is_instance_owned_by_user_by_id(instance: &Instance, user_id: i64) -> bool {
+/// Check instance ownership by user ID and team ID (used in SSE stream where
+/// we don't have the full `User` struct).
+fn is_instance_owned_by_user_by_id(
+    instance: &Instance,
+    user_id: i64,
+    team_id: Option<&str>,
+) -> bool {
+    // Team-owned instance: check team_id match
+    if let Some(team) = &instance.spec.team {
+        return team_id.is_some_and(|tid| tid == team.id);
+    }
+    // User-owned or global instance
     match &instance.spec.user {
         Some(u) => u.id == user_id,
         None => true,
@@ -549,15 +608,16 @@ pub async fn instance_events(
     }
 
     let user_id = user.id;
+    let team_id = user.team_id.clone();
     let ctf_name = state.config.ctf_name.clone();
     let challenge_name_owned = challenge_name.clone();
 
     let stream = async_stream::stream! {
         // Send the initial state immediately so the client doesn't start blind.
-        let solved = db::is_challenge_solved_for_user(&state.db, user_id, &challenge_name_owned, &ctf_name)
+        let solved = db::is_challenge_solved(&state.db, user_id, team_id.as_deref(), &challenge_name_owned, &ctf_name)
             .await
             .unwrap_or(false);
-        let snap = compute_instance_state(&state, user_id, &challenge_name_owned, solved);
+        let snap = compute_instance_state(&state, user_id, team_id.as_deref(), &challenge_name_owned, solved);
         let mut last_key = instance_state_key(&snap);
         if let Ok(json) = serde_json::to_string(&snap) {
             yield Ok::<_, Infallible>(Event::default().data(json));
@@ -567,10 +627,10 @@ pub async fn instance_events(
         loop {
             interval.tick().await;
 
-            let solved = db::is_challenge_solved_for_user(&state.db, user_id, &challenge_name_owned, &ctf_name)
+            let solved = db::is_challenge_solved(&state.db, user_id, team_id.as_deref(), &challenge_name_owned, &ctf_name)
                 .await
                 .unwrap_or(false);
-            let snap = compute_instance_state(&state, user_id, &challenge_name_owned, solved);
+            let snap = compute_instance_state(&state, user_id, team_id.as_deref(), &challenge_name_owned, solved);
             let key = instance_state_key(&snap);
 
             if key != last_key {

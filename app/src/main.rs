@@ -50,6 +50,7 @@ async fn main() -> anyhow::Result<()> {
         challenges: watchers.challenges.clone(),
         ctfs: watchers.ctfs.clone(),
         scoreboard: Arc::new(RwLock::new(scoreboard::Scoreboard::default())),
+        live_scoreboard: Arc::new(RwLock::new(scoreboard::Scoreboard::default())),
     });
 
     let _workers = k8s::sync::spawn_sync_workers(Arc::clone(&state), Arc::clone(&config), watchers);

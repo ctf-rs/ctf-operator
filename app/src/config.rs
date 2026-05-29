@@ -1,5 +1,32 @@
 use anyhow::{Context, Result};
 
+/// Application mode: determines whether the CTF runs with individual
+/// players or requires team membership.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AppMode {
+    /// Default — every player competes individually.
+    User,
+    /// Team mode — only users with a team can submit flags, spawn
+    /// instances, etc.  Solo users are shown an error.
+    Team,
+}
+
+impl AppMode {
+    /// Returns `true` when running in team mode.
+    pub const fn is_team(self) -> bool {
+        matches!(self, Self::Team)
+    }
+
+    /// Parse an `AppMode` from a raw string value (e.g. from an env var).
+    /// Returns `Team` for "team"/"teams" (case-insensitive), `User` otherwise.
+    pub fn parse(value: &str) -> Self {
+        match value.trim().to_lowercase().as_str() {
+            "team" | "teams" => Self::Team,
+            _ => Self::User,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct AppConfig {
     pub bind_addr: String,
@@ -39,6 +66,12 @@ pub struct AppConfig {
     /// Maximum number of simultaneously spawned instances per user.
     /// Defaults to 2.
     pub max_instances_per_user: usize,
+    /// Maximum number of simultaneously spawned instances per team.
+    /// Used instead of `max_instances_per_user` when the user belongs to a
+    /// team.  Defaults to 5.
+    pub max_instances_per_team: usize,
+    /// Application mode — `User` (default) or `Team`.
+    pub mode: AppMode,
 }
 
 #[derive(Clone, Debug)]
@@ -149,6 +182,14 @@ impl AppConfig {
             .filter(|value| *value > 0)
             .unwrap_or(2);
 
+        let max_instances_per_team = std::env::var("MAX_INSTANCES_PER_TEAM")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .filter(|value| *value > 0)
+            .unwrap_or(5);
+
+        let mode = AppMode::parse(&std::env::var("APP_MODE").unwrap_or_default());
+
         Ok(Self {
             bind_addr,
             database_url,
@@ -177,6 +218,36 @@ impl AppConfig {
             admin_role,
             player_role,
             max_instances_per_user,
+            max_instances_per_team,
+            mode,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_mode_parse_team() {
+        assert_eq!(AppMode::parse("team"), AppMode::Team);
+        assert_eq!(AppMode::parse("teams"), AppMode::Team);
+        assert_eq!(AppMode::parse("Team"), AppMode::Team);
+        assert_eq!(AppMode::parse("TEAMS"), AppMode::Team);
+        assert_eq!(AppMode::parse("  team  "), AppMode::Team);
+    }
+
+    #[test]
+    fn app_mode_parse_user() {
+        assert_eq!(AppMode::parse("user"), AppMode::User);
+        assert_eq!(AppMode::parse(""), AppMode::User);
+        assert_eq!(AppMode::parse("solo"), AppMode::User);
+        assert_eq!(AppMode::parse("anything"), AppMode::User);
+    }
+
+    #[test]
+    fn app_mode_is_team() {
+        assert!(AppMode::Team.is_team());
+        assert!(!AppMode::User.is_team());
     }
 }

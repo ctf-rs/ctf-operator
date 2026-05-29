@@ -5,12 +5,14 @@ pub mod models;
 mod users;
 
 pub use audit::{
-    FlagOrigin, check_flag_origin, log_download, log_flag_generation, log_instance_action,
+    FlagGenerationParams, FlagOrigin, check_flag_origin, log_download, log_flag_generation,
+    log_instance_action,
 };
 pub use flags::{
-    add_flag_submission, count_solved_flags_for_user, get_partial_solve_counts_for_user,
-    get_solved_flags_for_user, is_challenge_solved_for_user, list_solved_challenges_for_user,
-    mark_challenge_solved,
+    add_flag_submission, count_solved_flags, count_solved_flags_for_user,
+    get_partial_solve_counts, get_partial_solve_counts_for_user, get_solved_flags,
+    get_solved_flags_for_user, is_challenge_solved, is_challenge_solved_for_user,
+    list_solved_challenges, list_solved_challenges_for_user, mark_challenge_solved,
 };
 #[allow(unused_imports)] // re-exported as public API
 pub use models::{ChallengeView, FlagView, PortView, SolvedKey, User};
@@ -149,6 +151,38 @@ pub async fn migrate(db: &DatabaseConnection) -> Result<()> {
     db.execute_unprepared(
         r#"ALTER TABLE flag_submissions
            ADD COLUMN IF NOT EXISTS admin_submission BOOLEAN NOT NULL DEFAULT false"#,
+    )
+    .await?;
+
+    // -- team mode migrations --
+
+    db.execute_unprepared(
+        r#"ALTER TABLE users ADD COLUMN IF NOT EXISTS team_id TEXT"#,
+    )
+    .await?;
+    db.execute_unprepared(
+        r#"ALTER TABLE users ADD COLUMN IF NOT EXISTS team_name TEXT"#,
+    )
+    .await?;
+
+    db.execute_unprepared(
+        r#"ALTER TABLE flag_submissions ADD COLUMN IF NOT EXISTS team_id TEXT"#,
+    )
+    .await?;
+
+    db.execute_unprepared(
+        r#"ALTER TABLE instance_flags ADD COLUMN IF NOT EXISTS team_id TEXT"#,
+    )
+    .await?;
+
+    db.execute_unprepared(
+        r#"CREATE INDEX IF NOT EXISTS idx_users_team_id ON users(team_id)"#,
+    )
+    .await?;
+
+    db.execute_unprepared(
+        r#"CREATE INDEX IF NOT EXISTS idx_flag_submissions_team
+           ON flag_submissions(team_id, ctf_name)"#,
     )
     .await?;
 

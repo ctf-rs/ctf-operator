@@ -20,8 +20,8 @@ use k8s_openapi::{
     api::{
         apps::v1::{Deployment, DeploymentSpec},
         core::v1::{
-            Container, LocalObjectReference, Namespace, PodSpec, PodTemplateSpec, Secret, Service,
-            ServicePort, ServiceSpec,
+            ConfigMap, Container, LocalObjectReference, Namespace, PodSpec, PodTemplateSpec,
+            Secret, Service, ServicePort, ServiceSpec,
         },
     },
     apimachinery::pkg::{apis::meta::v1::LabelSelector, util::intstr::IntOrString},
@@ -32,6 +32,12 @@ use kube::{
     Api, ResourceExt,
 };
 use serde_json::json;
+
+const FLAG_VOLUME_NAME: &str = "flag-files";
+
+fn flag_config_map_name(instance: &Instance) -> String {
+    format!("{}-flags", instance.name_any())
+}
 
 #[derive(Debug)]
 pub struct InstanceReconciler;
@@ -180,8 +186,11 @@ fn recompute_expires_at(
         return;
     };
 
-    // Global instances (user=None, duration=None) never expire.
-    if instance.spec.duration_seconds.is_none() && instance.spec.user.is_none() {
+    // Global instances (user=None, team=None, duration=None) never expire.
+    if instance.spec.duration_seconds.is_none()
+        && instance.spec.user.is_none()
+        && instance.spec.team.is_none()
+    {
         status.expires_at = None;
         return;
     }
@@ -225,7 +234,7 @@ fn update_status_conditions(status: &mut InstanceStatus, observed: &ObservedInst
     set_resource_condition(
         status,
         "Service",
-        observed.service_ready,
+        observed.services_ready,
         "Ready",
         "NotReady",
     );
@@ -300,7 +309,15 @@ async fn reconcile_apply(
 
     // Create deployment and service when dependencies are ready
     if observed.flags_ready {
-        ensure_deployment(
+        ensure_flag_config_map(
+            instance.as_ref(),
+            refs.challenge.as_ref(),
+            &observed.flag_values,
+            &target_namespace,
+            &state,
+        )
+        .await?;
+        ensure_deployments(
             instance.as_ref(),
             refs.challenge.as_ref(),
             &observed.flag_values,
@@ -311,7 +328,7 @@ async fn reconcile_apply(
         .await?;
     }
     if observed.port_claims_ready {
-        ensure_service(
+        ensure_services(
             instance.as_ref(),
             refs.challenge.as_ref(),
             &observed.allocated_ports,
@@ -372,8 +389,11 @@ fn initialize_ready_timer(
     let now_unix = now_unix_seconds();
     status.ready_since = unix_seconds_to_time(now_unix);
 
-    // Global instances (user=None, duration=None) never expire.
-    if instance.spec.duration_seconds.is_none() && instance.spec.user.is_none() {
+    // Global instances (user=None, team=None, duration=None) never expire.
+    if instance.spec.duration_seconds.is_none()
+        && instance.spec.user.is_none()
+        && instance.spec.team.is_none()
+    {
         status.expires_at = None;
     } else {
         let duration = instance.spec.duration_seconds.unwrap_or(default_duration);
@@ -527,7 +547,7 @@ const fn determine_phase(observed: &ObservedInstanceResources, all_ready: bool) 
     }
 
     // Resources created, checking deployment
-    if !observed.service_ready {
+    if !observed.services_ready {
         return InstancePhase::Validating;
     }
 
@@ -650,7 +670,7 @@ struct ObservedInstanceResources {
     port_claims_ready: bool,
     flags_ready: bool,
     deployments_ready: bool,
-    service_ready: bool,
+    services_ready: bool,
     flag_values: BTreeMap<String, String>,
     allocated_ports: BTreeMap<String, u16>,
 }
@@ -732,27 +752,34 @@ fn collect_instance_resources(
         }
     }
 
-    let deployment_ref =
-        ObjectRef::<Deployment>::new(&instance.name_any()).within(target_namespace);
-    let deployments_ready = state
-        .deployments
-        .get(&deployment_ref)
-        .filter(|r| r.metadata.deletion_timestamp.is_none())
-        .and_then(|resource| resource.status.clone())
-        .is_some_and(|status| status.available_replicas.unwrap_or_default() > 0);
+    let deployments_ready = challenge.spec.containers.iter().all(|c| {
+        let dep_ref = ObjectRef::<Deployment>::new(&c.name).within(target_namespace);
+        state
+            .deployments
+            .get(&dep_ref)
+            .filter(|r| r.metadata.deletion_timestamp.is_none())
+            .and_then(|resource| resource.status.clone())
+            .is_some_and(|status| status.available_replicas.unwrap_or_default() > 0)
+    });
 
-    let service_ref = ObjectRef::<Service>::new(&instance.name_any()).within(target_namespace);
-    let service_ready = state
-        .services
-        .get(&service_ref)
-        .is_some_and(|r| r.metadata.deletion_timestamp.is_none());
+    let services_ready = challenge.spec.containers.iter().all(|c| {
+        // Only containers with ports get services
+        if c.ports.is_empty() {
+            return true;
+        }
+        let svc_ref = ObjectRef::<Service>::new(&c.name).within(target_namespace);
+        state
+            .services
+            .get(&svc_ref)
+            .is_some_and(|r| r.metadata.deletion_timestamp.is_none())
+    });
 
     ObservedInstanceResources {
         reservation_ready,
         port_claims_ready,
         flags_ready,
         deployments_ready,
-        service_ready,
+        services_ready,
         flag_values,
         allocated_ports,
     }
@@ -1017,7 +1044,65 @@ async fn ensure_flags(
     Ok(())
 }
 
-async fn ensure_deployment(
+/// Creates a ConfigMap containing flag values for file-based flag injection.
+/// Each key is `{container_name}-{filename}` and the value is the flag content.
+async fn ensure_flag_config_map(
+    instance: &Instance,
+    challenge: &Challenge,
+    flag_values: &BTreeMap<String, String>,
+    target_namespace: &str,
+    state: &CtfState,
+) -> Result<(), CtfError> {
+    let has_file_flags = challenge
+        .spec
+        .containers
+        .iter()
+        .any(|c| c.flags.iter().any(|f| f.file.is_some()));
+
+    if !has_file_flags {
+        return Ok(());
+    }
+
+    let namespace = target_namespace.to_owned();
+    let name = flag_config_map_name(instance);
+    let labels = base_labels(instance);
+
+    let mut data = BTreeMap::new();
+    for container in &challenge.spec.containers {
+        for container_flag in &container.flags {
+            if let Some(file_path) = &container_flag.file {
+                if let Some(flag_value) = flag_values.get(&container_flag.name) {
+                    let file_name = std::path::Path::new(file_path)
+                        .file_name()
+                        .map_or_else(
+                            || container_flag.name.clone(),
+                            |f| f.to_string_lossy().into_owned(),
+                        );
+                    let key = format!("{}-{}", container.name, file_name);
+                    data.insert(key, flag_value.clone());
+                }
+            }
+        }
+    }
+
+    let config_map = ConfigMap {
+        metadata: managed_resource_metadata(name.clone(), namespace.clone(), labels),
+        data: Some(data),
+        ..Default::default()
+    };
+
+    Api::<ConfigMap>::namespaced(state.client.clone(), &namespace)
+        .patch(
+            &name,
+            &PatchParams::apply(InstanceReconciler::NAME).force(),
+            &Patch::Apply(&config_map),
+        )
+        .await?;
+
+    Ok(())
+}
+
+async fn ensure_deployments(
     instance: &Instance,
     challenge: &Challenge,
     flag_values: &BTreeMap<String, String>,
@@ -1026,71 +1111,75 @@ async fn ensure_deployment(
     state: &CtfState,
 ) -> Result<(), CtfError> {
     let namespace = target_namespace.to_owned();
-    let name = instance.name_any();
     let deployment_config = &state.config.runtime_config.instance.deployment;
 
-    let mut labels = base_labels(instance);
-    labels.insert("app.kubernetes.io/name".to_string(), name.clone());
+    for container_spec in &challenge.spec.containers {
+        let name = container_spec.name.clone();
 
-    let pod_template = build_pod_template(
-        challenge,
-        flag_values,
-        allocated_ports,
-        deployment_config,
-        &labels,
-    );
+        let mut labels = base_labels(instance);
+        labels.insert("app.kubernetes.io/name".to_string(), name.clone());
 
-    let deployment = Deployment {
-        metadata: managed_resource_metadata(name.clone(), namespace.clone(), labels.clone()),
-        spec: Some(DeploymentSpec {
-            replicas: Some(deployment_config.replicas),
-            selector: LabelSelector {
-                match_labels: Some(labels.clone()),
+        let pod_template = build_pod_template(
+            instance,
+            container_spec,
+            flag_values,
+            allocated_ports,
+            deployment_config,
+            &labels,
+        );
+
+        let deployment = Deployment {
+            metadata: managed_resource_metadata(name.clone(), namespace.clone(), labels.clone()),
+            spec: Some(DeploymentSpec {
+                replicas: Some(deployment_config.replicas),
+                selector: LabelSelector {
+                    match_labels: Some(labels.clone()),
+                    ..Default::default()
+                },
+                template: pod_template,
                 ..Default::default()
-            },
-            template: pod_template,
+            }),
             ..Default::default()
-        }),
-        ..Default::default()
-    };
+        };
 
-    // Check cache: skip API call if deployment already exists with matching spec
-    let dep_ref = ObjectRef::<Deployment>::new(&name).within(&namespace);
-    if let Some(cached) = state.deployments.get(&dep_ref) {
-        if cached.metadata.deletion_timestamp.is_none()
-            && cached.spec == deployment.spec
-            && cached.metadata.labels == deployment.metadata.labels
-        {
-            return Ok(());
+        // Check cache: skip API call if deployment already exists with matching spec
+        let dep_ref = ObjectRef::<Deployment>::new(&name).within(&namespace);
+        if let Some(cached) = state.deployments.get(&dep_ref) {
+            if cached.metadata.deletion_timestamp.is_none()
+                && cached.spec == deployment.spec
+                && cached.metadata.labels == deployment.metadata.labels
+            {
+                continue;
+            }
         }
-    }
 
-    Api::<Deployment>::namespaced(state.client.clone(), &namespace)
-        .patch(
-            &name,
-            &PatchParams::apply(InstanceReconciler::NAME).force(),
-            &Patch::Apply(&deployment),
-        )
-        .await?;
+        Api::<Deployment>::namespaced(state.client.clone(), &namespace)
+            .patch(
+                &name,
+                &PatchParams::apply(InstanceReconciler::NAME).force(),
+                &Patch::Apply(&deployment),
+            )
+            .await?;
+    }
 
     Ok(())
 }
 
 fn build_pod_template(
-    challenge: &Challenge,
+    instance: &Instance,
+    container_spec: &ctf_cli::k8s::ChallengeContainer,
     flag_values: &BTreeMap<String, String>,
     allocated_ports: &BTreeMap<String, u16>,
     deployment_config: &InstanceDeploymentConfig,
     labels: &BTreeMap<String, String>,
 ) -> PodTemplateSpec {
-    let containers = build_containers(challenge, flag_values, allocated_ports, deployment_config);
+    let container = build_container(container_spec, flag_values, allocated_ports, deployment_config);
 
-    let has_kata = challenge.spec.containers.iter().any(|c| c.kata.is_some());
-    let kata_kernel = challenge
-        .spec
-        .containers
-        .iter()
-        .find_map(|c| c.kata.as_ref().and_then(|k| k.kernel.clone()));
+    let has_kata = container_spec.kata.is_some();
+    let kata_kernel = container_spec
+        .kata
+        .as_ref()
+        .and_then(|k| k.kernel.clone());
 
     let mut pod_annotations = BTreeMap::new();
     if let Some(kernel_path) = &kata_kernel {
@@ -1108,6 +1197,22 @@ fn build_pod_template(
         );
     }
 
+    // Add flag-files volume if this container has file-based flags
+    let has_file_flags = container_spec.flags.iter().any(|f| f.file.is_some());
+
+    let volumes = if has_file_flags {
+        Some(vec![k8s_openapi::api::core::v1::Volume {
+            name: FLAG_VOLUME_NAME.to_string(),
+            config_map: Some(k8s_openapi::api::core::v1::ConfigMapVolumeSource {
+                name: flag_config_map_name(instance),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }])
+    } else {
+        None
+    };
+
     PodTemplateSpec {
         metadata: Some(ObjectMeta {
             labels: Some(labels.clone()),
@@ -1119,7 +1224,8 @@ fn build_pod_template(
             ..Default::default()
         }),
         spec: Some(PodSpec {
-            containers,
+            containers: vec![container],
+            volumes,
             runtime_class_name: if has_kata {
                 Some("kata".to_string())
             } else {
@@ -1140,95 +1246,123 @@ fn build_pod_template(
     }
 }
 
-fn build_containers(
-    challenge: &Challenge,
+fn build_container(
+    container: &ctf_cli::k8s::ChallengeContainer,
     flag_values: &BTreeMap<String, String>,
     allocated_ports: &BTreeMap<String, u16>,
     deployment_config: &InstanceDeploymentConfig,
-) -> Vec<Container> {
+) -> Container {
     let use_host_port = deployment_config.use_host_port;
 
-    challenge
-        .spec
-        .containers
-        .iter()
-        .map(|container| Container {
-            env: {
-                let mut env = Vec::new();
-                for container_flag in &container.flags {
-                    let Some(flag_value) = flag_values.get(&container_flag.name) else {
-                        continue;
-                    };
+    let volume_mounts = {
+        let mounts: Vec<k8s_openapi::api::core::v1::VolumeMount> = container
+            .flags
+            .iter()
+            .filter_map(|cf| {
+                cf.file.as_ref().map(|file_path| {
+                    let file_name =
+                        std::path::Path::new(file_path)
+                            .file_name()
+                            .map_or_else(
+                                || cf.name.clone(),
+                                |f| f.to_string_lossy().into_owned(),
+                            );
+                    k8s_openapi::api::core::v1::VolumeMount {
+                        name: FLAG_VOLUME_NAME.to_string(),
+                        mount_path: file_path.clone(),
+                        sub_path: Some(format!("{}-{}", container.name, file_name)),
+                        read_only: Some(true),
+                        ..Default::default()
+                    }
+                })
+            })
+            .collect();
+        if mounts.is_empty() {
+            None
+        } else {
+            Some(mounts)
+        }
+    };
+
+    Container {
+        env: {
+            let mut env = Vec::new();
+            for container_flag in &container.flags {
+                let Some(flag_value) = flag_values.get(&container_flag.name) else {
+                    continue;
+                };
+                if let Some(env_name) = &container_flag.env {
                     env.push(k8s_openapi::api::core::v1::EnvVar {
-                        name: container_flag.env.clone(),
+                        name: env_name.clone(),
                         value: Some(flag_value.clone()),
                         ..Default::default()
                     });
                 }
-                for port in &container.ports {
-                    if let Some(env_name) = &port.env {
-                        let port_value = allocated_ports.get(&port.name).map_or_else(
-                            || port.container_port.to_string(),
-                            std::string::ToString::to_string,
-                        );
-                        env.push(k8s_openapi::api::core::v1::EnvVar {
-                            name: env_name.clone(),
-                            value: Some(port_value),
-                            ..Default::default()
-                        });
-                    }
-                }
-                for container_env in &container.env {
+            }
+            for port in &container.ports {
+                if let Some(env_name) = &port.env {
+                    let port_value = allocated_ports.get(&port.name).map_or_else(
+                        || port.container_port.to_string(),
+                        std::string::ToString::to_string,
+                    );
                     env.push(k8s_openapi::api::core::v1::EnvVar {
-                        name: container_env.name.clone(),
-                        value: Some(container_env.value.clone()),
+                        name: env_name.clone(),
+                        value: Some(port_value),
                         ..Default::default()
                     });
                 }
-                if env.is_empty() {
-                    None
-                } else {
-                    Some(env)
-                }
-            },
-            name: container.name.clone(),
-            image: Some(container.image.clone()),
-            image_pull_policy: deployment_config.image_pull_policy.clone(),
-            ports: if container.ports.is_empty() {
+            }
+            for container_env in &container.env {
+                env.push(k8s_openapi::api::core::v1::EnvVar {
+                    name: container_env.name.clone(),
+                    value: Some(container_env.value.clone()),
+                    ..Default::default()
+                });
+            }
+            if env.is_empty() {
                 None
             } else {
-                Some(
-                    container
-                        .ports
-                        .iter()
-                        .map(|port| {
-                            let host_port = if use_host_port && port.expose {
-                                allocated_ports.get(&port.name).map(|p| i32::from(*p))
-                            } else {
-                                None
-                            };
-                            k8s_openapi::api::core::v1::ContainerPort {
-                                name: Some(port.name.clone()),
-                                container_port: i32::from(port.container_port),
-                                host_port,
-                                ..Default::default()
-                            }
-                        })
-                        .collect(),
-                )
-            },
-            security_context: container.kata.as_ref().filter(|k| k.privileged).map(|_| {
-                k8s_openapi::api::core::v1::SecurityContext {
-                    privileged: Some(true),
-                    ..Default::default()
-                }
-            }),
-            ..Default::default()
-        })
-        .collect()
+                Some(env)
+            }
+        },
+        name: container.name.clone(),
+        image: Some(container.image.clone()),
+        image_pull_policy: deployment_config.image_pull_policy.clone(),
+        ports: if container.ports.is_empty() {
+            None
+        } else {
+            Some(
+                container
+                    .ports
+                    .iter()
+                    .map(|port| {
+                        let host_port = if use_host_port && port.expose {
+                            allocated_ports.get(&port.name).map(|p| i32::from(*p))
+                        } else {
+                            None
+                        };
+                        k8s_openapi::api::core::v1::ContainerPort {
+                            name: Some(port.name.clone()),
+                            container_port: i32::from(port.container_port),
+                            host_port,
+                            ..Default::default()
+                        }
+                    })
+                    .collect(),
+            )
+        },
+        security_context: container.kata.as_ref().filter(|k| k.privileged).map(|_| {
+            k8s_openapi::api::core::v1::SecurityContext {
+                privileged: Some(true),
+                ..Default::default()
+            }
+        }),
+        volume_mounts,
+        ..Default::default()
+    }
 }
 
-async fn ensure_service(
+async fn ensure_services(
     instance: &Instance,
     challenge: &Challenge,
     allocated_ports: &BTreeMap<String, u16>,
@@ -1236,101 +1370,118 @@ async fn ensure_service(
     state: &CtfState,
 ) -> Result<(), CtfError> {
     let namespace = target_namespace.to_owned();
-    let name = instance.name_any();
     let service_config = &state.config.runtime_config.instance.service;
+    let svc_api = Api::<Service>::namespaced(state.client.clone(), &namespace);
 
-    let mut selector_labels = base_labels(instance);
-    selector_labels.insert("app.kubernetes.io/name".to_string(), name.clone());
+    for container_spec in &challenge.spec.containers {
+        let name = container_spec.name.clone();
 
-    // Metadata labels = selector labels + extra config labels
-    let mut metadata_labels = selector_labels.clone();
-    metadata_labels.extend(service_config.labels.clone());
+        let mut selector_labels = base_labels(instance);
+        selector_labels.insert("app.kubernetes.io/name".to_string(), name.clone());
 
-    let annotations: Option<BTreeMap<String, String>> = if service_config.annotations.is_empty() {
-        None
-    } else {
-        Some(service_config.annotations.clone())
-    };
+        // Determine if this container has exposed ports
+        let has_exposed = container_spec.ports.iter().any(|p| p.expose);
 
-    let mut ports = Vec::<ServicePort>::new();
-    let mut seen_names = BTreeSet::new();
-    for container in &challenge.spec.containers {
-        for port in &container.ports {
-            if !port.expose {
-                continue;
-            }
-            if !seen_names.insert(port.name.clone()) {
-                continue;
-            }
-            let Some(exposed_port) = allocated_ports.get(&port.name) else {
-                continue;
+        // Exposed containers get the configured service type + labels/annotations;
+        // internal-only containers get a plain ClusterIP service for DNS resolution.
+        let (svc_type, metadata_labels, annotations) = if has_exposed {
+            let mut ml = selector_labels.clone();
+            ml.extend(service_config.labels.clone());
+            let ann = if service_config.annotations.is_empty() {
+                None
+            } else {
+                Some(service_config.annotations.clone())
             };
+            (service_config.type_.as_k8s_str().to_string(), ml, ann)
+        } else {
+            ("ClusterIP".to_string(), selector_labels.clone(), None)
+        };
+
+        let supports_node_port = svc_type != "ClusterIP";
+
+        // Collect all ports for this container
+        let mut ports = Vec::<ServicePort>::new();
+        for port in &container_spec.ports {
+            let node_port = if port.expose && supports_node_port {
+                let Some(&allocated) = allocated_ports.get(&port.name) else {
+                    continue;
+                };
+                Some(i32::from(allocated))
+            } else {
+                if port.expose && allocated_ports.get(&port.name).is_none() {
+                    continue;
+                }
+                None
+            };
+            // Always use container_port as the service port so internal callers
+            // reach the container on its natural port (e.g. web-app:5000).
+            // External access uses nodePort (or hostPort on the Deployment).
             ports.push(ServicePort {
                 name: Some(port.name.clone()),
-                port: i32::from(*exposed_port),
+                port: i32::from(port.container_port),
                 target_port: Some(IntOrString::Int(i32::from(port.container_port))),
+                node_port,
                 protocol: Some("TCP".to_string()),
                 ..Default::default()
             });
         }
-    }
 
-    if ports.is_empty() {
-        if let Err(err) = Api::<Service>::namespaced(state.client.clone(), &namespace)
-            .delete(&name, &DeleteParams::default())
-            .await
-        {
-            match err {
-                kube::Error::Api(ae) if ae.code == 404 => {}
-                other => return Err(other.into()),
-            }
+        if ports.is_empty() {
+            continue;
         }
-        return Ok(());
-    }
 
-    let service = Service {
-        metadata: ObjectMeta {
-            name: Some(name.clone()),
-            namespace: Some(namespace.clone()),
-            labels: Some(metadata_labels),
-            annotations,
+        let service = Service {
+            metadata: ObjectMeta {
+                name: Some(name.clone()),
+                namespace: Some(namespace.clone()),
+                labels: Some(metadata_labels.clone()),
+                annotations: annotations.clone(),
+                ..Default::default()
+            },
+            spec: Some(ServiceSpec {
+                selector: Some(selector_labels),
+                ports: Some(ports),
+                type_: Some(svc_type),
+                // Internal-only services are headless so DNS resolves to the pod IP
+                // directly, matching Docker Compose behavior where gethostbyname()
+                // returns the container's actual IP (needed for IP-based ACLs).
+                cluster_ip: if !has_exposed {
+                    Some("None".to_string())
+                } else {
+                    None
+                },
+                ..Default::default()
+            }),
             ..Default::default()
-        },
-        spec: Some(ServiceSpec {
-            selector: Some(selector_labels),
-            ports: Some(ports),
-            type_: Some(service_config.type_.as_k8s_str().to_string()),
-            ..Default::default()
-        }),
-        ..Default::default()
-    };
+        };
 
-    // Check cache: skip API call if service already exists with matching spec and labels
-    let svc_ref = ObjectRef::<Service>::new(&name).within(&namespace);
-    if let Some(cached) = state.services.get(&svc_ref) {
-        if cached.metadata.deletion_timestamp.is_none()
-            && cached
-                .spec
-                .as_ref()
-                .map(|s| (&s.selector, &s.ports, &s.type_))
-                == service
+        // Check cache: skip API call if service already exists with matching spec and labels
+        let svc_ref = ObjectRef::<Service>::new(&name).within(&namespace);
+        if let Some(cached) = state.services.get(&svc_ref) {
+            if cached.metadata.deletion_timestamp.is_none()
+                && cached
                     .spec
                     .as_ref()
-                    .map(|s| (&s.selector, &s.ports, &s.type_))
-            && cached.metadata.labels == service.metadata.labels
-            && cached.metadata.annotations == service.metadata.annotations
-        {
-            return Ok(());
+                    .map(|s| (&s.selector, &s.ports, &s.type_, &s.cluster_ip))
+                    == service
+                        .spec
+                        .as_ref()
+                        .map(|s| (&s.selector, &s.ports, &s.type_, &s.cluster_ip))
+                && cached.metadata.labels == service.metadata.labels
+                && cached.metadata.annotations == service.metadata.annotations
+            {
+                continue;
+            }
         }
-    }
 
-    Api::<Service>::namespaced(state.client.clone(), &namespace)
-        .patch(
-            &name,
-            &PatchParams::apply(InstanceReconciler::NAME).force(),
-            &Patch::Apply(&service),
-        )
-        .await?;
+        svc_api
+            .patch(
+                &name,
+                &PatchParams::apply(InstanceReconciler::NAME).force(),
+                &Patch::Apply(&service),
+            )
+            .await?;
+    }
 
     Ok(())
 }
@@ -1532,6 +1683,7 @@ mod tests {
                 ctf: "ctf-1".to_string(),
                 challenge: "chall-1".to_string(),
                 user: None,
+                team: None,
                 duration_seconds: None,
             },
         );

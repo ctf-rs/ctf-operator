@@ -126,6 +126,7 @@ mod tests {
                 ctf: ctf.to_string(),
                 challenge: challenge.to_string(),
                 user: None,
+                team: None,
                 duration_seconds: None,
             },
         );

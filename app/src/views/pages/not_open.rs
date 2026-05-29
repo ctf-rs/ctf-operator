@@ -106,3 +106,37 @@ pub fn CtfNotOpenPage(
         </PageShell>
     }
 }
+
+// ---------------------------------------------------------------------------
+// No-team page (team mode, user is not on a team)
+// ---------------------------------------------------------------------------
+
+#[component]
+pub fn NoTeamPage(ctf_title: String, user_label: String) -> impl IntoView {
+    view! {
+        <PageShell title=ctf_title.clone()>
+            <header class="topbar">
+                <div class="nav-left">
+                    <a class="ctf-title" href="/">{ctf_title.clone()}</a>
+                </div>
+                <div class="nav-center"></div>
+                <div class="nav-right">
+                    <span class="muted">{user_label}</span>
+                    <form method="post" action="/logout" style="display:inline-block;">
+                        <button class="btn secondary small" type="submit">"Logout"</button>
+                    </form>
+                </div>
+            </header>
+
+            <div style="text-align:center;margin-top:6rem;">
+                <h1>"No Team Assigned"</h1>
+                <p class="muted" style="margin-top:1.5rem;">
+                    "This CTF requires team membership. You are not currently assigned to any team."
+                </p>
+                <p class="muted" style="margin-top:0.5rem;">
+                    "Please contact an organiser to get assigned to a team."
+                </p>
+            </div>
+        </PageShell>
+    }
+}

@@ -130,6 +130,7 @@ async fn ensure_global_instance(
             ctf: ctf_name,
             challenge: challenge_name,
             user: None,
+            team: None,
             duration_seconds: None,
         },
         status: None,
@@ -230,6 +231,8 @@ fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
         }
     }
 
+    // Remove Ready before checking so it doesn't block its own recovery.
+    status.conditions.remove("Ready");
     if status.conditions.all_true() {
         status
             .conditions
@@ -275,7 +278,8 @@ mod tests {
                     env: vec![],
                     flags: vec![ctf_cli::models::ContainerFlag {
                         name: "flag-1".to_string(),
-                        env: "FLAG".to_string(),
+                        env: Some("FLAG".to_string()),
+                        file: None,
                     }],
                     ports: vec![ctf_cli::models::ContainerPort {
                         name: "http".to_string(),

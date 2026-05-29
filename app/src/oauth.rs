@@ -18,6 +18,8 @@ pub struct UserClaims {
     pub email: Option<String>,
     pub name: Option<String>,
     pub roles: Vec<String>,
+    pub team_id: Option<String>,
+    pub team_name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -108,12 +110,15 @@ pub async fn finish_login(client: &OidcClient, code: String) -> Result<UserClaim
         .await?;
 
     let roles = extract_roles_from_jwt(&token.access_token);
+    let (team_id, team_name) = extract_team_from_jwt(&token.access_token);
 
     Ok(UserClaims {
         sub: info.sub,
         email: info.email,
         name: info.preferred_username,
         roles,
+        team_id,
+        team_name,
     })
 }
 
@@ -170,4 +175,105 @@ fn extract_roles_from_jwt(access_token: &str) -> Vec<String> {
     roles.sort();
     roles.dedup();
     roles
+}
+
+/// Extract `team_id` and `team_name` from a Keycloak JWT access token.
+///
+/// Expects custom claims added via a Keycloak protocol mapper:
+/// - `team_id`: unique identifier for the team (e.g. Keycloak group ID or attribute)
+/// - `team_name`: human-readable team name
+fn extract_team_from_jwt(access_token: &str) -> (Option<String>, Option<String>) {
+    let parts = access_token.split('.').collect::<Vec<_>>();
+    if parts.len() < 2 {
+        return (None, None);
+    }
+
+    let Ok(decoded) = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(parts[1]) else {
+        return (None, None);
+    };
+
+    let Ok(json) = serde_json::from_slice::<Value>(&decoded) else {
+        return (None, None);
+    };
+
+    let team_id = json.get("team_id").and_then(|v| v.as_str()).map(String::from);
+    let team_name = json
+        .get("team_name")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    (team_id, team_name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base64::Engine;
+
+    /// Build a fake JWT (header.payload.signature) from a JSON payload.
+    fn fake_jwt(payload: &serde_json::Value) -> String {
+        let header = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(b"{\"alg\":\"RS256\",\"typ\":\"JWT\"}");
+        let body = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(serde_json::to_vec(payload).unwrap());
+        format!("{header}.{body}.fakesig")
+    }
+
+    #[test]
+    fn extract_team_from_jwt_with_both_claims() {
+        let payload = serde_json::json!({
+            "sub": "user-1",
+            "team_id": "team-alpha",
+            "team_name": "Alpha Squad",
+        });
+        let token = fake_jwt(&payload);
+        let (team_id, team_name) = extract_team_from_jwt(&token);
+        assert_eq!(team_id.as_deref(), Some("team-alpha"));
+        assert_eq!(team_name.as_deref(), Some("Alpha Squad"));
+    }
+
+    #[test]
+    fn extract_team_from_jwt_without_team_claims() {
+        let payload = serde_json::json!({
+            "sub": "user-1",
+            "email": "test@example.com",
+        });
+        let token = fake_jwt(&payload);
+        let (team_id, team_name) = extract_team_from_jwt(&token);
+        assert!(team_id.is_none());
+        assert!(team_name.is_none());
+    }
+
+    #[test]
+    fn extract_team_from_jwt_with_only_team_id() {
+        let payload = serde_json::json!({
+            "sub": "user-1",
+            "team_id": "team-beta",
+        });
+        let token = fake_jwt(&payload);
+        let (team_id, team_name) = extract_team_from_jwt(&token);
+        assert_eq!(team_id.as_deref(), Some("team-beta"));
+        assert!(team_name.is_none());
+    }
+
+    #[test]
+    fn extract_roles_from_jwt_realm_and_client() {
+        let payload = serde_json::json!({
+            "realm_access": { "roles": ["admin", "user"] },
+            "resource_access": {
+                "my-client": { "roles": ["editor"] }
+            }
+        });
+        let token = fake_jwt(&payload);
+        let roles = extract_roles_from_jwt(&token);
+        assert!(roles.contains(&"admin".to_string()));
+        assert!(roles.contains(&"user".to_string()));
+        assert!(roles.contains(&"my-client/editor".to_string()));
+    }
+
+    #[test]
+    fn extract_roles_from_invalid_jwt_returns_empty() {
+        let roles = extract_roles_from_jwt("not-a-jwt");
+        assert!(roles.is_empty());
+    }
 }

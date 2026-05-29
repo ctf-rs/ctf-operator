@@ -22,7 +22,8 @@ use tower_http::services::ServeDir;
 use crate::{
     db,
     middleware::{
-        extract_session_cookie, http_metrics, require_auth, require_ctf_exists, require_ctf_open,
+        extract_session_cookie, http_metrics, optional_auth, require_auth, require_ctf_exists,
+        require_ctf_open,
     },
     state::AppState,
 };
@@ -68,17 +69,21 @@ async fn server_fn_handler(req: Request<Body>) -> Response {
 /// Look up the authenticated user from the session cookie (if present).
 async fn resolve_user(state: &AppState, headers: &http::HeaderMap) -> Option<db::User> {
     let token = extract_session_cookie(headers, &state.config.session_cookie_name)?;
-    db::get_user_by_session(&state.db, &token)
+    let mut user = db::get_user_by_session(&state.db, &token)
         .await
         .ok()
-        .flatten()
+        .flatten()?;
+    if !state.config.mode.is_team() {
+        user.team_id = None;
+        user.team_name = None;
+    }
+    Some(user)
 }
 
 /// Build the application router with all routes wired to their handlers.
 pub fn router(state: Arc<AppState>) -> Router {
     // Protected page routes (auth checked via axum middleware)
     let protected_pages = Router::new()
-        .route("/scoreboard", get(pages::scoreboard))
         .route("/challenge/{challenge_name}/", get(pages::challenge_page))
         .route(
             "/challenge/{challenge_name}/instance-state",
@@ -95,6 +100,15 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route_layer(axum_mw::from_fn_with_state(state.clone(), require_ctf_open))
         .route_layer(axum_mw::from_fn_with_state(state.clone(), require_auth));
 
+    // Scoreboard uses optional_auth so it can serve anonymous visitors
+    // when the CRD's scoreboard.public is true (checked at request time).
+    let scoreboard_route = Router::new()
+        .route("/scoreboard", get(pages::scoreboard))
+        .route_layer(axum_mw::from_fn_with_state(
+            state.clone(),
+            optional_auth,
+        ));
+
     // Public routes (no auth required)
     let public = Router::new()
         .route("/", get(pages::index))
@@ -107,6 +121,7 @@ pub fn router(state: Arc<AppState>) -> Router {
             get(server_fn_handler).post(server_fn_handler),
         )
         .merge(protected_pages)
+        .merge(scoreboard_route)
         .merge(public)
         // Require CTF resource to exist for all routes above
         .route_layer(axum_mw::from_fn_with_state(

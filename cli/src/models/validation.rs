@@ -22,6 +22,10 @@ pub enum ValidationError {
     DuplicateChallengePortName,
     #[error("Container env names must be unique")]
     DuplicateContainerEnv,
+    #[error("Container flag must specify at least one of 'env' or 'file'")]
+    ContainerFlagMissingTarget,
+    #[error("Container flag file path must be absolute")]
+    ContainerFlagFileNotAbsolute,
     #[error("Challenge file names must be unique")]
     DuplicateChallengeFileName,
     #[error("Challenge can contain at most 3 files")]

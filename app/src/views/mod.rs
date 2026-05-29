@@ -4,11 +4,11 @@ mod pages;
 mod scripts;
 
 pub use pages::{
-    AccessDeniedPage, ChallengeDetailPage, CtfNotOpenPage, IndexPage, LoginPage,
+    AccessDeniedPage, ChallengeDetailPage, CtfNotOpenPage, IndexPage, LoginPage, NoTeamPage,
     ScoreboardHiddenPage, ScoreboardPage,
 };
 
-use ctf_cli::ChallengeCategory;
+use ctf_cli::{ChallengeCategory, ChallengeDifficulty};
 use leptos::prelude::*;
 
 use crate::db::ChallengeView;
@@ -80,6 +80,61 @@ pub struct ScoreboardPageData {
     pub user_label: String,
     pub leaderboard: Vec<UserScore>,
     pub frozen: bool,
+    /// Columns for the challenge-level grid (sorted by category then difficulty).
+    pub challenge_columns: Vec<ScoreboardChallenge>,
+    /// Per-entry solve details: `leaderboard[i].solved_challenges[j]` corresponds
+    /// to `challenge_columns[j]`.
+    pub solve_grid: Vec<Vec<SolveStatus>>,
+    /// Whether any user has a team (enables "Team" column header instead of "Player").
+    pub has_teams: bool,
+    /// CTF timing information for the progress bar timer.
+    pub timer: Option<ScoreboardTimer>,
+}
+
+/// Timing data for the scoreboard progress bar timer.
+#[derive(Debug, Clone)]
+pub struct ScoreboardTimer {
+    /// Unix timestamp (seconds) when the CTF started/opens.
+    pub start_ts: u64,
+    /// Unix timestamp (seconds) when the CTF ends.
+    pub end_ts: u64,
+    /// Current time as unix timestamp (seconds).
+    pub now_ts: u64,
+    /// Unix timestamp (seconds) when the scoreboard freezes (if set).
+    pub freeze_ts: Option<u64>,
+}
+
+/// One column in the scoreboard grid.
+///
+/// For single-flag challenges, there is one column whose `flag_name` equals
+/// the challenge name.  For multi-flag challenges, each flag gets its own
+/// column so the grid shows per-flag solve status.
+#[derive(Debug, Clone)]
+pub struct ScoreboardChallenge {
+    /// Internal challenge name (k8s resource name).
+    pub name: String,
+    /// Human-readable challenge name.
+    pub full_name: String,
+    /// Flag name within the challenge (same as `name` for single-flag).
+    pub flag_name: String,
+    /// Human-readable flag label (only set for multi-flag challenges).
+    pub flag_label: Option<String>,
+    pub category: ChallengeCategory,
+    pub difficulty: Option<ChallengeDifficulty>,
+    pub points: u32,
+    /// Whether this is part of a multi-flag challenge (affects header display).
+    pub multi_flag: bool,
+}
+
+/// Solve status for a single (entry, challenge) cell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SolveStatus {
+    /// Not solved.
+    Unsolved,
+    /// Solved (but not first blood).
+    Solved,
+    /// First blood — this entry solved the challenge first.
+    FirstBlood,
 }
 
 // ---------------------------------------------------------------------------

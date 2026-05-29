@@ -242,8 +242,14 @@ pub struct ContainerFlag {
     #[garde(length(min = 1, max = 63))]
     #[garde(pattern(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"))]
     pub name: String,
-    #[garde(length(min = 1))]
-    pub env: String,
+    /// Inject the flag as an environment variable with this name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[garde(skip)]
+    pub env: Option<String>,
+    /// Inject the flag as a file at this absolute path (e.g. `/app/flag.txt`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[garde(skip)]
+    pub file: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, Eq, garde::Validate)]
@@ -356,8 +362,20 @@ impl Challenge {
                     return Err(ValidationError::DuplicateContainerFlagName);
                 }
 
-                if !container_env_names.insert(flag.env.as_str()) {
-                    return Err(ValidationError::DuplicateContainerEnv);
+                if flag.env.is_none() && flag.file.is_none() {
+                    return Err(ValidationError::ContainerFlagMissingTarget);
+                }
+
+                if let Some(env) = &flag.env {
+                    if !container_env_names.insert(env.as_str()) {
+                        return Err(ValidationError::DuplicateContainerEnv);
+                    }
+                }
+
+                if let Some(file) = &flag.file {
+                    if !file.starts_with('/') {
+                        return Err(ValidationError::ContainerFlagFileNotAbsolute);
+                    }
                 }
 
                 if !known_flags.contains(flag.name.as_str()) {

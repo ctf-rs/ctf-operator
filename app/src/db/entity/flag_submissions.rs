@@ -18,6 +18,7 @@ pub struct Model {
     #[sea_orm(default_value = false)]
     pub admin_submission: bool,
     pub ip_address: Option<String>,
+    pub team_id: Option<String>,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
     pub created_at: DateTimeWithTimeZone,
 

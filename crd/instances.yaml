@@ -12,129 +12,143 @@ spec:
     singular: instance
   scope: Namespaced
   versions:
-    - additionalPrinterColumns:
-        - jsonPath: .status.phase
-          name: Phase
-          type: string
-        - jsonPath: .status.expiresAt
-          name: ExpiresAt
-          type: string
-      name: v1alpha1
-      schema:
-        openAPIV3Schema:
-          description: Auto-generated derived type for InstanceSpec via `CustomResource`
-          properties:
-            spec:
-              properties:
-                challenge:
-                  type: string
-                ctf:
-                  type: string
-                durationSeconds:
-                  description: Requested lifetime in seconds.
-                  format: uint64
-                  minimum: 0.0
-                  nullable: true
-                  type: integer
-                user:
-                  description: The user who spawned this instance.
-                  nullable: true
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.expiresAt
+      name: ExpiresAt
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Auto-generated derived type for InstanceSpec via `CustomResource`
+        properties:
+          spec:
+            properties:
+              challenge:
+                type: string
+              ctf:
+                type: string
+              durationSeconds:
+                description: Requested lifetime in seconds.
+                format: uint64
+                minimum: 0.0
+                nullable: true
+                type: integer
+              team:
+                description: The team that owns this instance (team mode).
+                nullable: true
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                required:
+                - id
+                - name
+                type: object
+              user:
+                description: |-
+                  The user associated with this instance.
+                  In solo mode this is the owner; in team mode this records who spawned it.
+                nullable: true
+                properties:
+                  id:
+                    format: int64
+                    type: integer
+                  username:
+                    type: string
+                required:
+                - id
+                - username
+                type: object
+            required:
+            - challenge
+            - ctf
+            type: object
+          status:
+            nullable: true
+            properties:
+              conditions:
+                default: []
+                items:
                   properties:
-                    id:
-                      format: int64
-                      type: integer
-                    username:
+                    lastProbeTime:
+                      description: >-
+                        Time is a wrapper around time.Time which supports correct marshaling to YAML
+                        and JSON.  Wrappers are provided for many of the factory methods that the time
+                        package offers.
+                      format: date-time
+                      nullable: true
+                      type: string
+                    lastTransitionTime:
+                      description: >-
+                        Time is a wrapper around time.Time which supports correct marshaling to YAML
+                        and JSON.  Wrappers are provided for many of the factory methods that the time
+                        package offers.
+                      format: date-time
+                      nullable: true
+                      type: string
+                    message:
+                      nullable: true
+                      type: string
+                    reason:
+                      nullable: true
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
                       type: string
                   required:
-                    - id
-                    - username
+                  - status
+                  - type
                   type: object
-              required:
-                - challenge
-                - ctf
-              type: object
-            status:
-              nullable: true
-              properties:
-                conditions:
-                  default: []
-                  items:
-                    properties:
-                      lastProbeTime:
-                        description: >-
-                          Time is a wrapper around time.Time which supports correct marshaling to YAML
-                          and JSON.  Wrappers are provided for many of the factory methods that the time
-                          package offers.
-                        format: date-time
-                        nullable: true
-                        type: string
-                      lastTransitionTime:
-                        description: >-
-                          Time is a wrapper around time.Time which supports correct marshaling to YAML
-                          and JSON.  Wrappers are provided for many of the factory methods that the time
-                          package offers.
-                        format: date-time
-                        nullable: true
-                        type: string
-                      message:
-                        nullable: true
-                        type: string
-                      reason:
-                        nullable: true
-                        type: string
-                      status:
-                        enum:
-                          - "True"
-                          - "False"
-                          - Unknown
-                        type: string
-                      type:
-                        type: string
-                    required:
-                      - status
-                      - type
-                    type: object
-                  type: array
-                expiresAt:
-                  description: >-
-                    Time is a wrapper around time.Time which supports correct marshaling to YAML
-                    and JSON.  Wrappers are provided for many of the factory methods that the time
-                    package offers.
-                  format: date-time
-                  nullable: true
-                  type: string
-                message:
-                  description: Human-readable message about the current state (especially for errors)
-                  nullable: true
-                  type: string
-                phase:
-                  default: Initializing
-                  description: Current phase of the instance lifecycle
-                  enum:
-                    - Initializing
-                    - Creating
-                    - Validating
-                    - Waiting
-                    - Ready
-                    - Error
-                    - Terminating
-                  type: string
-                readySince:
-                  description: Timestamp when the instance first became ready (timer started).
-                  format: date-time
-                  nullable: true
-                  type: string
-              type: object
-          required:
-            - spec
-          title: InstanceValidated
-          type: object
-          x-kubernetes-validations:
-            - message: ctf reference name is required
-              rule: self.spec.ctf != ''
-            - message: challenge reference name is required
-              rule: self.spec.challenge != ''
-      served: true
-      storage: true
-      subresources:
-        status: {}
+                type: array
+              expiresAt:
+                description: >-
+                  Time is a wrapper around time.Time which supports correct marshaling to YAML
+                  and JSON.  Wrappers are provided for many of the factory methods that the time
+                  package offers.
+                format: date-time
+                nullable: true
+                type: string
+              message:
+                description: Human-readable message about the current state (especially for errors)
+                nullable: true
+                type: string
+              phase:
+                default: Initializing
+                description: Current phase of the instance lifecycle
+                enum:
+                - Initializing
+                - Creating
+                - Validating
+                - Waiting
+                - Ready
+                - Error
+                - Terminating
+                type: string
+              readySince:
+                description: Timestamp when the instance first became ready (timer started).
+                format: date-time
+                nullable: true
+                type: string
+            type: object
+        required:
+        - spec
+        title: InstanceValidated
+        type: object
+        x-kubernetes-validations:
+        - message: ctf reference name is required
+          rule: self.spec.ctf != ''
+        - message: challenge reference name is required
+          rule: self.spec.challenge != ''
+    served: true
+    storage: true
+    subresources:
+      status: {}
