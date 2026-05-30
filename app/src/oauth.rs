@@ -1,8 +1,12 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use anyhow::Result;
 use base64::Engine;
 use rand::RngExt;
 use serde::Deserialize;
 use serde_json::Value;
+use tokio::sync::RwLock;
 use url::Url;
 
 use crate::config::OidcConfig;
@@ -22,6 +26,188 @@ pub struct UserClaims {
     pub team_name: Option<String>,
 }
 
+/// Resolved team info from a Keycloak group's attributes.
+#[derive(Debug, Clone)]
+struct TeamInfo {
+    team_id: String,
+    team_name: String,
+}
+
+/// Resolves Keycloak group paths (from the `groups` JWT claim) to team
+/// attributes (`team_id`, `team_name`) set on those groups.
+///
+/// At startup the resolver fetches the full group tree from Keycloak's
+/// admin API and caches a map of `group_path → TeamInfo`.  A background
+/// refresh can be triggered with [`GroupTeamResolver::refresh`].
+#[derive(Debug, Clone)]
+pub struct GroupTeamResolver {
+    /// group path (e.g. "/scc2026-finals/team1") → TeamInfo
+    cache: Arc<RwLock<HashMap<String, TeamInfo>>>,
+    admin_url: String,
+    http: reqwest::Client,
+    client_id: String,
+    client_secret: String,
+    token_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct KeycloakGroup {
+    id: String,
+    // name: String,
+    path: String,
+    #[serde(default)]
+    attributes: HashMap<String, Vec<String>>,
+    #[serde(default, rename = "subGroups")]
+    sub_groups: Vec<KeycloakGroup>,
+    #[serde(default, rename = "subGroupCount")]
+    sub_group_count: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ServiceTokenResponse {
+    access_token: String,
+}
+
+impl GroupTeamResolver {
+    /// Build a new resolver. Fetches the group tree once at construction.
+    pub async fn new(config: &OidcConfig) -> Result<Self> {
+        let issuer = config.issuer_url.trim_end_matches('/');
+        // Derive admin API base from issuer URL:
+        //   http://localhost:8081/realms/ctf  → http://localhost:8081/admin/realms/ctf
+        let admin_url = issuer.replacen("/realms/", "/admin/realms/", 1);
+        let token_url = format!("{issuer}/protocol/openid-connect/token");
+
+        let resolver = Self {
+            cache: Arc::new(RwLock::new(HashMap::new())),
+            admin_url,
+            http: reqwest::Client::new(),
+            client_id: config.client_id.clone(),
+            client_secret: config.client_secret.clone(),
+            token_url,
+        };
+
+        if let Err(e) = resolver.refresh().await {
+            tracing::warn!("failed to load group→team mapping (will retry on login): {e}");
+        }
+
+        Ok(resolver)
+    }
+
+    /// Fetch a service-account token for the OIDC client.
+    async fn get_admin_token(&self) -> Result<String> {
+        let resp = self
+            .http
+            .post(&self.token_url)
+            .form(&[
+                ("grant_type", "client_credentials"),
+                ("client_id", &self.client_id),
+                ("client_secret", &self.client_secret),
+            ])
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<ServiceTokenResponse>()
+            .await?;
+        Ok(resp.access_token)
+    }
+
+    /// Refresh the cached group→team mapping from Keycloak.
+    pub async fn refresh(&self) -> Result<()> {
+        let token = self.get_admin_token().await?;
+
+        // Fetch top-level groups
+        let top_groups: Vec<KeycloakGroup> = self
+            .http
+            .get(format!("{}/groups?briefRepresentation=false", self.admin_url))
+            .bearer_auth(&token)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+
+        let mut map = HashMap::new();
+        for g in &top_groups {
+            self.walk_group(g, &mut map, &token).await?;
+        }
+
+        let count = map.len();
+        *self.cache.write().await = map;
+        tracing::info!(count, "group→team cache refreshed");
+        Ok(())
+    }
+
+    /// Recursively walk a group tree, collecting team attributes.
+    fn walk_group<'a>(
+        &'a self,
+        group: &'a KeycloakGroup,
+        map: &'a mut HashMap<String, TeamInfo>,
+        token: &'a str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            // Check if this group has team attributes
+            if let (Some(tid), Some(tname)) = (
+                group
+                    .attributes
+                    .get("team_id")
+                    .and_then(|v| v.first())
+                    .filter(|s| !s.is_empty()),
+                group
+                    .attributes
+                    .get("team_name")
+                    .and_then(|v| v.first())
+                    .filter(|s| !s.is_empty()),
+            ) {
+                map.insert(
+                    group.path.clone(),
+                    TeamInfo {
+                        team_id: tid.clone(),
+                        team_name: tname.clone(),
+                    },
+                );
+            }
+
+            // Process inline sub_groups
+            for child in &group.sub_groups {
+                self.walk_group(child, map, token).await?;
+            }
+
+            // If the group reports having children but sub_groups is empty,
+            // fetch them via the /children endpoint.
+            if group.sub_groups.is_empty() && group.sub_group_count.unwrap_or(0) > 0 {
+                let children: Vec<KeycloakGroup> = self
+                    .http
+                    .get(format!(
+                        "{}/groups/{}/children?briefRepresentation=false",
+                        self.admin_url, group.id
+                    ))
+                    .bearer_auth(token)
+                    .send()
+                    .await?
+                    .error_for_status()?
+                    .json()
+                    .await?;
+                for child in &children {
+                    self.walk_group(child, map, token).await?;
+                }
+            }
+
+            Ok(())
+        })
+    }
+
+    /// Look up team info for a list of group paths from a JWT `groups` claim.
+    pub async fn resolve(&self, group_paths: &[String]) -> Option<(String, String)> {
+        let cache = self.cache.read().await;
+        for path in group_paths {
+            if let Some(info) = cache.get(path.as_str()) {
+                return Some((info.team_id.clone(), info.team_name.clone()));
+            }
+        }
+        None
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct OidcClient {
     pub client_id: String,
@@ -31,6 +217,7 @@ pub struct OidcClient {
     pub token_url: Url,
     pub userinfo_url: Url,
     pub http: reqwest::Client,
+    pub group_resolver: GroupTeamResolver,
 }
 
 #[derive(Debug, Deserialize)]
@@ -54,6 +241,8 @@ pub async fn build_client(config: &OidcConfig) -> Result<OidcClient> {
         "{internal_issuer}/protocol/openid-connect/userinfo"
     ))?;
 
+    let group_resolver = GroupTeamResolver::new(config).await?;
+
     Ok(OidcClient {
         client_id: config.client_id.clone(),
         client_secret: config.client_secret.clone(),
@@ -62,6 +251,7 @@ pub async fn build_client(config: &OidcConfig) -> Result<OidcClient> {
         token_url,
         userinfo_url,
         http: reqwest::Client::builder().build()?,
+        group_resolver,
     })
 }
 
@@ -110,7 +300,8 @@ pub async fn finish_login(client: &OidcClient, code: String) -> Result<UserClaim
         .await?;
 
     let roles = extract_roles_from_jwt(&token.access_token);
-    let (team_id, team_name) = extract_team_from_jwt(&token.access_token);
+    let (team_id, team_name) =
+        extract_team_from_jwt(&token.access_token, &client.group_resolver).await;
 
     Ok(UserClaims {
         sub: info.sub,
@@ -180,11 +371,14 @@ fn extract_roles_from_jwt(access_token: &str) -> Vec<String> {
 /// Extract `team_id` and `team_name` from a Keycloak JWT access token.
 ///
 /// Supports two modes:
-/// 1. **Group membership** (preferred): reads the `groups` claim (array of group paths
-///    like `["/scc2026-finals/team1"]`) and derives `team_id` from the leaf group name
-///    (e.g. `"team1"`) and `team_name` by title-casing it (e.g. `"Team 1"`).
+/// 1. **Group attributes** (preferred): reads the `groups` claim (array of group
+///    paths like `["/scc2026-finals/team1"]`) and resolves team info by looking
+///    up `team_id`/`team_name` attributes on those groups via `GroupTeamResolver`.
 /// 2. **Explicit claims** (fallback): reads `team_id` and `team_name` claims directly.
-fn extract_team_from_jwt(access_token: &str) -> (Option<String>, Option<String>) {
+async fn extract_team_from_jwt(
+    access_token: &str,
+    resolver: &GroupTeamResolver,
+) -> (Option<String>, Option<String>) {
     let parts = access_token.split('.').collect::<Vec<_>>();
     if parts.len() < 2 {
         return (None, None);
@@ -198,24 +392,14 @@ fn extract_team_from_jwt(access_token: &str) -> (Option<String>, Option<String>)
         return (None, None);
     };
 
-    // Try group membership claim first
+    // Try group-based resolution first
     if let Some(groups) = json.get("groups").and_then(|v| v.as_array()) {
-        for group in groups {
-            if let Some(path) = group.as_str() {
-                // Extract the leaf group name from paths like "/scc2026-finals/team1"
-                if let Some(leaf) = path.rsplit('/').next() {
-                    if leaf.starts_with("team") {
-                        let team_id = leaf.to_string();
-                        // Derive display name: "team1" -> "Team 1", "team17" -> "Team 17"
-                        let team_name = if let Some(num) = leaf.strip_prefix("team") {
-                            format!("Team {num}")
-                        } else {
-                            leaf.to_string()
-                        };
-                        return (Some(team_id), Some(team_name));
-                    }
-                }
-            }
+        let paths: Vec<String> = groups
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect();
+        if let Some((team_id, team_name)) = resolver.resolve(&paths).await {
+            return (Some(team_id), Some(team_name));
         }
     }
 
@@ -243,33 +427,63 @@ mod tests {
         format!("{header}.{body}.fakesig")
     }
 
-    #[test]
-    fn extract_team_from_jwt_with_both_claims() {
+    /// Build a test resolver pre-loaded with a group→team mapping.
+    fn test_resolver(entries: &[(&str, &str, &str)]) -> GroupTeamResolver {
+        let mut map = HashMap::new();
+        for (path, team_id, team_name) in entries {
+            map.insert(
+                path.to_string(),
+                TeamInfo {
+                    team_id: team_id.to_string(),
+                    team_name: team_name.to_string(),
+                },
+            );
+        }
+        GroupTeamResolver {
+            cache: Arc::new(RwLock::new(map)),
+            admin_url: String::new(),
+            http: reqwest::Client::new(),
+            client_id: String::new(),
+            client_secret: String::new(),
+            token_url: String::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn extract_team_from_jwt_with_both_claims() {
+        let resolver = test_resolver(&[]);
         let payload = serde_json::json!({
             "sub": "user-1",
             "team_id": "team-alpha",
             "team_name": "Alpha Squad",
         });
         let token = fake_jwt(&payload);
-        let (team_id, team_name) = extract_team_from_jwt(&token);
+        let (team_id, team_name) = extract_team_from_jwt(&token, &resolver).await;
         assert_eq!(team_id.as_deref(), Some("team-alpha"));
         assert_eq!(team_name.as_deref(), Some("Alpha Squad"));
     }
 
-    #[test]
-    fn extract_team_from_groups_claim() {
+    #[tokio::test]
+    async fn extract_team_from_groups_via_resolver() {
+        let resolver = test_resolver(&[
+            ("/scc2026-finals/team3", "team-3", "Team 3"),
+            ("/scc2026-finals/team17", "team-17", "Team 17"),
+        ]);
         let payload = serde_json::json!({
             "sub": "user-1",
             "groups": ["/scc2026-finals/team3"],
         });
         let token = fake_jwt(&payload);
-        let (team_id, team_name) = extract_team_from_jwt(&token);
-        assert_eq!(team_id.as_deref(), Some("team3"));
+        let (team_id, team_name) = extract_team_from_jwt(&token, &resolver).await;
+        assert_eq!(team_id.as_deref(), Some("team-3"));
         assert_eq!(team_name.as_deref(), Some("Team 3"));
     }
 
-    #[test]
-    fn extract_team_from_groups_prefers_group_over_explicit() {
+    #[tokio::test]
+    async fn extract_team_from_groups_prefers_group_over_explicit() {
+        let resolver = test_resolver(&[
+            ("/scc2026-finals/team17", "team-17", "Team 17"),
+        ]);
         let payload = serde_json::json!({
             "sub": "user-1",
             "groups": ["/scc2026-finals/team17"],
@@ -277,13 +491,14 @@ mod tests {
             "team_name": "Old Name",
         });
         let token = fake_jwt(&payload);
-        let (team_id, team_name) = extract_team_from_jwt(&token);
-        assert_eq!(team_id.as_deref(), Some("team17"));
+        let (team_id, team_name) = extract_team_from_jwt(&token, &resolver).await;
+        assert_eq!(team_id.as_deref(), Some("team-17"));
         assert_eq!(team_name.as_deref(), Some("Team 17"));
     }
 
-    #[test]
-    fn extract_team_from_groups_ignores_non_team_groups() {
+    #[tokio::test]
+    async fn extract_team_groups_not_in_resolver_falls_back() {
+        let resolver = test_resolver(&[]);
         let payload = serde_json::json!({
             "sub": "user-1",
             "groups": ["/scc2026-finals", "/some-other-group"],
@@ -291,32 +506,48 @@ mod tests {
             "team_name": "Fallback",
         });
         let token = fake_jwt(&payload);
-        let (team_id, team_name) = extract_team_from_jwt(&token);
-        // No group with "team" prefix, falls back to explicit claims
+        let (team_id, team_name) = extract_team_from_jwt(&token, &resolver).await;
         assert_eq!(team_id.as_deref(), Some("fallback"));
         assert_eq!(team_name.as_deref(), Some("Fallback"));
     }
 
-    #[test]
-    fn extract_team_from_jwt_without_team_claims() {
+    #[tokio::test]
+    async fn extract_team_hyphenated_group() {
+        let resolver = test_resolver(&[
+            ("/ctf-teams/team-alpha", "team-alpha", "Team Alpha"),
+        ]);
+        let payload = serde_json::json!({
+            "sub": "user-1",
+            "groups": ["/ctf-teams/team-alpha"],
+        });
+        let token = fake_jwt(&payload);
+        let (team_id, team_name) = extract_team_from_jwt(&token, &resolver).await;
+        assert_eq!(team_id.as_deref(), Some("team-alpha"));
+        assert_eq!(team_name.as_deref(), Some("Team Alpha"));
+    }
+
+    #[tokio::test]
+    async fn extract_team_from_jwt_without_team_claims() {
+        let resolver = test_resolver(&[]);
         let payload = serde_json::json!({
             "sub": "user-1",
             "email": "test@example.com",
         });
         let token = fake_jwt(&payload);
-        let (team_id, team_name) = extract_team_from_jwt(&token);
+        let (team_id, team_name) = extract_team_from_jwt(&token, &resolver).await;
         assert!(team_id.is_none());
         assert!(team_name.is_none());
     }
 
-    #[test]
-    fn extract_team_from_jwt_with_only_team_id() {
+    #[tokio::test]
+    async fn extract_team_from_jwt_with_only_team_id() {
+        let resolver = test_resolver(&[]);
         let payload = serde_json::json!({
             "sub": "user-1",
             "team_id": "team-beta",
         });
         let token = fake_jwt(&payload);
-        let (team_id, team_name) = extract_team_from_jwt(&token);
+        let (team_id, team_name) = extract_team_from_jwt(&token, &resolver).await;
         assert_eq!(team_id.as_deref(), Some("team-beta"));
         assert!(team_name.is_none());
     }
