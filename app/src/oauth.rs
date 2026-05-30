@@ -179,9 +179,11 @@ fn extract_roles_from_jwt(access_token: &str) -> Vec<String> {
 
 /// Extract `team_id` and `team_name` from a Keycloak JWT access token.
 ///
-/// Expects custom claims added via a Keycloak protocol mapper:
-/// - `team_id`: unique identifier for the team (e.g. Keycloak group ID or attribute)
-/// - `team_name`: human-readable team name
+/// Supports two modes:
+/// 1. **Group membership** (preferred): reads the `groups` claim (array of group paths
+///    like `["/scc2026-finals/team1"]`) and derives `team_id` from the leaf group name
+///    (e.g. `"team1"`) and `team_name` by title-casing it (e.g. `"Team 1"`).
+/// 2. **Explicit claims** (fallback): reads `team_id` and `team_name` claims directly.
 fn extract_team_from_jwt(access_token: &str) -> (Option<String>, Option<String>) {
     let parts = access_token.split('.').collect::<Vec<_>>();
     if parts.len() < 2 {
@@ -196,6 +198,28 @@ fn extract_team_from_jwt(access_token: &str) -> (Option<String>, Option<String>)
         return (None, None);
     };
 
+    // Try group membership claim first
+    if let Some(groups) = json.get("groups").and_then(|v| v.as_array()) {
+        for group in groups {
+            if let Some(path) = group.as_str() {
+                // Extract the leaf group name from paths like "/scc2026-finals/team1"
+                if let Some(leaf) = path.rsplit('/').next() {
+                    if leaf.starts_with("team") {
+                        let team_id = leaf.to_string();
+                        // Derive display name: "team1" -> "Team 1", "team17" -> "Team 17"
+                        let team_name = if let Some(num) = leaf.strip_prefix("team") {
+                            format!("Team {num}")
+                        } else {
+                            leaf.to_string()
+                        };
+                        return (Some(team_id), Some(team_name));
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback to explicit claims
     let team_id = json.get("team_id").and_then(|v| v.as_str()).map(String::from);
     let team_name = json
         .get("team_name")
@@ -230,6 +254,47 @@ mod tests {
         let (team_id, team_name) = extract_team_from_jwt(&token);
         assert_eq!(team_id.as_deref(), Some("team-alpha"));
         assert_eq!(team_name.as_deref(), Some("Alpha Squad"));
+    }
+
+    #[test]
+    fn extract_team_from_groups_claim() {
+        let payload = serde_json::json!({
+            "sub": "user-1",
+            "groups": ["/scc2026-finals/team3"],
+        });
+        let token = fake_jwt(&payload);
+        let (team_id, team_name) = extract_team_from_jwt(&token);
+        assert_eq!(team_id.as_deref(), Some("team3"));
+        assert_eq!(team_name.as_deref(), Some("Team 3"));
+    }
+
+    #[test]
+    fn extract_team_from_groups_prefers_group_over_explicit() {
+        let payload = serde_json::json!({
+            "sub": "user-1",
+            "groups": ["/scc2026-finals/team17"],
+            "team_id": "old-id",
+            "team_name": "Old Name",
+        });
+        let token = fake_jwt(&payload);
+        let (team_id, team_name) = extract_team_from_jwt(&token);
+        assert_eq!(team_id.as_deref(), Some("team17"));
+        assert_eq!(team_name.as_deref(), Some("Team 17"));
+    }
+
+    #[test]
+    fn extract_team_from_groups_ignores_non_team_groups() {
+        let payload = serde_json::json!({
+            "sub": "user-1",
+            "groups": ["/scc2026-finals", "/some-other-group"],
+            "team_id": "fallback",
+            "team_name": "Fallback",
+        });
+        let token = fake_jwt(&payload);
+        let (team_id, team_name) = extract_team_from_jwt(&token);
+        // No group with "team" prefix, falls back to explicit claims
+        assert_eq!(team_id.as_deref(), Some("fallback"));
+        assert_eq!(team_name.as_deref(), Some("Fallback"));
     }
 
     #[test]
