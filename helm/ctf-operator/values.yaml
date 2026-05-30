@@ -71,6 +71,9 @@ instance:
   deployment:
     replicas: 1
     imagePullPolicy: ""
+    # Bind allocated ports directly on the node via hostPort.
+    # Use with ClusterIP services when NodePort range is too restrictive.
+    useHostPort: false
     # Default runtimeClassName for instance pods (e.g. "gvisor").
     # Overridden to "kata" when a container sets the kata field.
     runtimeClassName: ""

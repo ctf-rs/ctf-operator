@@ -20,6 +20,9 @@ data:
 {{- if .Values.instance.deployment.imagePullPolicy }}
         imagePullPolicy: {{ .Values.instance.deployment.imagePullPolicy | quote }}
 {{- end }}
+{{- if .Values.instance.deployment.useHostPort }}
+        useHostPort: true
+{{- end }}
 {{- if .Values.instance.deployment.runtimeClassName }}
         runtimeClassName: {{ .Values.instance.deployment.runtimeClassName | quote }}
 {{- end }}
