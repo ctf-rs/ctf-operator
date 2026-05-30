@@ -65,10 +65,10 @@ pub async fn oauth_callback(
         }
     };
 
-    let (team_id, team_name) = if state.config.mode.is_team() {
-        (claims.team_id.as_deref(), claims.team_name.as_deref())
+    let team_id = if state.config.mode.is_team() {
+        claims.team_id.as_deref()
     } else {
-        (None, None)
+        None
     };
 
     let user = match db::upsert_user(
@@ -77,7 +77,6 @@ pub async fn oauth_callback(
         claims.email.as_deref(),
         claims.name.as_deref(),
         team_id,
-        team_name,
     )
     .await
     {

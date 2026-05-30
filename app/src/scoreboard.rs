@@ -541,7 +541,7 @@ async fn calculate_scores(
             FROM (
                 SELECT
                     COALESCE(u.team_id, u.id::text) AS entity_id,
-                    COALESCE(u.team_name, u.name, u.sub) AS display_name,
+                    COALESCE(t.team_name, u.name, u.sub) AS display_name,
                     s.challenge_name,
                     s.flag_name,
                     MIN(s.created_at) AS first_solve,
@@ -553,9 +553,10 @@ async fn calculate_scores(
                     ) AS rn
                 FROM flag_submissions s
                 JOIN users u ON u.id = s.user_id
+                LEFT JOIN teams t ON t.team_id = u.team_id
                 WHERE s.ctf_name = $1 AND s.accepted = true AND s.admin_submission = false
                 GROUP BY COALESCE(u.team_id, u.id::text),
-                         COALESCE(u.team_name, u.name, u.sub),
+                         COALESCE(t.team_name, u.name, u.sub),
                          s.challenge_name, s.flag_name, u.team_id
             ) sub
             WHERE rn = 1

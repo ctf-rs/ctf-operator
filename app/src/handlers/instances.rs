@@ -166,7 +166,7 @@ pub async fn spawn_instance(challenge_name: String) -> Result<(), ServerFnError>
             }),
             team: user.team_id.as_ref().map(|tid| InstanceTeam {
                 id: tid.clone(),
-                name: user.team_name.clone().unwrap_or_default(),
+                name: user.team_name.clone().unwrap_or_else(|| tid.clone()),
             }),
             duration_seconds: Some(duration_seconds),
         },

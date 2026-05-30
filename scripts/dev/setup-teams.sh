@@ -92,25 +92,24 @@ PARENT_LOC=$(kc_post_loc "/groups" '{"name": "ctf-teams"}')
 PARENT_ID=$(echo "${PARENT_LOC}" | grep -oE '[^/]+$')
 echo "  Created parent group ctf-teams (${PARENT_ID})"
 
-# Create child groups with team_id and team_name attributes
+# Create child groups with team_id attribute
 create_team_group() {
-    local name="$1" team_id="$2" team_name="$3"
+    local name="$1" team_id="$2"
     local loc
     loc=$(kc_post_loc "/groups/${PARENT_ID}/children" "{
         \"name\": \"${name}\",
         \"attributes\": {
-            \"team_id\": [\"${team_id}\"],
-            \"team_name\": [\"${team_name}\"]
+            \"team_id\": [\"${team_id}\"]
         }
     }")
     local gid
     gid=$(echo "${loc}" | grep -oE '[^/]+$')
-    echo "  Created group ${name} → team_id=${team_id}, team_name=${team_name} (${gid})"
+    echo "  Created group ${name} → team_id=${team_id} (${gid})"
     echo "${gid}"
 }
 
-ALPHA_ID=$(create_team_group "team-alpha" "team-alpha" "Team Alpha")
-BETA_ID=$(create_team_group "team-beta" "team-beta" "Team Beta")
+ALPHA_ID=$(create_team_group "team-alpha" "team-alpha")
+BETA_ID=$(create_team_group "team-beta" "team-beta")
 
 echo ""
 echo "=== Assigning users to team groups ==="
@@ -161,6 +160,15 @@ echo "  Admin (no group): test1"
 
 echo ""
 echo "=== Team setup complete! ==="
+
+echo ""
+echo "=== Updating team display names in DB ==="
+PGPASSWORD=ctf psql -h localhost -U ctf -d ctf_app -c "
+UPDATE teams SET team_name = 'Team Alpha' WHERE team_id = 'team-alpha';
+UPDATE teams SET team_name = 'Team Beta'  WHERE team_id = 'team-beta';
+" 2>/dev/null && echo "  Updated team names (Team Alpha, Team Beta)" \
+             || echo "  (skipped — app not running or teams not yet created)"
+
 echo ""
 echo "Teams (via group membership → groups JWT claim):"
 echo "  /ctf-teams/team-alpha: player, test2, test3"
@@ -168,4 +176,4 @@ echo "  /ctf-teams/team-beta:  test4, test5, test6"
 echo "  Solo users: test7, test8, test9, test10"
 echo "  Admin (solo): test1"
 echo ""
-echo "Login at http://localhost:8090 with any of these users (password = username)"
+echo "Login at http://localhost:8080 with any of these users (password = username)"

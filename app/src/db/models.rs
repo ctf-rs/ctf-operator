@@ -12,6 +12,7 @@ pub struct User {
     pub discord_id: Option<String>,
     pub discord_username: Option<String>,
     pub team_id: Option<String>,
+    /// Resolved from `teams` table; not stored on the user row.
     pub team_name: Option<String>,
     pub roles: Vec<String>,
 }

@@ -16,7 +16,9 @@ pub use flags::{
 };
 #[allow(unused_imports)] // re-exported as public API
 pub use models::{ChallengeView, FlagView, PortView, SolvedKey, User};
-pub use users::{create_session, delete_session, get_user_by_session, link_discord, upsert_user};
+pub use users::{
+    create_session, delete_session, ensure_team, get_user_by_session, link_discord, upsert_user,
+};
 
 use anyhow::Result;
 use sea_orm::{ConnectOptions, ConnectionTrait, Database, DatabaseConnection};
@@ -157,11 +159,22 @@ pub async fn migrate(db: &DatabaseConnection) -> Result<()> {
     // -- team mode migrations --
 
     db.execute_unprepared(
-        r#"ALTER TABLE users ADD COLUMN IF NOT EXISTS team_id TEXT"#,
+        r#"CREATE TABLE IF NOT EXISTS teams (
+            team_id TEXT PRIMARY KEY,
+            team_name TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )"#,
     )
     .await?;
+
     db.execute_unprepared(
-        r#"ALTER TABLE users ADD COLUMN IF NOT EXISTS team_name TEXT"#,
+        r#"ALTER TABLE users ADD COLUMN IF NOT EXISTS team_id TEXT REFERENCES teams(team_id)"#,
+    )
+    .await?;
+
+    // Drop legacy team_name column from users if it exists.
+    db.execute_unprepared(
+        r#"ALTER TABLE users DROP COLUMN IF EXISTS team_name"#,
     )
     .await?;
 

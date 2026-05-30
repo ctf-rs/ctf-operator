@@ -3,7 +3,7 @@ use sea_orm::{
     ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set, sea_query::OnConflict,
 };
 
-use super::entity::{sessions, users};
+use super::entity::{sessions, teams, users};
 use super::models::User;
 
 /// Link a Discord account to a user by user id.
@@ -24,20 +24,43 @@ pub async fn link_discord(
     Ok(())
 }
 
+/// Ensure the `teams` row exists for the given team_id, creating it with
+/// `team_name = team_id` when first seen.
+pub async fn ensure_team(db: &DatabaseConnection, team_id: &str) -> Result<()> {
+    let model = teams::ActiveModel {
+        team_id: Set(team_id.to_owned()),
+        team_name: Set(team_id.to_owned()),
+        ..Default::default()
+    };
+    teams::Entity::insert(model)
+        .on_conflict(
+            OnConflict::column(teams::Column::TeamId)
+                .do_nothing()
+                .to_owned(),
+        )
+        .do_nothing()
+        .exec(db)
+        .await?;
+    Ok(())
+}
+
 pub async fn upsert_user(
     db: &DatabaseConnection,
     sub: &str,
     email: Option<&str>,
     name: Option<&str>,
     team_id: Option<&str>,
-    team_name: Option<&str>,
 ) -> Result<User> {
+    // Auto-create team entry when a new team_id appears.
+    if let Some(tid) = team_id {
+        ensure_team(db, tid).await?;
+    }
+
     let model = users::ActiveModel {
         sub: Set(sub.to_owned()),
         email: Set(email.map(ToOwned::to_owned)),
         name: Set(name.map(ToOwned::to_owned)),
         team_id: Set(team_id.map(ToOwned::to_owned)),
-        team_name: Set(team_name.map(ToOwned::to_owned)),
         ..Default::default()
     };
 
@@ -48,12 +71,21 @@ pub async fn upsert_user(
                     users::Column::Email,
                     users::Column::Name,
                     users::Column::TeamId,
-                    users::Column::TeamName,
                 ])
                 .to_owned(),
         )
         .exec_with_returning(db)
         .await?;
+
+    // Resolve team_name from teams table
+    let team_name = if let Some(ref tid) = result.team_id {
+        teams::Entity::find_by_id(tid.clone())
+            .one(db)
+            .await?
+            .map(|t| t.team_name)
+    } else {
+        None
+    };
 
     Ok(User {
         id: result.id,
@@ -63,7 +95,7 @@ pub async fn upsert_user(
         discord_id: result.discord_id,
         discord_username: result.discord_username,
         team_id: result.team_id,
-        team_name: result.team_name,
+        team_name,
         roles: Vec::new(),
     })
 }
@@ -111,6 +143,17 @@ pub async fn get_user_by_session(db: &DatabaseConnection, token: &str) -> Result
     match result {
         Some((session, Some(user))) => {
             let roles: Vec<String> = serde_json::from_value(session.roles_json).unwrap_or_default();
+
+            // Resolve team_name from teams table
+            let team_name = if let Some(ref tid) = user.team_id {
+                teams::Entity::find_by_id(tid.clone())
+                    .one(db)
+                    .await?
+                    .map(|t| t.team_name)
+            } else {
+                None
+            };
+
             Ok(Some(User {
                 id: user.id,
                 sub: user.sub,
@@ -119,7 +162,7 @@ pub async fn get_user_by_session(db: &DatabaseConnection, token: &str) -> Result
                 discord_id: user.discord_id,
                 discord_username: user.discord_username,
                 team_id: user.team_id,
-                team_name: user.team_name,
+                team_name,
                 roles,
             }))
         }

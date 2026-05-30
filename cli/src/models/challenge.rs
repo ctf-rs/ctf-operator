@@ -45,6 +45,7 @@ pub struct Challenge {
     pub files: Vec<PathBuf>,
     #[garde(dive)]
     pub flags: Vec<ChallengeFlag>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[garde(dive)]
     pub containers: Vec<ChallengeContainer>,
 }

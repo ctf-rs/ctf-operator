@@ -108,7 +108,6 @@ where
 
             match db::get_user_by_session(&state.db, &token).await {
                 Ok(Some(mut user)) => {
-                    // In user mode, ignore team fields from Keycloak
                     if !state.config.mode.is_team() {
                         user.team_id = None;
                         user.team_name = None;
