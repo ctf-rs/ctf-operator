@@ -813,14 +813,15 @@ async fn ensure_target_namespace(
         MANAGED_BY_VALUE.to_string(),
     );
 
-    // If any container requires kata + privileged, set the Pod Security
-    // Admission label so the namespace allows privileged pods (needed for
-    // Talos / PSS "baseline" default).
-    let needs_privileged = challenge
-        .spec
-        .containers
-        .iter()
-        .any(|c| c.kata.as_ref().is_some_and(|k| k.privileged));
+    // If any container requires kata + privileged, or if useHostPort is
+    // enabled, set the Pod Security Admission label so the namespace allows
+    // privileged pods (needed for Talos / PSS "baseline" default).
+    let needs_privileged = state.config.runtime_config.instance.deployment.use_host_port
+        || challenge
+            .spec
+            .containers
+            .iter()
+            .any(|c| c.kata.as_ref().is_some_and(|k| k.privileged));
     if needs_privileged {
         labels.insert(
             "pod-security.kubernetes.io/enforce".to_string(),
