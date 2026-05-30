@@ -110,7 +110,7 @@ impl GroupTeamResolver {
         // Fetch top-level groups
         let top_groups: Vec<KeycloakGroup> = self
             .http
-            .get(format!("{}/groups?briefRepresentation=false", self.admin_url))
+            .get(format!("{}/groups?briefRepresentation=false&max=1000", self.admin_url))
             .bearer_auth(&token)
             .send()
             .await?
@@ -158,7 +158,7 @@ impl GroupTeamResolver {
                 let children: Vec<KeycloakGroup> = self
                     .http
                     .get(format!(
-                        "{}/groups/{}/children?briefRepresentation=false",
+                        "{}/groups/{}/children?briefRepresentation=false&max=1000",
                         self.admin_url, group.id
                     ))
                     .bearer_auth(token)
