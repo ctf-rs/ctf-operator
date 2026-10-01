@@ -16,7 +16,7 @@ services:
       - "5432:5432"
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.6
+    image: quay.io/keycloak/keycloak:26.8
     command: ["start-dev", "--import-realm", "--http-port=8081"]
     environment:
       KEYCLOAK_ADMIN: admin
