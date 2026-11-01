@@ -1,6 +1,0 @@
-{{- if not .Values.ctf.name }}
-{{ fail "ctf.name is required" }}
-{{- end }}
-{{- if eq (trim .Values.ctf.name) "" }}
-{{ fail "ctf.name cannot be empty" }}
-{{- end }}
