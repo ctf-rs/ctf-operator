@@ -90,7 +90,7 @@ Tests live in `helm/ctf-operator/tests/`.
 ## Docker image
 
 ```bash
-docker build -f Dockerfile.operator -t ctf-operator:local .
+docker build -t ctf-operator:local .
 ```
 
 The multi-stage build copies only the CLI and operator manifests and sources.
@@ -122,9 +122,7 @@ cargo run -p ctf-operator -- operator \
   --config ./examples/operator-config-local.yaml
 ```
 
-`scripts/dev/run-operator.sh` is an alternative launcher targeting the
-`kind-ctf-dev` context. `kind-config.yaml` is a standalone local cluster
-configuration; the CLI generates its own kind configuration.
+The CLI generates its own kind configuration from the supplied CTF YAML.
 
 The operator does not require a database or identity provider. CLI file upload
 requires S3 storage configured in the CTF YAML and explicitly supplied credentials
