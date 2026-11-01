@@ -31,8 +31,8 @@ cargo build --release -p ctf-cli --bin ctf
 cargo test --workspace
 ```
 
-The operator integration test checks that the generated CRDs and the copies
-packaged in the Helm chart match:
+The operator integration test compares CRDs generated directly from the Rust
+types against the YAML packaged in the Helm chart:
 
 ```bash
 cargo test -p ctf-operator --test crd_sync
@@ -61,8 +61,9 @@ Generate their YAML using the operator binary:
 cargo run -p ctf-operator -- crd
 ```
 
-This command replaces the generated `crd/` directory. Copy the generated files
-into `helm/ctf-operator/files/crds/`:
+This command replaces the local `crd/` output directory, which is not maintained
+in version control. Copy the generated files into `helm/ctf-operator/files/crds/`;
+these are the only versioned CRD YAML files:
 
 ```bash
 cp crd/*.yaml helm/ctf-operator/files/crds/
@@ -136,7 +137,7 @@ Do not modify live Kubernetes resources without explicit user authorization.
 | Change | Checks |
 | --- | --- |
 | Operator or CLI Rust code | Formatting, Clippy, and affected crate tests |
-| Shared CRD models | Rust checks, regenerate both YAML copies, CRD sync test, Helm tests |
+| Shared CRD models | Rust checks, regenerate Helm CRD YAML, CRD sync test, Helm tests |
 | Helm templates | Helm lint and unit tests |
 | Workspace or Docker build configuration | Workspace Rust checks and Docker build when available |
 

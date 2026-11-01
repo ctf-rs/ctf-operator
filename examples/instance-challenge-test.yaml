@@ -1,8 +1,0 @@
-apiVersion: operator.ctf.rs/v1alpha1
-kind: Instance
-metadata:
-  name: challenge-test-inst
-  namespace: ctf
-spec:
-  ctf: playground
-  challenge: challenge-test
