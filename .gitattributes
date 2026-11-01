@@ -3,22 +3,19 @@
 # use Linux line endings.
 * text eol=lf
 
-# Binary files often seen in our documentation.
-*.png filter=lfs diff=lfs merge=lfs -text
-*.jpg filter=lfs diff=lfs merge=lfs -text
-*.ico filter=lfs diff=lfs merge=lfs -text
-
-# We do not expect any of the following to be present in our repo but if they show up
-# we want them to be stored in LFS.
-*.dll filter=lfs diff=lfs merge=lfs -text
-*.exe filter=lfs diff=lfs merge=lfs -text
-*.zip filter=lfs diff=lfs merge=lfs -text
-*.lib filter=lfs diff=lfs merge=lfs -text
-*.so filter=lfs diff=lfs merge=lfs -text
-*.doc filter=lfs diff=lfs merge=lfs -text
-*.docx filter=lfs diff=lfs merge=lfs -text
-*.xls filter=lfs diff=lfs merge=lfs -text
-*.xlsx filter=lfs diff=lfs merge=lfs -text
-*.ppt filter=lfs diff=lfs merge=lfs -text
-*.pptx filter=lfs diff=lfs merge=lfs -text
-*.pdf filter=lfs diff=lfs merge=lfs -text
+# Store binary files directly in Git without line-ending conversion.
+*.png -text
+*.jpg -text
+*.ico -text
+*.dll -text
+*.exe -text
+*.zip -text
+*.lib -text
+*.so -text
+*.doc -text
+*.docx -text
+*.xls -text
+*.xlsx -text
+*.ppt -text
+*.pptx -text
+*.pdf -text
