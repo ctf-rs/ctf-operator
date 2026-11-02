@@ -184,6 +184,36 @@ impl FileReference {
     }
 }
 
+impl FileReference {
+    /// Path of the file as participants receive it: its path inside the top-level folder
+    /// of its challenge (`public/src/bot.js` becomes `src/bot.js`), or inside the build
+    /// output for generated files. Files outside any challenge keep only their name.
+    pub fn participant_path(&self, directory: &Path) -> Result<PathBuf> {
+        match self {
+            Self::Build { path, .. } => Ok(path.clone()),
+            Self::Host(path) => {
+                let file = directory
+                    .join(path)
+                    .canonicalize()
+                    .with_context(|| format!("input does not exist: {}", path.display()))?;
+                let owner = file
+                    .ancestors()
+                    .skip(1)
+                    .find(|ancestor| ancestor.join("challenge.yaml").is_file());
+                let relative = owner
+                    .and_then(|owner| file.strip_prefix(owner).ok())
+                    .map(Path::to_path_buf);
+                Ok(match relative {
+                    Some(relative) if relative.components().count() > 1 => {
+                        relative.components().skip(1).collect()
+                    }
+                    _ => PathBuf::from(file.file_name().context("file has no name")?),
+                })
+            }
+        }
+    }
+}
+
 impl Image {
     pub fn validate(&self, directory: &Path) -> Result<()> {
         match self {
@@ -267,6 +297,7 @@ impl Project {
 }
 
 impl Challenge {
+    #[must_use]
     pub fn domain(&self) -> DomainChallenge {
         DomainChallenge {
             name: self.name.clone(),
@@ -277,7 +308,7 @@ impl Challenge {
             authors: self.authors.clone(),
             instance_duration_seconds: self.instance_duration_seconds,
             instancing: self.instancing,
-            files: self.files.iter().map(PathBuf::from).collect(),
+            files: Vec::new(),
             flags: self.flags.clone(),
             services: self
                 .services
@@ -328,13 +359,12 @@ impl Challenge {
         let mut file_names = HashSet::new();
         for file in &self.files {
             self.validate_reference(file, directory, true)?;
-            let name = match FileReference::parse(file)? {
-                FileReference::Host(path) | FileReference::Build { path, .. } => path
-                    .file_name()
-                    .context("file reference has no filename")?
-                    .to_owned(),
-            };
-            ensure!(file_names.insert(name), "participant filenames collide");
+            let name = FileReference::parse(file)?.participant_path(directory)?;
+            ensure!(
+                file_names.insert(name.clone()),
+                "participant files collide at {}",
+                name.display()
+            );
         }
         for flag in &self.flags {
             ensure!(
@@ -402,6 +432,38 @@ pub fn endpoint_prefix(service: &str, port: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn participant_paths_keep_layout_inside_the_challenge_folder() -> Result<()> {
+        let root =
+            std::env::temp_dir().join(format!("ctf-participant-{:016x}", rand::random::<u64>()));
+        for path in [
+            "one/challenge.yaml",
+            "one/public/src/bot.js",
+            "one/source/source.c",
+            "one/notes.txt",
+            "two/challenge.yaml",
+            "two/public/capture.pcap",
+        ] {
+            fs::create_dir_all(root.join(path).parent().context("test path has a parent")?)?;
+            fs::write(root.join(path), b"")?;
+        }
+        let one = root.join("one");
+        let path = |value: &str| FileReference::parse(value)?.participant_path(&one);
+        let result = (|| {
+            assert_eq!(path("public/src/bot.js")?, PathBuf::from("src/bot.js"));
+            assert_eq!(path("source/source.c")?, PathBuf::from("source.c"));
+            assert_eq!(path("notes.txt")?, PathBuf::from("notes.txt"));
+            assert_eq!(
+                path("../two/public/capture.pcap")?,
+                PathBuf::from("capture.pcap")
+            );
+            assert_eq!(path("build://compile/out/app")?, PathBuf::from("out/app"));
+            Ok(())
+        })();
+        fs::remove_dir_all(&root)?;
+        result
+    }
 
     #[test]
     fn generated_reference_uses_result_root_and_decodes_paths() -> Result<()> {

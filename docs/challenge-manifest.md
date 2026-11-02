@@ -265,6 +265,23 @@ entry's selected filesystem root.
 Generated paths are never relative to Dockerfile `WORKDIR`, the build context,
 or a host export directory.
 
+`files` lists individual files. Archives are not authored by hand: the platform
+decides how participants download the selected files.
+
+Each selected file keeps a path relative to where it was selected from:
+
+| Selected file | Path received by participants |
+|---|---|
+| Inside a challenge's top-level folder, e.g. `public/src/bot.js` | Path inside that folder: `src/bot.js` |
+| Directly in a challenge directory, e.g. `notes.txt` | `notes.txt` |
+| Generated, e.g. `build://prepare/out/program` | Path inside the build result: `out/program` |
+| Outside any challenge directory | File name only |
+
+The challenge directory of a host file is its nearest ancestor containing a
+`challenge.yaml`, so a file referenced from another challenge, for example
+`../other/public/capture.pcap`, is received as `capture.pcap`. Two selected
+files that resolve to the same participant path are an error.
+
 ### 5.2 Path domains
 
 | Path | Base |
@@ -518,7 +535,7 @@ The following details are outside the defined draft contract:
 |---|---|
 | Image sources | Registry images for static generators and test runners. |
 | Build dependencies | Bindings between separate static build entries. |
-| File selection | Directory entries in `files`, filename overrides, and duplicate final filenames. |
+| File selection | Directory entries in `files` and explicit participant path overrides. |
 | References | Escaping, traversal rejection, symlinks, and portability rules for absolute host paths. |
 | Test execution | Command overrides, writable mounts, and additional mount options. |
 | Endpoints | Endpoint formatting for every port type, HTTPS setup, and IPv6 formatting. |

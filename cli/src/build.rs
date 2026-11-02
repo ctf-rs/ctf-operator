@@ -95,14 +95,22 @@ async fn challenge_build(
     fs::create_dir(&file_directory)?;
     let mut files = Vec::new();
     for value in &challenge.manifest.files {
-        let source = FileReference::parse(value)?.resolve(&challenge.directory, &exports)?;
+        let reference = FileReference::parse(value)?;
+        let source = reference.resolve(&challenge.directory, &exports)?;
         ensure!(
             source.is_file(),
             "participant artifact is not a file: {}",
             source.display()
         );
-        let destination = file_directory.join(source.file_name().context("file has no name")?);
-        ensure!(!destination.exists(), "participant filenames collide");
+        let destination = file_directory.join(reference.participant_path(&challenge.directory)?);
+        ensure!(
+            !destination.exists(),
+            "participant files collide at {}",
+            destination.display()
+        );
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)?;
+        }
         fs::copy(&source, &destination).with_context(|| {
             format!(
                 "could not export {} to {}",
