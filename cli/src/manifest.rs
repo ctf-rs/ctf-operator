@@ -184,6 +184,21 @@ impl FileReference {
     }
 }
 
+/// Resolves `.` and `..` components without following symlinks.
+fn normalize(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 impl FileReference {
     /// Path of the file as participants receive it: its path inside the top-level folder
     /// of its challenge (`public/src/bot.js` becomes `src/bot.js`), or inside the build
@@ -192,10 +207,11 @@ impl FileReference {
         match self {
             Self::Build { path, .. } => Ok(path.clone()),
             Self::Host(path) => {
-                let file = directory
-                    .join(path)
-                    .canonicalize()
-                    .with_context(|| format!("input does not exist: {}", path.display()))?;
+                // Named by the listed path, not a symlink target: a listed link is published as
+                // a regular file under its own name.
+                let listed = directory.join(path);
+                ensure!(listed.exists(), "input does not exist: {}", path.display());
+                let file = normalize(&listed);
                 let owner = file
                     .ancestors()
                     .skip(1)
@@ -444,10 +460,13 @@ mod tests {
             "one/notes.txt",
             "two/challenge.yaml",
             "two/public/capture.pcap",
+            "one/source/glibc/libc-2.31.so",
         ] {
             fs::create_dir_all(root.join(path).parent().context("test path has a parent")?)?;
             fs::write(root.join(path), b"")?;
         }
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("libc-2.31.so", root.join("one/source/glibc/libc.so.6"))?;
         let one = root.join("one");
         let path = |value: &str| FileReference::parse(value)?.participant_path(&one);
         let result = (|| {
@@ -459,6 +478,11 @@ mod tests {
                 PathBuf::from("capture.pcap")
             );
             assert_eq!(path("build://compile/out/app")?, PathBuf::from("out/app"));
+            #[cfg(unix)]
+            assert_eq!(
+                path("source/glibc/libc.so.6")?,
+                PathBuf::from("glibc/libc.so.6")
+            );
             Ok(())
         })();
         fs::remove_dir_all(&root)?;
