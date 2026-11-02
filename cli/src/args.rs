@@ -38,8 +38,6 @@ pub struct ProjectArgs {
 pub struct TestArgs {
     #[command(flatten)]
     pub project: ProjectArgs,
-    #[arg(long, default_value = "ctf-local")]
-    pub cluster: String,
     #[arg(long)]
     pub keep: bool,
 }
@@ -48,18 +46,15 @@ pub struct TestArgs {
 pub enum ClusterCommand {
     Create {
         manifest: PathBuf,
-        #[arg(long, default_value = "ctf-local")]
-        name: String,
         /// Locally built operator image to import into kind.
         #[arg(long, default_value = "ctf-operator:local")]
         operator_image: String,
     },
     Status {
-        #[arg(default_value = "ctf-local")]
-        name: String,
+        manifest: PathBuf,
     },
     Delete {
-        name: String,
+        manifest: PathBuf,
     },
 }
 
@@ -80,14 +75,17 @@ impl Args {
             Command::Cluster { command } => match command {
                 ClusterCommand::Create {
                     manifest,
-                    name,
                     operator_image,
                 } => {
                     let project = Project::load(&manifest, &[])?;
-                    Box::pin(cluster::create(&project.ctf, &name, &operator_image, &ui)).await
+                    Box::pin(cluster::create(&project, &operator_image, &ui)).await
                 }
-                ClusterCommand::Status { name } => cluster::status(&name, &ui).await,
-                ClusterCommand::Delete { name } => cluster::delete(&name, &ui).await,
+                ClusterCommand::Status { manifest } => {
+                    cluster::status(&Project::load(&manifest, &[])?, &ui).await
+                }
+                ClusterCommand::Delete { manifest } => {
+                    cluster::delete(&Project::load(&manifest, &[])?, &ui).await
+                }
             },
         }
     }

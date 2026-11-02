@@ -3,8 +3,8 @@ use std::{collections::BTreeMap, fs, path::Path, time::Duration};
 use anyhow::{bail, ensure, Context, Result};
 use ctf_core::{
     k8s::{
-        Challenge as ChallengeResource, ChallengeService, ChallengeSpec, Ctf, CtfSpec, Flag,
-        Instance, InstancePhase, InstanceSpec, InstanceUser,
+        Challenge as ChallengeResource, ChallengeService, ChallengeSpec, Flag, Instance,
+        InstancePhase, InstanceSpec, InstanceUser,
     },
     models::ChallengePortType,
 };
@@ -67,22 +67,21 @@ pub async fn project(args: TestArgs, ui: &Ui) -> Result<()> {
         !challenge.manifest.services.is_empty() && !challenge.manifest.test.is_empty()
     });
     let runtime = if needs_runtime {
-        let state = LocalCluster::load(&args.cluster)?;
+        let state = LocalCluster::load(&project.ctf.name)?;
         state.supports(&project.ctf.network.ports)?;
         Some(Runtime {
             client: state.client().await?,
             node: state.node_address().await?,
             network: state.network(),
-            cluster: args.cluster,
-            ctf_name: format!("run-{}", output.run),
+            cluster: project.ctf.name.clone(),
+            ctf_name: project.ctf.name.clone(),
             names: project
                 .challenges
                 .iter()
-                .enumerate()
-                .map(|(index, challenge)| {
+                .map(|challenge| {
                     (
                         challenge.manifest.name.clone(),
-                        format!("ch-{}-{index}", &output.run[..8]),
+                        challenge.manifest.name.clone(),
                     )
                 })
                 .collect(),
@@ -437,26 +436,11 @@ impl Runtime {
         let hosted = project.challenges.iter().filter(|challenge| {
             !challenge.manifest.services.is_empty() && !challenge.manifest.test.is_empty()
         });
-        let challenges = hosted
-            .clone()
-            .map(|challenge| self.names[&challenge.manifest.name].clone())
-            .collect();
-        let ctf = Ctf {
-            metadata: self.metadata(self.ctf_name.clone()),
-            spec: CtfSpec {
-                full_name: project.ctf.full_name.clone(),
-                description: project.ctf.description.clone(),
-                public: false,
-                instance_duration_seconds: project.ctf.instance_duration_seconds,
-                challenges,
-                flag: project.ctf.flag.clone(),
-                network: project.ctf.network.clone(),
-                scoreboard: project.ctf.scoreboard.clone(),
-                schedule: project.ctf.schedule.clone(),
-            },
-            status: None,
-        };
-        cluster::apply(&Api::namespaced(self.client.clone(), NAMESPACE), &ctf).await?;
+        cluster::apply(
+            &Api::namespaced(self.client.clone(), NAMESPACE),
+            &cluster::event_ctf(project),
+        )
+        .await?;
         for challenge in hosted {
             let manifest = &challenge.manifest;
             let services = manifest
@@ -502,7 +486,7 @@ impl Runtime {
         let challenge_name = &self.names[&challenge.manifest.name];
         let api = Api::<Instance>::namespaced(self.client.clone(), NAMESPACE);
         let name = if challenge.manifest.instancing {
-            let name = format!("ctf-inst-{}-{}-{index}", &self.run[..8], challenge_name);
+            let name = instance_name(&self.run, index, challenge_name);
             let instance = Instance {
                 metadata: self.metadata(name.clone()),
                 spec: InstanceSpec {
@@ -699,11 +683,6 @@ impl Runtime {
                     }
                 }
             }
-            let ctfs = Api::<Ctf>::namespaced(self.client.clone(), NAMESPACE);
-            if ctfs.get_opt(&self.ctf_name).await?.is_some() {
-                ctfs.delete(&self.ctf_name, &DeleteParams::default())
-                    .await?;
-            }
             Ok::<(), anyhow::Error>(())
         }
         .await;
@@ -713,6 +692,13 @@ impl Runtime {
         }
         result
     }
+}
+
+/// A per-test instance name: unique per run and test, and a valid 63-character DNS label.
+fn instance_name(run: &str, index: usize, challenge: &str) -> String {
+    let mut name = format!("test-{}-{index}-{challenge}", &run[..8]);
+    name.truncate(63);
+    name.trim_end_matches('-').to_owned()
 }
 
 fn endpoint(kind: &ChallengePortType, host: &str, port: i32) -> String {

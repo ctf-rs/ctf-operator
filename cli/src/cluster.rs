@@ -7,8 +7,8 @@ use std::{
 
 use anyhow::{bail, ensure, Context, Result};
 use ctf_core::{
-    k8s::{Challenge, Ctf as CtfResource, Flag, Instance, PortClaim, ReservationSet},
-    models::{Ctf, CtfPorts},
+    k8s::{Challenge, Ctf as CtfResource, CtfSpec, Flag, Instance, PortClaim, ReservationSet},
+    models::CtfPorts,
 };
 use k8s_openapi::{
     api::{
@@ -19,7 +19,7 @@ use k8s_openapi::{
     apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition,
 };
 use kube::{
-    api::{Patch, PatchParams},
+    api::{ObjectMeta, Patch, PatchParams},
     config::{KubeConfigOptions, Kubeconfig},
     runtime::wait::{await_condition, conditions},
     Api, Client, Config, CustomResourceExt, Resource, ResourceExt,
@@ -29,11 +29,14 @@ use serde_json::json;
 use tokio::process::Command;
 
 use crate::{
+    manifest::Project,
     process::{self, Format},
     ui::Ui,
 };
 
 pub const NAMESPACE: &str = "ctf-local";
+/// kind names the node `<cluster>-control-plane`, which must remain a 63-character DNS label.
+const MAX_CLUSTER_NAME: usize = 63 - "-control-plane".len();
 
 fn network_name(cluster: &str) -> String {
     format!("ctf-{cluster}")
@@ -121,13 +124,13 @@ impl LocalCluster {
         ensure!(
             name != "kind"
                 && !name.is_empty()
-                && name.len() <= 40
+                && name.len() <= MAX_CLUSTER_NAME
                 && name
                     .bytes()
                     .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-')
                 && !name.starts_with('-')
                 && !name.ends_with('-'),
-            "cluster name must be a DNS label of at most 40 characters"
+            "event name {name} cannot name a kind cluster: it must be a DNS label of at most {MAX_CLUSTER_NAME} characters"
         );
         let root = env::var_os("XDG_STATE_HOME")
             .map(PathBuf::from)
@@ -137,12 +140,12 @@ impl LocalCluster {
         Ok(root.join("ctf/clusters").join(name))
     }
 
+    /// Loads the cluster owned for the event `name`.
     pub fn load(name: &str) -> Result<Self> {
         let path = Self::directory(name)?.join("cluster.json");
-        let state: Self = serde_json::from_slice(
-            &fs::read(&path)
-                .with_context(|| format!("no owned cluster state at {}", path.display()))?,
-        )?;
+        let state: Self = serde_json::from_slice(&fs::read(&path).with_context(|| {
+            format!("event {name} has no local cluster; run `ctf cluster create <ctf.yaml>` first")
+        })?)?;
         ensure!(
             state.name == name,
             "cluster ownership record does not match {name}"
@@ -199,7 +202,11 @@ impl LocalCluster {
     }
 }
 
-pub async fn create(ctf: &Ctf, name: &str, operator_image: &str, ui: &Ui) -> Result<()> {
+/// Creates or updates the event's cluster, named after the event, with its operator and
+/// its single `Ctf`.
+pub async fn create(project: &Project, operator_image: &str, ui: &Ui) -> Result<()> {
+    let ctf = &project.ctf;
+    let name = ctf.name.as_str();
     let directory = LocalCluster::directory(name)?;
     let existing = exists(name).await?;
     let state = if existing {
@@ -280,7 +287,8 @@ pub async fn create(ctf: &Ctf, name: &str, operator_image: &str, ui: &Ui) -> Res
         ui,
     )
     .await?;
-    Box::pin(install_operator(client, &image, ui)).await?;
+    Box::pin(install_operator(client.clone(), &image, ui)).await?;
+    apply(&Api::namespaced(client, NAMESPACE), &event_ctf(project)).await?;
     ui.message(format!(
         "Cluster {name} ready; kubeconfig: {}",
         kubeconfig.display()
@@ -329,7 +337,33 @@ async fn exists(name: &str) -> Result<bool> {
         .any(|line| line == name))
 }
 
-pub async fn status(name: &str, ui: &Ui) -> Result<()> {
+/// The event's single `Ctf`, referencing every challenge of the event.
+#[must_use]
+pub fn event_ctf(project: &Project) -> CtfResource {
+    let ctf = &project.ctf;
+    CtfResource {
+        metadata: ObjectMeta {
+            name: Some(ctf.name.clone()),
+            namespace: Some(NAMESPACE.to_owned()),
+            ..ObjectMeta::default()
+        },
+        spec: CtfSpec {
+            full_name: ctf.full_name.clone(),
+            description: ctf.description.clone(),
+            public: false,
+            instance_duration_seconds: ctf.instance_duration_seconds,
+            challenges: project.names.clone(),
+            flag: ctf.flag.clone(),
+            network: ctf.network.clone(),
+            scoreboard: ctf.scoreboard.clone(),
+            schedule: ctf.schedule.clone(),
+        },
+        status: None,
+    }
+}
+
+pub async fn status(project: &Project, ui: &Ui) -> Result<()> {
+    let name = project.ctf.name.as_str();
     let state = LocalCluster::load(name)?;
     ensure!(exists(name).await?, "owned cluster {name} does not exist");
     let client = state.client().await?;
@@ -349,7 +383,8 @@ pub async fn status(name: &str, ui: &Ui) -> Result<()> {
     Ok(())
 }
 
-pub async fn delete(name: &str, ui: &Ui) -> Result<()> {
+pub async fn delete(project: &Project, ui: &Ui) -> Result<()> {
+    let name = project.ctf.name.as_str();
     let _state = LocalCluster::load(name).context("refusing to delete an unowned cluster")?;
     let directory = LocalCluster::directory(name)?;
     let mut command = kind(name);

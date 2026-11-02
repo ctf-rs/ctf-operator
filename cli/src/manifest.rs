@@ -109,6 +109,9 @@ pub struct LoadedChallenge {
 #[derive(Debug)]
 pub struct Project {
     pub ctf: Ctf,
+    /// Names of every challenge in the event, in manifest order.
+    pub names: Vec<String>,
+    /// Selected challenges.
     pub challenges: Vec<LoadedChallenge>,
 }
 
@@ -223,6 +226,7 @@ impl Project {
             .context("invalid event configuration")?;
         let mut challenges = Vec::new();
         let mut names = HashSet::new();
+        let mut ordered = Vec::new();
         for relative in &ctf.challenges {
             let manifest_path = root.join(relative);
             let manifest_path = manifest_path
@@ -239,6 +243,7 @@ impl Project {
                 "duplicate challenge {}",
                 manifest.name
             );
+            ordered.push(manifest.name.clone());
             manifest
                 .validate(&directory)
                 .with_context(|| format!("invalid challenge {}", manifest.name))?;
@@ -253,7 +258,11 @@ impl Project {
             ensure!(names.contains(name), "unknown challenge selection {name}");
         }
         ensure!(!challenges.is_empty(), "no challenges selected");
-        Ok(Self { ctf, challenges })
+        Ok(Self {
+            ctf,
+            names: ordered,
+            challenges,
+        })
     }
 }
 
