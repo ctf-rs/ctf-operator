@@ -87,6 +87,8 @@ pub enum InstanceServiceType {
     #[serde(rename = "ClusterIP")]
     #[default]
     ClusterIp,
+    #[serde(rename = "NodePort")]
+    NodePort,
     #[serde(rename = "LoadBalancer")]
     LoadBalancer,
 }
@@ -96,6 +98,7 @@ impl InstanceServiceType {
     pub const fn as_k8s_str(&self) -> &'static str {
         match self {
             Self::ClusterIp => "ClusterIP",
+            Self::NodePort => "NodePort",
             Self::LoadBalancer => "LoadBalancer",
         }
     }

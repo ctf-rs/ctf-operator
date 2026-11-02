@@ -6,7 +6,7 @@ use crate::{
     runtime::{CtfResult, CtfState},
     util::{Controller, Watcher},
 };
-use ctf_cli::k8s::Instance;
+use ctf_core::k8s::Instance;
 use std::sync::Arc;
 
 pub fn controller(

@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    validate_relative_existing_file, Ctf, Flag, FlagFormat, FlagMatchOptions, FlagRandomRules,
+    validate_relative_existing_file, CtfFlag, Flag, FlagFormat, FlagMatchOptions, FlagRandomRules,
     FlagScoring, ValidationError, ValidationResult,
 };
 
@@ -47,7 +47,7 @@ pub struct Challenge {
     pub flags: Vec<ChallengeFlag>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[garde(dive)]
-    pub containers: Vec<ChallengeContainer>,
+    pub services: Vec<ChallengeService>,
 }
 
 #[derive(
@@ -155,26 +155,27 @@ impl ChallengeDifficulty {
 #[derive(
     Debug, Default, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate,
 )]
+#[serde(deny_unknown_fields)]
 pub struct ChallengeFlag {
     #[garde(length(min = 1, max = 63))]
     #[garde(pattern(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"))]
     pub name: String,
     /// Optional human-readable label for the flag (e.g., "Web Flag", "Forensics Flag").
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[garde(skip)]
     pub label: Option<String>,
     #[garde(length(min = 1, max = 127))]
     #[garde(ascii)]
     pub body: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[garde(pattern(r"^[a-zA-Z0-9]+$"))]
     #[garde(ascii)]
     #[garde(length(min = 3, max = 6))]
     pub prefix: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[garde(skip)]
     pub format: Option<FlagFormat>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[garde(dive)]
     pub random: Option<FlagRandomRules>,
     #[serde(default)]
@@ -185,15 +186,21 @@ pub struct ChallengeFlag {
     #[garde(dive)]
     pub scoring: FlagScoring,
     /// Optional difficulty for this flag.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[garde(skip)]
     pub difficulty: Option<ChallengeDifficulty>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FlagBinding {
+    Static,
+    Injected { instancing: bool },
+}
+
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, garde::Validate)]
-pub struct ChallengeContainer {
+pub struct ChallengeService {
     #[garde(length(min = 1, max = 63))]
-    #[garde(pattern(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"))]
+    #[garde(pattern(r"^[a-z]([-a-z0-9]*[a-z0-9])?$"))]
     pub name: String,
     #[garde(skip)]
     pub image: ContainerImage,
@@ -213,6 +220,7 @@ pub struct ChallengeContainer {
 
 /// Kata Containers runtime configuration.
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(deny_unknown_fields)]
 pub struct ContainerKata {
     /// Custom kernel path for the Kata hypervisor.
     /// Maps to annotation `io.katacontainers.config.hypervisor.kernel`.
@@ -231,21 +239,24 @@ pub enum ContainerImage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, Eq, garde::Validate)]
+#[serde(deny_unknown_fields)]
 pub struct ContainerEnv {
     #[garde(length(min = 1))]
+    #[garde(pattern(r"^[A-Za-z_][A-Za-z0-9_]*$"))]
     pub name: String,
     #[garde(skip)]
     pub value: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, Eq, garde::Validate)]
+#[serde(deny_unknown_fields)]
 pub struct ContainerFlag {
     #[garde(length(min = 1, max = 63))]
     #[garde(pattern(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"))]
     pub name: String,
     /// Inject the flag as an environment variable with this name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[garde(skip)]
+    #[garde(pattern(r"^[A-Za-z_][A-Za-z0-9_]*$"))]
     pub env: Option<String>,
     /// Inject the flag as a file at this absolute path (e.g. `/app/flag.txt`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -254,16 +265,18 @@ pub struct ContainerFlag {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, Eq, garde::Validate)]
+#[serde(deny_unknown_fields)]
 #[expect(
     clippy::struct_field_names,
     reason = "container_port is clearer than just 'port' in ContainerPort"
 )]
 pub struct ContainerPort {
-    #[garde(length(min = 1, max = 63))]
+    #[garde(length(min = 1, max = 15))]
     #[garde(pattern(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"))]
+    #[garde(custom(validate_port_name))]
     pub name: String,
     #[serde(rename = "containerPort")]
-    #[garde(skip)]
+    #[garde(range(min = 1))]
     pub container_port: u16,
     #[serde(default)]
     #[garde(skip)]
@@ -272,8 +285,21 @@ pub struct ContainerPort {
     #[garde(skip)]
     pub port_type: ChallengePortType,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[garde(skip)]
+    #[garde(pattern(r"^[A-Za-z_][A-Za-z0-9_]*$"))]
     pub env: Option<String>,
+}
+
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "garde custom validator signature requirement"
+)]
+fn validate_port_name(name: &str, _: &()) -> garde::Result {
+    if name.contains("--") || !name.bytes().any(|byte| byte.is_ascii_alphabetic()) {
+        return Err(garde::Error::new(
+            "port names must contain a letter and no adjacent hyphens",
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -292,17 +318,23 @@ pub enum ChallengePortType {
 
 impl ChallengeFlag {
     #[must_use]
-    pub fn flag(&self, ctf: &Ctf) -> Flag {
+    pub fn effective_flag(&self, defaults: &CtfFlag, binding: FlagBinding) -> Flag {
         let body = self.body.clone();
         let prefix = self
             .prefix
             .clone()
-            .unwrap_or_else(|| ctf.flag.prefix.clone());
-        let format = self.format.unwrap_or(ctf.flag.format);
-        let random = self.random.clone().or_else(|| ctf.flag.random.clone());
+            .unwrap_or_else(|| defaults.prefix.clone());
+        let format = self.format.unwrap_or(defaults.format);
+        let random = match binding {
+            FlagBinding::Static => None,
+            FlagBinding::Injected { instancing: false } => self.random.clone(),
+            FlagBinding::Injected { instancing: true } => {
+                self.random.clone().or_else(|| defaults.random.clone())
+            }
+        };
         let options = FlagMatchOptions {
-            ignore_case: self.options.ignore_case || ctf.flag.options.ignore_case,
-            ignore_random: self.options.ignore_random || ctf.flag.options.ignore_random,
+            ignore_case: self.options.ignore_case || defaults.options.ignore_case,
+            ignore_random: self.options.ignore_random || defaults.options.ignore_random,
         };
 
         Flag {
@@ -317,11 +349,25 @@ impl ChallengeFlag {
 }
 
 impl Challenge {
+    #[must_use]
+    pub fn flag_binding(&self, name: &str) -> FlagBinding {
+        if self
+            .services
+            .iter()
+            .any(|service| service.flags.iter().any(|flag| flag.name == name))
+        {
+            FlagBinding::Injected {
+                instancing: self.instancing,
+            }
+        } else {
+            FlagBinding::Static
+        }
+    }
+
     pub fn validate_strict(&self) -> ValidationResult<()> {
         garde::Validate::validate(self).map_err(ValidationError::from_garde)?;
-
-        if self.files.len() > 3 {
-            return Err(ValidationError::TooManyChallengeFiles);
+        if self.instancing && self.services.is_empty() {
+            return Err(ValidationError::InstancingWithoutServices);
         }
 
         let mut file_names = HashSet::<String>::new();
@@ -341,17 +387,19 @@ impl Challenge {
             if !flag_names.insert(flag.name.as_str()) {
                 return Err(ValidationError::DuplicateFlagName);
             }
+            if flag.random.is_some() && self.flag_binding(&flag.name) == FlagBinding::Static {
+                return Err(ValidationError::RandomStaticFlag(flag.name.clone()));
+            }
         }
 
         let mut container_names = HashSet::<&str>::new();
-        let mut challenge_port_names = HashSet::<&str>::new();
         let known_flags = self
             .flags
             .iter()
             .map(|flag| flag.name.as_str())
             .collect::<HashSet<_>>();
 
-        for container in &self.containers {
+        for container in &self.services {
             if !container_names.insert(container.name.as_str()) {
                 return Err(ValidationError::DuplicateContainerName);
             }
@@ -361,6 +409,11 @@ impl Challenge {
             for flag in &container.flags {
                 if !container_flag_names.insert(flag.name.as_str()) {
                     return Err(ValidationError::DuplicateContainerFlagName);
+                }
+                for env in &container.env {
+                    if !container_env_names.insert(&env.name) {
+                        return Err(ValidationError::DuplicateContainerEnv);
+                    }
                 }
 
                 if flag.env.is_none() && flag.file.is_none() {
@@ -389,9 +442,10 @@ impl Challenge {
                 if !container_port_names.insert(port.name.as_str()) {
                     return Err(ValidationError::DuplicateContainerPortName);
                 }
-
-                if !challenge_port_names.insert(port.name.as_str()) {
-                    return Err(ValidationError::DuplicateChallengePortName);
+                if let Some(env) = &port.env {
+                    if !container_env_names.insert(env) {
+                        return Err(ValidationError::DuplicateContainerEnv);
+                    }
                 }
             }
         }
@@ -410,16 +464,93 @@ impl Challenge {
             validate_relative_existing_file(base_dir, file_path, format!("files[{idx}]"))?;
         }
 
-        for (idx, container) in self.containers.iter().enumerate() {
+        for (idx, container) in self.services.iter().enumerate() {
             if let ContainerImage::Dockerfile { path } = &container.image {
                 validate_relative_existing_file(
                     base_dir,
                     path,
-                    format!("containers[{idx}].image.path"),
+                    format!("services[{idx}].image.path"),
                 )?;
             }
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unset_optional_flag_fields_are_omitted_for_kubernetes_enums() {
+        let flag = ChallengeFlag {
+            name: "main".into(),
+            body: "literal".into(),
+            ..ChallengeFlag::default()
+        };
+        let value = serde_json::to_value(&flag).expect("flag serializes");
+        for field in ["label", "prefix", "format", "random", "difficulty"] {
+            assert!(value.get(field).is_none(), "{field} must be omitted");
+        }
+    }
+
+    #[test]
+    fn event_randomization_only_applies_to_instanced_injected_flags() {
+        let defaults = CtfFlag {
+            random: Some(serde_json::from_str("{}").expect("valid random defaults")),
+            ..CtfFlag::default()
+        };
+        let flag = ChallengeFlag {
+            name: "main".into(),
+            body: "literal".into(),
+            ..ChallengeFlag::default()
+        };
+        assert_eq!(
+            flag.effective_flag(&defaults, FlagBinding::Static)
+                .generate(),
+            "CTF{literal}"
+        );
+        assert!(flag
+            .effective_flag(&defaults, FlagBinding::Injected { instancing: false })
+            .random
+            .is_none());
+        assert!(flag
+            .effective_flag(&defaults, FlagBinding::Injected { instancing: true })
+            .random
+            .is_some());
+        let explicit = ChallengeFlag {
+            random: defaults.random.clone(),
+            ..flag
+        };
+        assert!(explicit
+            .effective_flag(&defaults, FlagBinding::Injected { instancing: false })
+            .random
+            .is_some());
+    }
+
+    #[test]
+    fn rejects_static_randomization_and_offline_instancing() {
+        let mut challenge = Challenge {
+            name: "offline".into(),
+            full_name: "Offline".into(),
+            instancing: true,
+            ..Challenge::default()
+        };
+        assert_eq!(
+            challenge.validate_strict(),
+            Err(ValidationError::InstancingWithoutServices)
+        );
+        challenge.instancing = false;
+        challenge.flags.push(ChallengeFlag {
+            name: "main".into(),
+            body: "literal".into(),
+            random: Some(serde_json::from_str("{}").expect("valid random defaults")),
+            ..ChallengeFlag::default()
+        });
+        assert!(matches!(
+            challenge.validate_strict(),
+            Err(ValidationError::RandomStaticFlag(_))
+        ));
     }
 }

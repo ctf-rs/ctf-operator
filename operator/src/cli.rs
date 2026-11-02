@@ -16,8 +16,8 @@ pub enum Command {
 
 #[derive(Debug, Parser)]
 pub struct CrdArgs {
-    #[arg(short = 'n', long = "namespace", default_value = "ctf")]
-    pub namespace: String,
+    #[arg(long, default_value = "crd")]
+    pub output: PathBuf,
 }
 
 #[derive(Debug, Parser)]

@@ -11,10 +11,11 @@ use crate::{
     },
     util::Reconciler,
 };
-use ctf_cli::k8s::{
-    Challenge, ConditionStatus, Ctf, Flag, FlagSpec, Instance, InstancePhase, InstanceStatus,
+use ctf_core::k8s::{
+    Challenge, ConditionStatus, Ctf, Flag, FlagSpec, Instance, InstanceEndpoint, InstancePhase,
+    InstanceStatus,
 };
-use ctf_cli::k8s::{PortClaim, PortClaimSpec, ReservationRef, ReservationSet};
+use ctf_core::k8s::{PortClaim, PortClaimSpec, ReservationRef, ReservationSet};
 use jiff::Timestamp;
 use k8s_openapi::{
     api::{
@@ -34,6 +35,7 @@ use kube::{
 use serde_json::json;
 
 const FLAG_VOLUME_NAME: &str = "flag-files";
+const LABEL_INSTANCE_UID: &str = "operators.ctf.rs/instance-uid";
 
 fn flag_config_map_name(instance: &Instance) -> String {
     format!("{}-flags", instance.name_any())
@@ -252,8 +254,10 @@ async fn reconcile_apply(
     instance: Arc<Instance>,
     state: Arc<CtfState>,
 ) -> Result<Action, CtfError> {
-    let target_namespace = target_namespace_for_instance(instance.as_ref());
+    let target_namespace =
+        target_namespace_for_instance(instance.as_ref(), &state.config.instance_namespace_prefix)?;
     let mut status = instance.status.clone().unwrap_or_default();
+    status.namespace = Some(target_namespace.clone());
 
     // Validate references (Ctf and Challenge)
     let refs = match validate_references(instance.as_ref(), &state, &mut status).await? {
@@ -350,6 +354,12 @@ async fn reconcile_apply(
 
     // Update status conditions
     update_status_conditions(&mut status, &observed);
+    status.endpoints = observed_endpoints(
+        refs.challenge.as_ref(),
+        &observed,
+        &target_namespace,
+        &state,
+    );
     let all_ready = all_conditions_true_except(&status, "Ready");
 
     initialize_ready_timer(
@@ -406,7 +416,8 @@ async fn reconcile_cleanup(
     state: Arc<CtfState>,
     api: &Api<Instance>,
 ) -> Result<Action, CtfError> {
-    let target_namespace = target_namespace_for_instance(instance.as_ref());
+    let target_namespace =
+        target_namespace_for_instance(instance.as_ref(), &state.config.instance_namespace_prefix)?;
     let ns_api: Api<Namespace> = Api::all(state.client.clone());
     let name = instance.name_any();
 
@@ -420,7 +431,8 @@ async fn reconcile_cleanup(
 
     // Check if namespace still exists
     match ns_api.get(&target_namespace).await {
-        Ok(_ns) => {
+        Ok(ns) => {
+            ensure_namespace_owner(&ns, instance.as_ref())?;
             // Namespace still exists, try to delete it (or it's already terminating)
             match ns_api
                 .delete(&target_namespace, &DeleteParams::default())
@@ -497,20 +509,8 @@ fn set_not_ready(status: &mut InstanceStatus, typ: &str, reason: &str, message: 
         .conditions
         .set("Ready", ConditionStatus::False, "NotReady", "");
     // Set phase and message for user-facing display
-    status.phase = InstancePhase::Error;
-    status.message = Some(sanitize_error_message(message));
-}
-
-/// Sanitizes error messages to avoid exposing sensitive information
-fn sanitize_error_message(msg: &str) -> String {
-    // Keep it generic but helpful
-    if msg.contains("not found") || msg.contains("Missing") {
-        "Required resource not found. Please try again.".to_string()
-    } else if msg.contains("not ready") {
-        "Waiting for dependencies to become available.".to_string()
-    } else {
-        "Instance setup encountered an issue. Please wait or try again.".to_string()
-    }
+    status.phase = InstancePhase::Initializing;
+    status.message = Some(message.to_owned());
 }
 
 fn set_resource_condition(
@@ -565,7 +565,7 @@ fn all_conditions_true_except(status: &InstanceStatus, skip: &str) -> bool {
     conditions.all_true()
 }
 
-fn conditions_true_excluding_ready(conditions: &ctf_cli::k8s::Conditions) -> bool {
+fn conditions_true_excluding_ready(conditions: &ctf_core::k8s::Conditions) -> bool {
     let mut clone = conditions.clone();
     clone.remove("Ready");
     clone.all_true()
@@ -613,6 +613,9 @@ fn base_labels(instance: &Instance) -> BTreeMap<String, String> {
     labels.insert(LABEL_CTF.to_string(), instance.spec.ctf.clone());
     labels.insert(LABEL_CHALLENGE.to_string(), instance.spec.challenge.clone());
     labels.insert(LABEL_INSTANCE.to_string(), instance.name_any());
+    if let Some(uid) = instance.uid() {
+        labels.insert(LABEL_INSTANCE_UID.to_owned(), uid);
+    }
     labels.insert(
         LABEL_NAMESPACE.to_string(),
         instance.namespace().unwrap_or_default(),
@@ -645,15 +648,25 @@ fn managed_resource_metadata(
 }
 
 fn port_claim_name(instance: &Instance, port_name: &str) -> String {
-    format!("{}-{}", instance.name_any(), port_name)
+    let identity = format!(
+        "{}\0{}\0{port_name}",
+        instance.namespace().unwrap_or_default(),
+        instance.name_any()
+    );
+    let digest = digest(&identity);
+    format!("port-{}", &digest[..58])
+}
+
+fn endpoint_key(service: &str, port: &str) -> String {
+    format!("{service}/{port}")
 }
 
 fn exposed_port_names(challenge: &Challenge) -> BTreeSet<String> {
     let mut names = BTreeSet::new();
-    for container in &challenge.spec.containers {
+    for container in &challenge.spec.services {
         for port in &container.ports {
             if port.expose {
-                names.insert(port.name.clone());
+                names.insert(endpoint_key(&container.name, &port.name));
             }
         }
     }
@@ -721,13 +734,14 @@ fn collect_instance_resources(
 
     let mut allocated_ports = BTreeMap::new();
     let mut port_claims_ready = true;
-    for container in &challenge.spec.containers {
+    for container in &challenge.spec.services {
         for port in &container.ports {
             if !port.expose {
                 continue;
             }
 
-            let claim_name = port_claim_name(instance, &port.name);
+            let key = endpoint_key(&container.name, &port.name);
+            let claim_name = port_claim_name(instance, &key);
             let claim_ref = ObjectRef::<PortClaim>::new(&claim_name).within(target_namespace);
             let Some(port_claim) = state
                 .port_claims
@@ -745,14 +759,14 @@ fn collect_instance_resources(
                 port_claims_ready = false;
             }
             if let Some(value) = port_claim_status.port {
-                allocated_ports.insert(port.name.clone(), value);
+                allocated_ports.insert(key, value);
             } else {
                 port_claims_ready = false;
             }
         }
     }
 
-    let deployments_ready = challenge.spec.containers.iter().all(|c| {
+    let deployments_ready = challenge.spec.services.iter().all(|c| {
         let dep_ref = ObjectRef::<Deployment>::new(&c.name).within(target_namespace);
         state
             .deployments
@@ -762,16 +776,36 @@ fn collect_instance_resources(
             .is_some_and(|status| status.available_replicas.unwrap_or_default() > 0)
     });
 
-    let services_ready = challenge.spec.containers.iter().all(|c| {
-        // Only containers with ports get services
+    let services_ready = challenge.spec.services.iter().all(|c| {
+        // Only services with ports get services
         if c.ports.is_empty() {
             return true;
         }
         let svc_ref = ObjectRef::<Service>::new(&c.name).within(target_namespace);
-        state
+        let internal_ready = state
             .services
             .get(&svc_ref)
-            .is_some_and(|r| r.metadata.deletion_timestamp.is_none())
+            .is_some_and(|r| r.metadata.deletion_timestamp.is_none());
+        let external_ready = if state
+            .config
+            .runtime_config
+            .instance
+            .service
+            .type_
+            .as_k8s_str()
+            != "ClusterIP"
+            && c.ports.iter().any(|port| port.expose)
+        {
+            let external =
+                ObjectRef::<Service>::new(&external_service_name(&c.name)).within(target_namespace);
+            state
+                .services
+                .get(&external)
+                .is_some_and(|resource| resource.metadata.deletion_timestamp.is_none())
+        } else {
+            true
+        };
+        internal_ready && external_ready
     });
 
     ObservedInstanceResources {
@@ -785,20 +819,51 @@ fn collect_instance_resources(
     }
 }
 
-fn target_namespace_for_instance(instance: &Instance) -> String {
-    let mut ns = instance.name_any().to_ascii_lowercase();
-    if ns.len() > 63 {
-        ns.truncate(63);
-    }
-    while ns.ends_with('-') {
-        ns.pop();
-    }
+fn digest(value: &str) -> String {
+    use sha2::{Digest, Sha256};
+    use std::fmt::Write;
+    Sha256::digest(value.as_bytes())
+        .iter()
+        .fold(String::with_capacity(64), |mut hex, byte| {
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        })
+}
 
-    if ns.is_empty() {
-        "ctf-inst-fallback".clone_into(&mut ns);
+fn target_namespace_for_instance(instance: &Instance, prefix: &str) -> Result<String, CtfError> {
+    let uid = instance
+        .uid()
+        .ok_or_else(|| CtfError::ConfigError("instance has no UID".to_owned()))?;
+    let prefix = prefix.trim_end_matches('-');
+    let name = format!("{prefix}-{}", &digest(&uid)[..32]);
+    if name.len() > 63 {
+        return Err(CtfError::ConfigError(
+            "instance namespace prefix is too long".to_owned(),
+        ));
     }
+    Ok(name)
+}
 
-    ns
+fn ensure_namespace_owner(namespace: &Namespace, instance: &Instance) -> Result<(), CtfError> {
+    let expected = instance
+        .uid()
+        .ok_or_else(|| CtfError::ConfigError("instance has no UID".to_owned()))?;
+    let actual = namespace
+        .metadata
+        .labels
+        .as_ref()
+        .and_then(|labels| labels.get(LABEL_INSTANCE_UID));
+    if actual != Some(&expected) {
+        return Err(CtfError::ConfigError(format!(
+            "refusing to adopt or delete unowned namespace {}",
+            namespace.name_any()
+        )));
+    }
+    Ok(())
+}
+
+fn external_service_name(name: &str) -> String {
+    format!("ctf-exposed-{}", &digest(name)[..32])
 }
 
 async fn ensure_target_namespace(
@@ -816,10 +881,15 @@ async fn ensure_target_namespace(
     // If any container requires kata + privileged, or if useHostPort is
     // enabled, set the Pod Security Admission label so the namespace allows
     // privileged pods (needed for Talos / PSS "baseline" default).
-    let needs_privileged = state.config.runtime_config.instance.deployment.use_host_port
+    let needs_privileged = state
+        .config
+        .runtime_config
+        .instance
+        .deployment
+        .use_host_port
         || challenge
             .spec
-            .containers
+            .services
             .iter()
             .any(|c| c.kata.as_ref().is_some_and(|k| k.privileged));
     if needs_privileged {
@@ -833,10 +903,15 @@ async fn ensure_target_namespace(
     let ns_ref = ObjectRef::<Namespace>::new(target_namespace);
     if let Some(cached) = state.namespaces.get(&ns_ref) {
         if cached.metadata.deletion_timestamp.is_none() {
+            ensure_namespace_owner(cached.as_ref(), instance)?;
             if let Some(cached_labels) = &cached.metadata.labels {
                 if labels.iter().all(|(k, v)| cached_labels.get(k) == Some(v)) {
                     return Ok(());
                 }
+            }
+            let api = Api::<Namespace>::all(state.client.clone());
+            if let Some(existing) = api.get_opt(target_namespace).await? {
+                ensure_namespace_owner(&existing, instance)?;
             }
         }
     }
@@ -988,33 +1063,26 @@ async fn ensure_flags(
     for challenge_flag in &challenge.spec.flags {
         let name = format!("{}-{}", instance.name_any(), challenge_flag.name);
 
-        // For non-instanced (global) challenges, only use random rules
-        // explicitly set on the challenge flag. CTF-level random defaults
-        // are ignored so the flag stays static across all users.
-        let random = if challenge.spec.instancing {
-            challenge_flag
-                .random
-                .clone()
-                .or_else(|| ctf.spec.flag.random.clone())
+        let binding = if challenge.spec.services.iter().any(|service| {
+            service
+                .flags
+                .iter()
+                .any(|flag| flag.name == challenge_flag.name)
+        }) {
+            ctf_core::models::FlagBinding::Injected {
+                instancing: challenge.spec.instancing,
+            }
         } else {
-            challenge_flag.random.clone()
+            ctf_core::models::FlagBinding::Static
         };
-
+        let resolved = challenge_flag.effective_flag(&ctf.spec.flag, binding);
         let spec = FlagSpec {
-            prefix: challenge_flag
-                .prefix
-                .clone()
-                .unwrap_or_else(|| ctf.spec.flag.prefix.clone()),
-            format: challenge_flag.format.unwrap_or(ctf.spec.flag.format),
-            body: challenge_flag.body.clone(),
-            random,
-            options: ctf_cli::models::FlagMatchOptions {
-                ignore_case: challenge_flag.options.ignore_case
-                    || ctf.spec.flag.options.ignore_case,
-                ignore_random: challenge_flag.options.ignore_random
-                    || ctf.spec.flag.options.ignore_random,
-            },
-            scoring: challenge_flag.scoring.clone(),
+            prefix: resolved.prefix,
+            format: resolved.format,
+            body: resolved.body,
+            random: resolved.random,
+            options: resolved.options,
+            scoring: resolved.scoring,
         };
 
         // Check cache: skip API call if flag already exists with matching spec and labels
@@ -1056,7 +1124,7 @@ async fn ensure_flag_config_map(
 ) -> Result<(), CtfError> {
     let has_file_flags = challenge
         .spec
-        .containers
+        .services
         .iter()
         .any(|c| c.flags.iter().any(|f| f.file.is_some()));
 
@@ -1069,16 +1137,14 @@ async fn ensure_flag_config_map(
     let labels = base_labels(instance);
 
     let mut data = BTreeMap::new();
-    for container in &challenge.spec.containers {
+    for container in &challenge.spec.services {
         for container_flag in &container.flags {
             if let Some(file_path) = &container_flag.file {
                 if let Some(flag_value) = flag_values.get(&container_flag.name) {
-                    let file_name = std::path::Path::new(file_path)
-                        .file_name()
-                        .map_or_else(
-                            || container_flag.name.clone(),
-                            |f| f.to_string_lossy().into_owned(),
-                        );
+                    let file_name = std::path::Path::new(file_path).file_name().map_or_else(
+                        || container_flag.name.clone(),
+                        |f| f.to_string_lossy().into_owned(),
+                    );
                     let key = format!("{}-{}", container.name, file_name);
                     data.insert(key, flag_value.clone());
                 }
@@ -1114,7 +1180,7 @@ async fn ensure_deployments(
     let namespace = target_namespace.to_owned();
     let deployment_config = &state.config.runtime_config.instance.deployment;
 
-    for container_spec in &challenge.spec.containers {
+    for container_spec in &challenge.spec.services {
         let name = container_spec.name.clone();
 
         let mut labels = base_labels(instance);
@@ -1168,19 +1234,21 @@ async fn ensure_deployments(
 
 fn build_pod_template(
     instance: &Instance,
-    container_spec: &ctf_cli::k8s::ChallengeContainer,
+    container_spec: &ctf_core::k8s::ChallengeService,
     flag_values: &BTreeMap<String, String>,
     allocated_ports: &BTreeMap<String, u16>,
     deployment_config: &InstanceDeploymentConfig,
     labels: &BTreeMap<String, String>,
 ) -> PodTemplateSpec {
-    let container = build_container(container_spec, flag_values, allocated_ports, deployment_config);
+    let container = build_container(
+        container_spec,
+        flag_values,
+        allocated_ports,
+        deployment_config,
+    );
 
     let has_kata = container_spec.kata.is_some();
-    let kata_kernel = container_spec
-        .kata
-        .as_ref()
-        .and_then(|k| k.kernel.clone());
+    let kata_kernel = container_spec.kata.as_ref().and_then(|k| k.kernel.clone());
 
     let mut pod_annotations = BTreeMap::new();
     if let Some(kernel_path) = &kata_kernel {
@@ -1248,7 +1316,7 @@ fn build_pod_template(
 }
 
 fn build_container(
-    container: &ctf_cli::k8s::ChallengeContainer,
+    container: &ctf_core::k8s::ChallengeService,
     flag_values: &BTreeMap<String, String>,
     allocated_ports: &BTreeMap<String, u16>,
     deployment_config: &InstanceDeploymentConfig,
@@ -1261,13 +1329,9 @@ fn build_container(
             .iter()
             .filter_map(|cf| {
                 cf.file.as_ref().map(|file_path| {
-                    let file_name =
-                        std::path::Path::new(file_path)
-                            .file_name()
-                            .map_or_else(
-                                || cf.name.clone(),
-                                |f| f.to_string_lossy().into_owned(),
-                            );
+                    let file_name = std::path::Path::new(file_path)
+                        .file_name()
+                        .map_or_else(|| cf.name.clone(), |f| f.to_string_lossy().into_owned());
                     k8s_openapi::api::core::v1::VolumeMount {
                         name: FLAG_VOLUME_NAME.to_string(),
                         mount_path: file_path.clone(),
@@ -1302,10 +1366,12 @@ fn build_container(
             }
             for port in &container.ports {
                 if let Some(env_name) = &port.env {
-                    let port_value = allocated_ports.get(&port.name).map_or_else(
-                        || port.container_port.to_string(),
-                        std::string::ToString::to_string,
-                    );
+                    let port_value = allocated_ports
+                        .get(&endpoint_key(&container.name, &port.name))
+                        .map_or_else(
+                            || port.container_port.to_string(),
+                            std::string::ToString::to_string,
+                        );
                     env.push(k8s_openapi::api::core::v1::EnvVar {
                         name: env_name.clone(),
                         value: Some(port_value),
@@ -1338,7 +1404,9 @@ fn build_container(
                     .iter()
                     .map(|port| {
                         let host_port = if use_host_port && port.expose {
-                            allocated_ports.get(&port.name).map(|p| i32::from(*p))
+                            allocated_ports
+                                .get(&endpoint_key(&container.name, &port.name))
+                                .map(|p| i32::from(*p))
                         } else {
                             None
                         };
@@ -1374,7 +1442,7 @@ async fn ensure_services(
     let service_config = &state.config.runtime_config.instance.service;
     let svc_api = Api::<Service>::namespaced(state.client.clone(), &namespace);
 
-    for container_spec in &challenge.spec.containers {
+    for container_spec in &challenge.spec.services {
         let name = container_spec.name.clone();
 
         let mut selector_labels = base_labels(instance);
@@ -1383,45 +1451,12 @@ async fn ensure_services(
         // Determine if this container has exposed ports
         let has_exposed = container_spec.ports.iter().any(|p| p.expose);
 
-        // Exposed containers get the configured service type + labels/annotations;
-        // internal-only containers get a plain ClusterIP service for DNS resolution.
-        let (svc_type, metadata_labels, annotations) = if has_exposed {
-            let mut ml = selector_labels.clone();
-            ml.extend(service_config.labels.clone());
-            let ann = if service_config.annotations.is_empty() {
-                None
-            } else {
-                Some(service_config.annotations.clone())
-            };
-            (service_config.type_.as_k8s_str().to_string(), ml, ann)
-        } else {
-            ("ClusterIP".to_string(), selector_labels.clone(), None)
-        };
-
-        let supports_node_port = svc_type != "ClusterIP";
-
-        // Collect all ports for this container
         let mut ports = Vec::<ServicePort>::new();
         for port in &container_spec.ports {
-            let node_port = if port.expose && supports_node_port {
-                let Some(&allocated) = allocated_ports.get(&port.name) else {
-                    continue;
-                };
-                Some(i32::from(allocated))
-            } else {
-                if port.expose && allocated_ports.get(&port.name).is_none() {
-                    continue;
-                }
-                None
-            };
-            // Always use container_port as the service port so internal callers
-            // reach the container on its natural port (e.g. web-app:5000).
-            // External access uses nodePort (or hostPort on the Deployment).
             ports.push(ServicePort {
                 name: Some(port.name.clone()),
                 port: i32::from(port.container_port),
                 target_port: Some(IntOrString::Int(i32::from(port.container_port))),
-                node_port,
                 protocol: Some("TCP".to_string()),
                 ..Default::default()
             });
@@ -1435,56 +1470,146 @@ async fn ensure_services(
             metadata: ObjectMeta {
                 name: Some(name.clone()),
                 namespace: Some(namespace.clone()),
-                labels: Some(metadata_labels.clone()),
-                annotations: annotations.clone(),
+                labels: Some(selector_labels.clone()),
                 ..Default::default()
             },
             spec: Some(ServiceSpec {
-                selector: Some(selector_labels),
+                selector: Some(selector_labels.clone()),
                 ports: Some(ports),
-                type_: Some(svc_type),
-                // Internal-only services are headless so DNS resolves to the pod IP
-                // directly, matching Docker Compose behavior where gethostbyname()
-                // returns the container's actual IP (needed for IP-based ACLs).
-                cluster_ip: if !has_exposed {
-                    Some("None".to_string())
-                } else {
-                    None
-                },
+                type_: Some("ClusterIP".to_owned()),
+                cluster_ip: Some("None".to_owned()),
                 ..Default::default()
             }),
             ..Default::default()
         };
+        let mut resources = vec![service];
+        if has_exposed && service_config.type_.as_k8s_str() != "ClusterIP" {
+            let mut labels = base_labels(instance);
+            labels.insert("app.kubernetes.io/name".to_owned(), name.clone());
+            labels.extend(service_config.labels.clone());
+            resources.push(Service {
+                metadata: ObjectMeta {
+                    name: Some(external_service_name(&name)),
+                    namespace: Some(namespace.clone()),
+                    labels: Some(labels),
+                    annotations: Some(service_config.annotations.clone()),
+                    ..ObjectMeta::default()
+                },
+                spec: Some(ServiceSpec {
+                    selector: Some(selector_labels),
+                    ports: Some(exposed_service_ports(container_spec, allocated_ports)?),
+                    type_: Some(service_config.type_.as_k8s_str().to_owned()),
+                    ..ServiceSpec::default()
+                }),
+                ..Service::default()
+            });
+        }
 
-        // Check cache: skip API call if service already exists with matching spec and labels
-        let svc_ref = ObjectRef::<Service>::new(&name).within(&namespace);
-        if let Some(cached) = state.services.get(&svc_ref) {
-            if cached.metadata.deletion_timestamp.is_none()
-                && cached
-                    .spec
-                    .as_ref()
-                    .map(|s| (&s.selector, &s.ports, &s.type_, &s.cluster_ip))
-                    == service
+        for service in resources {
+            let name = service.name_any();
+            let svc_ref = ObjectRef::<Service>::new(&name).within(&namespace);
+            if let Some(cached) = state.services.get(&svc_ref) {
+                if cached.metadata.deletion_timestamp.is_none()
+                    && cached
                         .spec
                         .as_ref()
                         .map(|s| (&s.selector, &s.ports, &s.type_, &s.cluster_ip))
-                && cached.metadata.labels == service.metadata.labels
-                && cached.metadata.annotations == service.metadata.annotations
-            {
-                continue;
+                        == service
+                            .spec
+                            .as_ref()
+                            .map(|s| (&s.selector, &s.ports, &s.type_, &s.cluster_ip))
+                    && cached.metadata.labels == service.metadata.labels
+                    && cached.metadata.annotations == service.metadata.annotations
+                {
+                    continue;
+                }
             }
-        }
 
-        svc_api
-            .patch(
-                &name,
-                &PatchParams::apply(InstanceReconciler::NAME).force(),
-                &Patch::Apply(&service),
-            )
-            .await?;
+            svc_api
+                .patch(
+                    &name,
+                    &PatchParams::apply(InstanceReconciler::NAME).force(),
+                    &Patch::Apply(&service),
+                )
+                .await?;
+        }
     }
 
     Ok(())
+}
+
+/// Externally reachable endpoints of every exposed port, as currently observed.
+fn observed_endpoints(
+    challenge: &Challenge,
+    observed: &ObservedInstanceResources,
+    namespace: &str,
+    state: &CtfState,
+) -> Vec<InstanceEndpoint> {
+    let use_host_port = state
+        .config
+        .runtime_config
+        .instance
+        .deployment
+        .use_host_port;
+    let mut endpoints = Vec::new();
+    for service in &challenge.spec.services {
+        for port in service.ports.iter().filter(|port| port.expose) {
+            let external_port = if use_host_port {
+                observed
+                    .allocated_ports
+                    .get(&endpoint_key(&service.name, &port.name))
+                    .copied()
+            } else {
+                state
+                    .services
+                    .get(&ObjectRef::new(&external_service_name(&service.name)).within(namespace))
+                    .and_then(|resource| {
+                        resource
+                            .spec
+                            .as_ref()?
+                            .ports
+                            .as_ref()?
+                            .iter()
+                            .find(|candidate| candidate.name.as_deref() == Some(&port.name))?
+                            .node_port
+                    })
+                    .and_then(|assigned| u16::try_from(assigned).ok())
+            };
+            if let Some(external_port) = external_port {
+                endpoints.push(InstanceEndpoint {
+                    service: service.name.clone(),
+                    port: port.name.clone(),
+                    external_port,
+                });
+            }
+        }
+    }
+    endpoints
+}
+
+fn exposed_service_ports(
+    service: &ctf_core::k8s::ChallengeService,
+    allocated_ports: &BTreeMap<String, u16>,
+) -> Result<Vec<ServicePort>, CtfError> {
+    service
+        .ports
+        .iter()
+        .filter(|port| port.expose)
+        .map(|port| {
+            let key = endpoint_key(&service.name, &port.name);
+            let assigned = allocated_ports.get(&key).ok_or_else(|| {
+                CtfError::ConfigError(format!("exposed port {key} has no allocation"))
+            })?;
+            Ok(ServicePort {
+                name: Some(port.name.clone()),
+                port: i32::from(port.container_port),
+                target_port: Some(IntOrString::Int(i32::from(port.container_port))),
+                node_port: Some(i32::from(*assigned)),
+                protocol: Some("TCP".to_owned()),
+                ..ServicePort::default()
+            })
+        })
+        .collect()
 }
 
 async fn ensure_port_claims(
@@ -1534,16 +1659,17 @@ async fn ensure_port_claims(
     }
 
     let mut seen_names = BTreeSet::new();
-    for container in &challenge.spec.containers {
+    for container in &challenge.spec.services {
         for port in &container.ports {
             if !port.expose {
                 continue;
             }
-            if !seen_names.insert(port.name.clone()) {
+            let key = endpoint_key(&container.name, &port.name);
+            if !seen_names.insert(key.clone()) {
                 continue;
             }
 
-            let name = port_claim_name(instance, &port.name);
+            let name = port_claim_name(instance, &key);
 
             // Check cache: skip API call if port claim exists with matching spec and labels
             let claim_ref = ObjectRef::<PortClaim>::new(&name).within(target_namespace);
@@ -1587,7 +1713,7 @@ async fn ensure_port_claims(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ctf_cli::k8s::{ChallengeSpec, CtfSpec};
+    use ctf_core::k8s::{ChallengeSpec, CtfSpec};
     use std::collections::HashSet;
 
     fn make_ctf(name: &str, ready: bool) -> Ctf {
@@ -1599,26 +1725,26 @@ mod tests {
                 public: false,
                 instance_duration_seconds: 15 * 60,
                 challenges: vec!["chall-1".to_string()],
-                flag: ctf_cli::models::CtfFlag {
+                flag: ctf_core::models::CtfFlag {
                     prefix: "SCC".to_string(),
-                    format: ctf_cli::models::FlagFormat::Curly,
+                    format: ctf_core::models::FlagFormat::Curly,
                     random: None,
-                    options: ctf_cli::models::FlagMatchOptions::default(),
+                    options: ctf_core::models::FlagMatchOptions::default(),
                 },
-                network: ctf_cli::models::CtfNetwork {
-                    ports: ctf_cli::models::CtfPorts {
+                network: ctf_core::models::CtfNetwork {
+                    ports: ctf_core::models::CtfPorts {
                         start: 20000,
                         end: 20100,
                     },
                     ip: None,
                 },
-                scoreboard: ctf_cli::models::CtfScoreboard::default(),
-                schedule: ctf_cli::models::CtfSchedule::default(),
+                scoreboard: ctf_core::models::CtfScoreboard::default(),
+                schedule: ctf_core::models::CtfSchedule::default(),
             },
         );
         ctf.metadata.namespace = Some("ctf".to_string());
         if ready {
-            let mut status = ctf_cli::k8s::CtfStatus::default();
+            let mut status = ctf_core::k8s::CtfStatus::default();
             status
                 .conditions
                 .set("Validation", ConditionStatus::True, "Validated", "");
@@ -1641,18 +1767,18 @@ mod tests {
                 categories: HashSet::new(),
                 tags: HashSet::new(),
                 authors: HashSet::new(),
-                flags: vec![ctf_cli::models::ChallengeFlag {
+                flags: vec![ctf_core::models::ChallengeFlag {
                     name: "flag-1".to_string(),
                     body: "body".to_string(),
                     prefix: None,
                     format: None,
                     random: None,
                     label: None,
-                    options: ctf_cli::models::FlagMatchOptions::default(),
-                    scoring: ctf_cli::models::FlagScoring::default(),
+                    options: ctf_core::models::FlagMatchOptions::default(),
+                    scoring: ctf_core::models::FlagScoring::default(),
                     difficulty: None,
                 }],
-                containers: vec![ctf_cli::k8s::ChallengeContainer {
+                services: vec![ctf_core::k8s::ChallengeService {
                     name: "svc".to_string(),
                     image: "repo/svc:latest".to_string(),
                     env: vec![],
@@ -1665,7 +1791,7 @@ mod tests {
         );
         challenge.metadata.namespace = Some("ctf".to_string());
         if ready {
-            let mut status = ctf_cli::k8s::ChallengeStatus::default();
+            let mut status = ctf_core::k8s::ChallengeStatus::default();
             status
                 .conditions
                 .set("Validation", ConditionStatus::True, "Validated", "");
@@ -1680,7 +1806,7 @@ mod tests {
     fn make_instance() -> Instance {
         let mut instance = Instance::new(
             "inst-1",
-            ctf_cli::k8s::InstanceSpec {
+            ctf_core::k8s::InstanceSpec {
                 ctf: "ctf-1".to_string(),
                 challenge: "chall-1".to_string(),
                 user: None,
@@ -1689,6 +1815,7 @@ mod tests {
             },
         );
         instance.metadata.namespace = Some("ctf".to_string());
+        instance.metadata.uid = Some("test-instance-uid".to_owned());
         instance
     }
 
@@ -1769,7 +1896,15 @@ mod tests {
     fn port_claim_name_is_stable() {
         let instance = make_instance();
 
-        assert_eq!(port_claim_name(&instance, "http"), "inst-1-http");
+        assert_eq!(
+            port_claim_name(&instance, "svc/http"),
+            port_claim_name(&instance, "svc/http")
+        );
+        assert_ne!(
+            port_claim_name(&instance, "svc/http"),
+            port_claim_name(&instance, "other/http")
+        );
+        assert!(port_claim_name(&instance, "svc/http").len() <= 63);
     }
 
     #[test]
@@ -1788,24 +1923,24 @@ mod tests {
     #[test]
     fn exposed_port_names_only_returns_exposed_ports() {
         let mut challenge = make_challenge("chall-1", true);
-        challenge.spec.containers = vec![ctf_cli::k8s::ChallengeContainer {
+        challenge.spec.services = vec![ctf_core::k8s::ChallengeService {
             name: "svc".to_string(),
             image: "repo/svc:latest".to_string(),
             env: vec![],
             flags: vec![],
             ports: vec![
-                ctf_cli::models::ContainerPort {
+                ctf_core::models::ContainerPort {
                     name: "http".to_string(),
                     container_port: 80,
                     expose: true,
-                    port_type: ctf_cli::models::ChallengePortType::HTTP,
+                    port_type: ctf_core::models::ChallengePortType::HTTP,
                     env: None,
                 },
-                ctf_cli::models::ContainerPort {
+                ctf_core::models::ContainerPort {
                     name: "admin".to_string(),
                     container_port: 8080,
                     expose: false,
-                    port_type: ctf_cli::models::ChallengePortType::HTTP,
+                    port_type: ctf_core::models::ChallengePortType::HTTP,
                     env: None,
                 },
             ],
@@ -1813,38 +1948,46 @@ mod tests {
         }];
 
         let names = exposed_port_names(&challenge);
-        assert!(names.contains("http"));
-        assert!(!names.contains("admin"));
+        assert!(names.contains("svc/http"));
+        assert!(!names.contains("svc/admin"));
+        let ports = exposed_service_ports(
+            &challenge.spec.services[0],
+            &BTreeMap::from([("svc/http".to_owned(), 31000)]),
+        )
+        .expect("exposed port allocated");
+        assert_eq!(ports.len(), 1);
+        assert_eq!(ports[0].name.as_deref(), Some("http"));
+        assert_eq!(ports[0].node_port, Some(31000));
     }
 
     #[test]
-    fn exposed_port_names_deduplicates_names_across_containers() {
+    fn exposed_ports_with_same_name_in_distinct_services_are_independent() {
         let mut challenge = make_challenge("chall-1", true);
-        challenge.spec.containers = vec![
-            ctf_cli::k8s::ChallengeContainer {
+        challenge.spec.services = vec![
+            ctf_core::k8s::ChallengeService {
                 name: "svc-a".to_string(),
                 image: "repo/svc-a:latest".to_string(),
                 env: vec![],
                 flags: vec![],
-                ports: vec![ctf_cli::models::ContainerPort {
+                ports: vec![ctf_core::models::ContainerPort {
                     name: "http".to_string(),
                     container_port: 80,
                     expose: true,
-                    port_type: ctf_cli::models::ChallengePortType::HTTP,
+                    port_type: ctf_core::models::ChallengePortType::HTTP,
                     env: None,
                 }],
                 kata: None,
             },
-            ctf_cli::k8s::ChallengeContainer {
+            ctf_core::k8s::ChallengeService {
                 name: "svc-b".to_string(),
                 image: "repo/svc-b:latest".to_string(),
                 env: vec![],
                 flags: vec![],
-                ports: vec![ctf_cli::models::ContainerPort {
+                ports: vec![ctf_core::models::ContainerPort {
                     name: "http".to_string(),
                     container_port: 8080,
                     expose: true,
-                    port_type: ctf_cli::models::ChallengePortType::HTTP,
+                    port_type: ctf_core::models::ChallengePortType::HTTP,
                     env: None,
                 }],
                 kata: None,
@@ -1852,7 +1995,8 @@ mod tests {
         ];
 
         let names = exposed_port_names(&challenge);
-        assert_eq!(names.len(), 1);
-        assert!(names.contains("http"));
+        assert_eq!(names.len(), 2);
+        assert!(names.contains("svc-a/http"));
+        assert!(names.contains("svc-b/http"));
     }
 }

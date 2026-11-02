@@ -1,16 +1,12 @@
 use std::{fs, path::Path};
 
-use ctf_cli::k8s::{Challenge, Ctf, Flag, Instance, PortClaim, ReservationSet};
+use ctf_core::k8s::{Challenge, Ctf, Flag, Instance, PortClaim, ReservationSet};
 use kube::CustomResourceExt;
 use serde_json::Value;
 
 #[test]
-fn helm_crds_match_generated_crds() {
-    let helm_dir = Path::new("..")
-        .join("helm")
-        .join("ctf-operator")
-        .join("files")
-        .join("crds");
+fn checked_in_crds_match_generated_crds() {
+    let crd_dir = Path::new("..").join("crd");
 
     let crds = [
         ("challenges.yaml", Challenge::crd()),
@@ -22,24 +18,20 @@ fn helm_crds_match_generated_crds() {
     ];
 
     for (file, generated) in crds {
-        let helm_path = helm_dir.join(file);
+        let crd_path = crd_dir.join(file);
 
-        assert!(
-            helm_path.exists(),
-            "helm CRD missing: {}",
-            helm_path.display()
-        );
+        assert!(crd_path.exists(), "CRD missing: {}", crd_path.display());
 
         let generated_doc = serde_json::to_value(generated)
             .unwrap_or_else(|err| unreachable!("failed serializing CRD for {file}: {err}"));
-        let helm_doc = parse_yaml_doc(&helm_path);
+        let stored_doc = parse_yaml_doc(&crd_path);
 
         assert_eq!(
             generated_doc,
-            helm_doc,
-            "CRD mismatch for file {}\n  helm: {}",
+            stored_doc,
+            "CRD mismatch for file {}\n  stored: {}",
             file,
-            helm_path.display()
+            crd_path.display()
         );
     }
 }

@@ -4,7 +4,7 @@ use crate::{
     runtime::{CtfError, CtfState},
     util::Reconciler,
 };
-use ctf_cli::k8s::{Instance, InstancePhase};
+use ctf_core::k8s::{Instance, InstancePhase};
 use kube::{api::DeleteParams, runtime::controller::Action, Api, ResourceExt};
 
 /// How often every instance is re-checked for expiry.
@@ -100,7 +100,7 @@ fn resolve_effective_duration(instance: &Instance, state: &CtfState) -> Option<u
 
     // Try challenge-level override.
     let challenge_ref =
-        ObjectRef::<ctf_cli::k8s::Challenge>::new(&instance.spec.challenge).within(&namespace);
+        ObjectRef::<ctf_core::k8s::Challenge>::new(&instance.spec.challenge).within(&namespace);
     if let Some(challenge) = state.challenges.get(&challenge_ref) {
         if let Some(d) = challenge.spec.instance_duration_seconds {
             return Some(u64::from(d));
@@ -108,7 +108,7 @@ fn resolve_effective_duration(instance: &Instance, state: &CtfState) -> Option<u
     }
 
     // Fall back to CTF-level default.
-    let ctf_ref = ObjectRef::<ctf_cli::k8s::Ctf>::new(&instance.spec.ctf).within(&namespace);
+    let ctf_ref = ObjectRef::<ctf_core::k8s::Ctf>::new(&instance.spec.ctf).within(&namespace);
     if let Some(ctf) = state.ctfs.get(&ctf_ref) {
         return Some(u64::from(ctf.spec.instance_duration_seconds));
     }

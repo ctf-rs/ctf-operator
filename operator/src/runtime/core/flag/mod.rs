@@ -6,7 +6,7 @@ use crate::{
     runtime::{CtfResult, CtfState},
     util::{Controller, Watcher},
 };
-use ctf_cli::k8s::Flag;
+use ctf_core::k8s::Flag;
 use kube::{runtime::watcher::Config, Client};
 use std::sync::Arc;
 

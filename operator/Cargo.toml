@@ -24,9 +24,10 @@ parking_lot = { workspace = true }
 async-stream = { workspace = true }
 jiff = { workspace = true }
 rand = { workspace = true }
+sha2 = "0.11.1"
 
 k8s-openapi = { workspace = true }
 kube = { workspace = true, features = ["client", "derive", "runtime", "unstable-runtime"] }
 rustls = { workspace = true, default-features = false, features = ["ring", "std"] }
 
-ctf-cli = { path = "../cli" }
+ctf-core = { path = "../core" }

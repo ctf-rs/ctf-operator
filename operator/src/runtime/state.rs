@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::runtime::OperatorRuntimeConfig;
-use ctf_cli::k8s::{Challenge, Ctf, Flag, Instance, PortClaim, ReservationSet};
+use ctf_core::k8s::{Challenge, Ctf, Flag, Instance, PortClaim, ReservationSet};
 use k8s_openapi::api::{
     apps::v1::Deployment,
     core::v1::{Namespace, Secret, Service},

@@ -19,7 +19,7 @@ pub enum InstancePhase {
     Creating,
     /// Resources created, waiting for validation
     Validating,
-    /// Waiting for containers to become ready
+    /// Waiting for services to become ready
     Waiting,
     /// Instance is ready to use
     Ready,
@@ -99,6 +99,10 @@ pub struct InstanceSpec {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema, Default)]
 pub struct InstanceStatus {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<String>,
+    #[serde(default)]
+    pub endpoints: Vec<InstanceEndpoint>,
     /// Current phase of the instance lifecycle
     #[serde(default)]
     pub phase: InstancePhase,
@@ -116,6 +120,14 @@ pub struct InstanceStatus {
     pub ready_since: Option<apimachinery::pkg::apis::meta::v1::Time>,
     #[serde(default)]
     pub conditions: Conditions,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+pub struct InstanceEndpoint {
+    pub service: String,
+    pub port: String,
+    #[serde(rename = "externalPort")]
+    pub external_port: u16,
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,21 @@
+[package]
+name = "ctf-core"
+version = "0.1.0"
+edition = "2021"
+description = "Shared CTF domain models and Kubernetes resources"
+license = "MIT"
+
+[lints]
+workspace = true
+
+[dependencies]
+garde = { workspace = true, features = ["serde", "derive", "regex"] }
+jiff = { workspace = true }
+k8s-openapi = { workspace = true }
+kube = { workspace = true, features = ["derive"] }
+rand = { workspace = true }
+regex = { workspace = true }
+schemars = { workspace = true, features = ["uuid1"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

@@ -4,7 +4,7 @@ use crate::{
     runtime::{CtfError, CtfState},
     util::Reconciler,
 };
-use ctf_cli::k8s::{ConditionStatus, ReservationSet, ReservationSetStatus};
+use ctf_core::k8s::{ConditionStatus, ReservationSet, ReservationSetStatus};
 use kube::{runtime::controller::Action, runtime::reflector::ObjectRef, ResourceExt};
 
 #[derive(Debug)]
@@ -55,7 +55,7 @@ impl Reconciler for ReservationSetReconciler {
     }
 }
 
-fn conditions_true_excluding_ready(conditions: &ctf_cli::k8s::Conditions) -> bool {
+fn conditions_true_excluding_ready(conditions: &ctf_core::k8s::Conditions) -> bool {
     let mut clone = conditions.clone();
     clone.remove("Ready");
     clone.all_true()
@@ -119,7 +119,7 @@ fn refresh_claims(resource: &ReservationSet, state: &CtfState, status: &mut Rese
                     .unwrap_or_else(|| claim.metadata.namespace.as_deref().unwrap_or_default())
                     == reservation_ref.namespace.as_deref().unwrap_or_default()
         })
-        .map(|claim| ctf_cli::k8s::ReservationSetClaimStatus {
+        .map(|claim| ctf_core::k8s::ReservationSetClaimStatus {
             port: claim.status.as_ref().and_then(|status| status.port),
             name: claim.name_any(),
             namespace: claim.namespace().unwrap_or_default(),
@@ -141,7 +141,7 @@ fn refresh_claims(resource: &ReservationSet, state: &CtfState, status: &mut Rese
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ctf_cli::k8s::ReservationSetSpec;
+    use ctf_core::k8s::ReservationSetSpec;
 
     fn reservation(start: u16, end: u16) -> ReservationSet {
         let mut rs = ReservationSet::new("res-a", ReservationSetSpec { start, end });

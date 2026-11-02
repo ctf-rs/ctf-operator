@@ -4,8 +4,8 @@ use crate::{
     runtime::{CtfError, CtfState},
     util::Reconciler,
 };
-use ctf_cli::k8s::{Challenge, ChallengeStatus, ConditionStatus, Instance, InstanceSpec};
-use ctf_cli::models::{ChallengeContainer, ChallengeFlag, ContainerImage};
+use ctf_core::k8s::{Challenge, ChallengeStatus, ConditionStatus, Instance, InstanceSpec};
+use ctf_core::models::{ChallengeFlag, ChallengeService, ContainerImage};
 use kube::{
     api::{ObjectMeta, Patch, PatchParams},
     runtime::controller::Action,
@@ -39,9 +39,9 @@ impl Reconciler for ChallengeReconciler {
 
         if ready {
             // Auto-create global instance for non-instanced challenges that
-            // actually provide containers. If a challenge has no containers
+            // actually provide services. If a challenge has no services
             // we never create an instance (e.g., informational challenges).
-            if !resource.spec.instancing && !resource.spec.containers.is_empty() {
+            if !resource.spec.instancing && !resource.spec.services.is_empty() {
                 match ensure_global_instance(&resource, &namespace, &ctx).await {
                     Ok(Some(requeue)) => return Ok(Action::requeue(requeue)),
                     Ok(None) => {}
@@ -165,7 +165,7 @@ fn sanitize_k8s_name(name: &str) -> String {
 }
 
 fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
-    let core = ctf_cli::models::Challenge {
+    let core = ctf_core::models::Challenge {
         name: resource.name_any(),
         full_name: resource.spec.full_name.clone(),
         description: resource.spec.description.clone(),
@@ -179,7 +179,7 @@ fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
             .files
             .iter()
             .map(|file| match file {
-                ctf_cli::k8s::ChallengeFileRef::S3 { key, .. } => PathBuf::from(key),
+                ctf_core::k8s::ChallengeFileRef::S3 { key, .. } => PathBuf::from(key),
             })
             .collect(),
         flags: resource
@@ -198,11 +198,11 @@ fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
                 difficulty: flag.difficulty,
             })
             .collect(),
-        containers: resource
+        services: resource
             .spec
-            .containers
+            .services
             .iter()
-            .map(|container| ChallengeContainer {
+            .map(|container| ChallengeService {
                 name: container.name.clone(),
                 image: ContainerImage::Image {
                     image: container.image.clone(),
@@ -247,7 +247,7 @@ fn validate_spec(resource: &Challenge, status: &mut ChallengeStatus) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ctf_cli::k8s::{ChallengeContainer, ChallengeFileRef, ChallengeSpec};
+    use ctf_core::k8s::{ChallengeFileRef, ChallengeService, ChallengeSpec};
     use std::collections::HashSet;
 
     fn valid_challenge() -> Challenge {
@@ -261,31 +261,31 @@ mod tests {
                 categories: HashSet::new(),
                 tags: HashSet::new(),
                 authors: HashSet::new(),
-                flags: vec![ctf_cli::models::ChallengeFlag {
+                flags: vec![ctf_core::models::ChallengeFlag {
                     name: "flag-1".to_string(),
                     body: "flagbody".to_string(),
                     prefix: None,
                     format: None,
                     random: None,
                     label: None,
-                    options: ctf_cli::models::FlagMatchOptions::default(),
-                    scoring: ctf_cli::models::FlagScoring::default(),
+                    options: ctf_core::models::FlagMatchOptions::default(),
+                    scoring: ctf_core::models::FlagScoring::default(),
                     difficulty: None,
                 }],
-                containers: vec![ChallengeContainer {
+                services: vec![ChallengeService {
                     name: "svc".to_string(),
                     image: "repo/svc:latest".to_string(),
                     env: vec![],
-                    flags: vec![ctf_cli::models::ContainerFlag {
+                    flags: vec![ctf_core::models::ContainerFlag {
                         name: "flag-1".to_string(),
                         env: Some("FLAG".to_string()),
                         file: None,
                     }],
-                    ports: vec![ctf_cli::models::ContainerPort {
+                    ports: vec![ctf_core::models::ContainerPort {
                         name: "http".to_string(),
                         container_port: 8080,
                         expose: true,
-                        port_type: ctf_cli::models::ChallengePortType::HTTP,
+                        port_type: ctf_core::models::ChallengePortType::HTTP,
                         env: None,
                     }],
                     kata: None,
@@ -315,15 +315,15 @@ mod tests {
     #[test]
     fn validate_spec_sets_ready_false_for_invalid_spec() {
         let mut challenge = valid_challenge();
-        challenge.spec.flags.push(ctf_cli::models::ChallengeFlag {
+        challenge.spec.flags.push(ctf_core::models::ChallengeFlag {
             name: "flag-1".to_string(),
             body: "other".to_string(),
             prefix: None,
             format: None,
             random: None,
             label: None,
-            options: ctf_cli::models::FlagMatchOptions::default(),
-            scoring: ctf_cli::models::FlagScoring::default(),
+            options: ctf_core::models::FlagMatchOptions::default(),
+            scoring: ctf_core::models::FlagScoring::default(),
             difficulty: None,
         });
 

@@ -8,7 +8,7 @@ pub use error::*;
 pub use state::*;
 
 use crate::util::{Waiter, Watcher};
-use ctf_cli::k8s::{PortClaim, ReservationSet};
+use ctf_core::k8s::{PortClaim, ReservationSet};
 use k8s_openapi::api::{
     apps::v1::Deployment,
     core::v1::{Namespace, Secret, Service},
@@ -69,10 +69,10 @@ fn build_operator_config(
 
 /// CRD watchers for custom resources managed by the operator
 struct CrdWatchers {
-    ctf: Watcher<ctf_cli::k8s::Ctf>,
-    challenge: Watcher<ctf_cli::k8s::Challenge>,
-    flag: Watcher<ctf_cli::k8s::Flag>,
-    instance: Watcher<ctf_cli::k8s::Instance>,
+    ctf: Watcher<ctf_core::k8s::Ctf>,
+    challenge: Watcher<ctf_core::k8s::Challenge>,
+    flag: Watcher<ctf_core::k8s::Flag>,
+    instance: Watcher<ctf_core::k8s::Instance>,
     reservation_set: Watcher<ReservationSet>,
     port_claim: Watcher<PortClaim>,
 }
@@ -185,7 +185,7 @@ pub async fn run(
 
     let ctf_controller = core::ctf::controller(Arc::clone(&state), &crd.ctf)?;
     let challenge_controller =
-        core::challenge::controller(Arc::clone(&state), &crd.challenge, &crd.instance)?;
+        core::challenge::controller(Arc::clone(&state), &crd.challenge, &crd.instance, &crd.ctf)?;
     let flag_controller = core::flag::controller(Arc::clone(&state), &crd.flag)?;
     let reservation_set_controller = core::reservation_set::controller(
         Arc::clone(&state),

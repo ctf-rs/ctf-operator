@@ -6,7 +6,7 @@ use crate::{
     runtime::{CtfResult, CtfState},
     util::{Controller, Watcher},
 };
-use ctf_cli::k8s::{Challenge, Instance};
+use ctf_core::k8s::{Challenge, Ctf, Instance};
 use kube::{
     runtime::{reflector::ObjectRef, watcher::Config},
     Client,
@@ -30,9 +30,10 @@ pub fn controller(
     ctx: Arc<CtfState>,
     watcher: &Watcher<Challenge>,
     instance_watcher: &Watcher<Instance>,
+    ctf_watcher: &Watcher<Ctf>,
 ) -> CtfResult<Controller<ChallengeReconciler>> {
-    Ok(
-        Controller::new(ctx, watcher)?.watches(instance_watcher, |instance| {
+    Ok(Controller::new(ctx, watcher)?
+        .watches(instance_watcher, |instance| {
             // When an instance changes (created/deleted), re-reconcile its challenge
             let ns = instance.metadata.namespace.as_deref().unwrap_or_default();
             let challenge_name = &instance.spec.challenge;
@@ -40,6 +41,13 @@ pub fn controller(
                 return None;
             }
             Some(ObjectRef::<Challenge>::new(challenge_name).within(ns))
-        })?,
-    )
+        })?
+        .watches(ctf_watcher, |ctf| {
+            let namespace = ctf.metadata.namespace.as_deref().unwrap_or_default();
+            ctf.spec
+                .challenges
+                .iter()
+                .map(|name| ObjectRef::<Challenge>::new(name).within(namespace))
+                .collect::<Vec<_>>()
+        })?)
 }

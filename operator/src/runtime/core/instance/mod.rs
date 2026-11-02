@@ -8,7 +8,7 @@ use crate::{
     runtime::{CtfResult, CtfState},
     util::{Controller, Watcher},
 };
-use ctf_cli::k8s::{Challenge, Ctf, Flag, Instance, PortClaim, ReservationSet};
+use ctf_core::k8s::{Challenge, Ctf, Flag, Instance, PortClaim, ReservationSet};
 use k8s_openapi::api::{apps::v1::Deployment, core::v1::Service};
 use kube::{
     runtime::{
@@ -116,7 +116,7 @@ fn resource_to_instance_ref(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ctf_cli::k8s::{ChallengeSpec, CtfSpec, InstanceSpec};
+    use ctf_core::k8s::{ChallengeSpec, CtfSpec, InstanceSpec};
     use std::collections::HashSet;
 
     fn instance(name: &str, ns: &str, ctf: &str, challenge: &str) -> Arc<Instance> {
@@ -143,21 +143,21 @@ mod tests {
                 public: false,
                 instance_duration_seconds: 15 * 60,
                 challenges: vec!["chall-a".to_string()],
-                flag: ctf_cli::models::CtfFlag {
+                flag: ctf_core::models::CtfFlag {
                     prefix: "SCC".to_string(),
-                    format: ctf_cli::models::FlagFormat::Curly,
+                    format: ctf_core::models::FlagFormat::Curly,
                     random: None,
-                    options: ctf_cli::models::FlagMatchOptions::default(),
+                    options: ctf_core::models::FlagMatchOptions::default(),
                 },
-                network: ctf_cli::models::CtfNetwork {
-                    ports: ctf_cli::models::CtfPorts {
+                network: ctf_core::models::CtfNetwork {
+                    ports: ctf_core::models::CtfPorts {
                         start: 20000,
                         end: 20010,
                     },
                     ip: None,
                 },
-                scoreboard: ctf_cli::models::CtfScoreboard::default(),
-                schedule: ctf_cli::models::CtfSchedule::default(),
+                scoreboard: ctf_core::models::CtfScoreboard::default(),
+                schedule: ctf_core::models::CtfSchedule::default(),
             },
         );
         ctf.metadata.namespace = Some(ns.to_string());
@@ -176,7 +176,7 @@ mod tests {
                 tags: HashSet::new(),
                 authors: HashSet::new(),
                 flags: vec![],
-                containers: vec![ctf_cli::k8s::ChallengeContainer {
+                services: vec![ctf_core::k8s::ChallengeService {
                     name: "svc".to_string(),
                     image: "repo/svc:latest".to_string(),
                     env: vec![],

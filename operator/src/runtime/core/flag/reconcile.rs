@@ -4,7 +4,7 @@ use crate::{
     runtime::{CtfError, CtfState},
     util::Reconciler,
 };
-use ctf_cli::k8s::{ConditionStatus, Flag, FlagStatus};
+use ctf_core::k8s::{ConditionStatus, Flag, FlagStatus};
 use kube::{runtime::controller::Action, ResourceExt};
 
 #[derive(Debug)]
@@ -42,7 +42,7 @@ impl Reconciler for FlagReconciler {
 }
 
 fn validate_and_generate(resource: &Flag, status: &mut FlagStatus) {
-    let core = ctf_cli::models::Flag {
+    let core = ctf_core::models::Flag {
         prefix: resource.spec.prefix.clone(),
         format: resource.spec.format,
         body: resource.spec.body.clone(),
@@ -91,7 +91,7 @@ fn validate_and_generate(resource: &Flag, status: &mut FlagStatus) {
     }
 }
 
-fn conditions_true_excluding_ready(conditions: &ctf_cli::k8s::Conditions) -> bool {
+fn conditions_true_excluding_ready(conditions: &ctf_core::k8s::Conditions) -> bool {
     let mut clone = conditions.clone();
     clone.remove("Ready");
     clone.all_true()
@@ -100,18 +100,18 @@ fn conditions_true_excluding_ready(conditions: &ctf_cli::k8s::Conditions) -> boo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ctf_cli::k8s::FlagSpec;
+    use ctf_core::k8s::FlagSpec;
 
     fn valid_flag() -> Flag {
         let mut flag = Flag::new(
             "flag-1",
             FlagSpec {
                 prefix: "SCC".to_string(),
-                format: ctf_cli::models::FlagFormat::Curly,
+                format: ctf_core::models::FlagFormat::Curly,
                 body: "hello".to_string(),
                 random: None,
-                options: ctf_cli::models::FlagMatchOptions::default(),
-                scoring: ctf_cli::models::FlagScoring::default(),
+                options: ctf_core::models::FlagMatchOptions::default(),
+                scoring: ctf_core::models::FlagScoring::default(),
             },
         );
         flag.metadata.namespace = Some("ctf".to_string());
@@ -136,7 +136,7 @@ mod tests {
         let flag = valid_flag();
         let mut status = FlagStatus {
             flag: Some("preexisting".to_string()),
-            conditions: ctf_cli::k8s::Conditions::default(),
+            conditions: ctf_core::k8s::Conditions::default(),
         };
 
         validate_and_generate(&flag, &mut status);
@@ -152,7 +152,7 @@ mod tests {
 
         let mut status = FlagStatus {
             flag: Some("will-be-cleared".to_string()),
-            conditions: ctf_cli::k8s::Conditions::default(),
+            conditions: ctf_core::k8s::Conditions::default(),
         };
 
         validate_and_generate(&flag, &mut status);

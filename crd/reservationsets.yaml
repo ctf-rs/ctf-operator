@@ -1,0 +1,158 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: reservationsets.operator.ctf.rs
+spec:
+  group: operator.ctf.rs
+  names:
+    kind: ReservationSet
+    plural: reservationsets
+    shortNames:
+    - reservation
+    singular: reservationset
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.start
+      name: START
+      type: integer
+    - jsonPath: .spec.end
+      name: END
+      type: integer
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Auto-generated derived type for ReservationSetSpec via `CustomResource`
+        properties:
+          spec:
+            properties:
+              end:
+                format: uint16
+                maximum: 65535.0
+                minimum: 0.0
+                type: integer
+              start:
+                format: uint16
+                maximum: 65535.0
+                minimum: 0.0
+                type: integer
+            required:
+            - end
+            - start
+            type: object
+          status:
+            nullable: true
+            properties:
+              claims:
+                default: []
+                items:
+                  properties:
+                    conditions:
+                      default: []
+                      items:
+                        properties:
+                          lastProbeTime:
+                            description: >-
+                              Time is a wrapper around time.Time which supports correct marshaling to YAML
+                              and JSON.  Wrappers are provided for many of the factory methods that the time
+                              package offers.
+                            format: date-time
+                            nullable: true
+                            type: string
+                          lastTransitionTime:
+                            description: >-
+                              Time is a wrapper around time.Time which supports correct marshaling to YAML
+                              and JSON.  Wrappers are provided for many of the factory methods that the time
+                              package offers.
+                            format: date-time
+                            nullable: true
+                            type: string
+                          message:
+                            nullable: true
+                            type: string
+                          reason:
+                            nullable: true
+                            type: string
+                          status:
+                            enum:
+                            - "True"
+                            - "False"
+                            - Unknown
+                            type: string
+                          type:
+                            type: string
+                        required:
+                        - status
+                        - type
+                        type: object
+                      type: array
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                    port:
+                      format: uint16
+                      maximum: 65535.0
+                      minimum: 0.0
+                      nullable: true
+                      type: integer
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                type: array
+              conditions:
+                default: []
+                items:
+                  properties:
+                    lastProbeTime:
+                      description: >-
+                        Time is a wrapper around time.Time which supports correct marshaling to YAML
+                        and JSON.  Wrappers are provided for many of the factory methods that the time
+                        package offers.
+                      format: date-time
+                      nullable: true
+                      type: string
+                    lastTransitionTime:
+                      description: >-
+                        Time is a wrapper around time.Time which supports correct marshaling to YAML
+                        and JSON.  Wrappers are provided for many of the factory methods that the time
+                        package offers.
+                      format: date-time
+                      nullable: true
+                      type: string
+                    message:
+                      nullable: true
+                      type: string
+                    reason:
+                      nullable: true
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+            type: object
+        required:
+        - spec
+        title: ReservationSet
+        type: object
+        x-kubernetes-validations:
+        - message: start be larger or equal than 1024
+          rule: self.spec.start >= 1024
+        - message: end be smaller or equal than 49151
+          rule: self.spec.end <= 49151
+        - message: start must be smaller or equal than end
+          rule: self.spec.start <= self.spec.end
+    served: true
+    storage: true
+    subresources:
+      status: {}

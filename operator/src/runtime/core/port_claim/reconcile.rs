@@ -4,7 +4,7 @@ use crate::{
     runtime::{CtfError, CtfState},
     util::Reconciler,
 };
-use ctf_cli::k8s::{ConditionStatus, PortClaim, PortClaimStatus, ReservationSet};
+use ctf_core::k8s::{ConditionStatus, PortClaim, PortClaimStatus, ReservationSet};
 use kube::{runtime::controller::Action, runtime::reflector::ObjectRef, ResourceExt};
 use rand::RngExt;
 
@@ -59,7 +59,7 @@ impl Reconciler for PortClaimReconciler {
     }
 }
 
-fn conditions_true_excluding_ready(conditions: &ctf_cli::k8s::Conditions) -> bool {
+fn conditions_true_excluding_ready(conditions: &ctf_core::k8s::Conditions) -> bool {
     let mut clone = conditions.clone();
     clone.remove("Ready");
     clone.all_true()
@@ -233,7 +233,7 @@ fn pick_free_port_with_rng(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ctf_cli::k8s::{PortClaimSpec, ReservationRef};
+    use ctf_core::k8s::{PortClaimSpec, ReservationRef};
     use rand::SeedableRng;
 
     fn claim(

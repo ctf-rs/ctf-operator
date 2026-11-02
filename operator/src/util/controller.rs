@@ -106,6 +106,7 @@ impl<R: Reconciler> Controller<R> {
         } = self;
 
         controller
+            .shutdown_on_signal()
             .run(R::reconcile, R::error_policy, ctx)
             .for_each(|_reconcileres| async {})
             .await;

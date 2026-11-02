@@ -97,10 +97,11 @@ impl<K: KubeObject> Watcher<K> {
     where
         K: Send,
     {
-        let streams = self
-            .apis
-            .into_iter()
-            .map(|api| kube::runtime::watcher(api, self.config.clone()).boxed());
+        let streams = self.apis.into_iter().map(|api| {
+            kube::runtime::watcher(api, self.config.clone())
+                .default_backoff()
+                .boxed()
+        });
         select_all(streams).reflect_shared(self.writer)
     }
 
@@ -122,6 +123,7 @@ impl<K: KubeObject> Watcher<K> {
     {
         let streams = self.apis.into_iter().map(|api| {
             kube::runtime::watcher(api, self.config.clone())
+                .default_backoff()
                 .index(Arc::clone(&index))
                 .boxed()
         });

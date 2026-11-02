@@ -10,7 +10,11 @@ pub enum ValidationError {
     ServiceReservationStartGreaterThanEnd,
     #[error("There are multiple flags with same name")]
     DuplicateFlagName,
-    #[error("There are multiple containers with same name")]
+    #[error("Instancing requires at least one service")]
+    InstancingWithoutServices,
+    #[error("Static flag {0} cannot declare randomization; bind it to a service first")]
+    RandomStaticFlag(String),
+    #[error("There are multiple services with same name")]
     DuplicateContainerName,
     #[error("Container contains duplicate flag name")]
     DuplicateContainerFlagName,
@@ -18,7 +22,7 @@ pub enum ValidationError {
     UnknownContainerFlagReference,
     #[error("Container contains duplicate port name")]
     DuplicateContainerPortName,
-    #[error("Challenge port names must be unique across all containers")]
+    #[error("Challenge port names must be unique across all services")]
     DuplicateChallengePortName,
     #[error("Container env names must be unique")]
     DuplicateContainerEnv,

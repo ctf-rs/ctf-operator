@@ -4,7 +4,7 @@ use crate::{
     runtime::{CtfError, CtfState, MANAGED_BY_LABEL, MANAGED_BY_VALUE},
     util::Reconciler,
 };
-use ctf_cli::k8s::{ConditionStatus, Ctf, CtfStatus, ReservationSet, ReservationSetSpec};
+use ctf_core::k8s::{ConditionStatus, Ctf, CtfStatus, ReservationSet, ReservationSetSpec};
 use kube::{
     api::{ObjectMeta, Patch, PatchParams},
     runtime::controller::Action,
@@ -101,7 +101,7 @@ async fn ensure_reservation_set(
 }
 
 fn validate_spec(resource: &Ctf, status: &mut CtfStatus) {
-    let core = ctf_cli::models::Ctf {
+    let core = ctf_core::models::Ctf {
         name: resource.name_any(),
         full_name: resource.spec.full_name.clone(),
         description: resource.spec.description.clone(),
@@ -148,7 +148,7 @@ fn validate_spec(resource: &Ctf, status: &mut CtfStatus) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ctf_cli::k8s::CtfSpec;
+    use ctf_core::k8s::CtfSpec;
 
     fn valid_ctf() -> Ctf {
         let mut ctf = Ctf::new(
@@ -159,21 +159,21 @@ mod tests {
                 public: false,
                 instance_duration_seconds: 15 * 60,
                 challenges: vec!["chall-1".to_string()],
-                flag: ctf_cli::models::CtfFlag {
+                flag: ctf_core::models::CtfFlag {
                     prefix: "SCC".to_string(),
-                    format: ctf_cli::models::FlagFormat::Curly,
+                    format: ctf_core::models::FlagFormat::Curly,
                     random: None,
-                    options: ctf_cli::models::FlagMatchOptions::default(),
+                    options: ctf_core::models::FlagMatchOptions::default(),
                 },
-                network: ctf_cli::models::CtfNetwork {
-                    ports: ctf_cli::models::CtfPorts {
+                network: ctf_core::models::CtfNetwork {
+                    ports: ctf_core::models::CtfPorts {
                         start: 20000,
                         end: 20100,
                     },
                     ip: None,
                 },
-                scoreboard: ctf_cli::models::CtfScoreboard::default(),
-                schedule: ctf_cli::models::CtfSchedule::default(),
+                scoreboard: ctf_core::models::CtfScoreboard::default(),
+                schedule: ctf_core::models::CtfSchedule::default(),
             },
         );
         ctf.metadata.namespace = Some("ctf".to_string());
