@@ -1,293 +1,177 @@
-use anyhow::{bail, Context};
-use ctf_cli::models::{Challenge, ContainerImage};
 use std::{
-    collections::HashSet,
+    collections::BTreeMap,
+    fs,
     path::{Path, PathBuf},
 };
+
+use anyhow::{ensure, Context, Result};
+use serde::Serialize;
 use tokio::process::Command;
 
 use crate::{
-    cli::{Backend, BuildArgs},
-    read_challenge, read_ctf,
+    manifest::{FileReference, Image, LoadedChallenge, Project},
+    process::{self, Format},
+    ui::Ui,
 };
 
-pub async fn build(args: BuildArgs) -> anyhow::Result<()> {
-    let BuildArgs {
-        ctf,
-        challenges,
-        backend,
-        publish,
-    } = args;
+#[derive(Debug, Serialize)]
+pub struct BuiltChallenge {
+    pub services: BTreeMap<String, String>,
+    pub exports: BTreeMap<String, PathBuf>,
+    pub files: Vec<PathBuf>,
+}
 
-    let ctf_dir = ctf
-        .parent()
-        .context("ctf yaml must have parent directory")?
-        .to_path_buf();
+#[derive(Debug, Serialize)]
+pub struct BuildOutput {
+    pub run: String,
+    pub directory: PathBuf,
+    pub challenges: BTreeMap<String, BuiltChallenge>,
+}
 
-    let ctf = read_ctf(ctf).await?;
-
-    if ctf.challenges.is_empty() {
-        bail!("ctf has no challenges configured");
-    }
-
-    let challenge_items = load_challenges(&ctf_dir, &ctf.challenges).await?;
-    let selected = select_challenges(challenge_items, challenges)?;
-
-    let publish_registry = if publish {
-        Some(
-            ctf.registry
-                .as_ref()
-                .context("--publish requires ctf.registry.url")?
-                .url
-                .trim_end_matches('/')
-                .to_owned(),
-        )
-    } else {
-        None
+pub async fn project(project: &Project, output: &Path, ui: &Ui) -> Result<BuildOutput> {
+    let run = format!("{:016x}", rand::random::<u64>());
+    fs::create_dir_all(output)
+        .with_context(|| format!("could not create output {}", output.display()))?;
+    let directory = output.canonicalize()?.join(format!("run-{run}"));
+    fs::create_dir(&directory)?;
+    let mut result = BuildOutput {
+        run,
+        directory,
+        challenges: BTreeMap::new(),
     };
-
-    build_selected_challenges(&selected, publish_registry.as_deref(), backend).await
+    for challenge in &project.challenges {
+        let built = challenge_build(challenge, &result.directory, &result.run, ui).await?;
+        result
+            .challenges
+            .insert(challenge.manifest.name.clone(), built);
+    }
+    fs::write(
+        result.directory.join("build.json"),
+        serde_json::to_vec_pretty(&result)?,
+    )?;
+    ui.message(format!("Build outputs: {}", result.directory.display()));
+    Ok(result)
 }
 
-async fn load_challenges(
-    ctf_dir: &Path,
-    challenge_paths: &[PathBuf],
-) -> anyhow::Result<Vec<(PathBuf, Challenge)>> {
-    let mut items = Vec::new();
-    let mut seen_names = HashSet::<String>::new();
-    for rel_path in challenge_paths {
-        let path = ctf_dir.join(rel_path);
-        let challenge = read_challenge(path.clone()).await?;
-        if !seen_names.insert(challenge.name.clone()) {
-            bail!(
-                "duplicate challenge name in ctf challenge files: {}",
-                challenge.name
-            );
-        }
-        items.push((path, challenge));
+async fn challenge_build(
+    challenge: &LoadedChallenge,
+    output: &Path,
+    run: &str,
+    ui: &Ui,
+) -> Result<BuiltChallenge> {
+    let name = &challenge.manifest.name;
+    let root = output.join(name);
+    fs::create_dir(&root)?;
+    let mut services = BTreeMap::new();
+    for service in &challenge.manifest.services {
+        let tag = format!("ctf-local/{name}/{}:{run}", service.name);
+        let image = image(
+            &service.image,
+            &challenge.directory,
+            &tag,
+            None,
+            &root.join(format!("service-{}", service.name)),
+            ui,
+        )
+        .await?;
+        services.insert(service.name.clone(), image);
     }
-    Ok(items)
-}
-
-fn select_challenges(
-    challenge_items: Vec<(PathBuf, Challenge)>,
-    requested: Vec<String>,
-) -> anyhow::Result<Vec<(PathBuf, Challenge)>> {
-    let requested_names = requested.into_iter().collect::<HashSet<_>>();
-    if requested_names.is_empty() {
-        return Ok(challenge_items);
+    let mut exports = BTreeMap::new();
+    for entry in &challenge.manifest.build {
+        let destination = root.join(format!("build-{}", entry.name));
+        fs::create_dir(&destination)?;
+        image(
+            &entry.image,
+            &challenge.directory,
+            &format!("ctf-local/{name}/{}:{run}", entry.name),
+            Some(&destination),
+            &root.join(format!("generator-{}", entry.name)),
+            ui,
+        )
+        .await?;
+        exports.insert(entry.name.clone(), destination);
     }
-
-    let selected = challenge_items
-        .into_iter()
-        .filter(|(_, challenge)| requested_names.contains(&challenge.name))
-        .collect::<Vec<_>>();
-
-    let available = selected
-        .iter()
-        .map(|(_, challenge)| challenge.name.clone())
-        .collect::<HashSet<_>>();
-    let missing = requested_names
-        .difference(&available)
-        .cloned()
-        .collect::<Vec<_>>();
-
-    if !missing.is_empty() {
-        bail!(
-            "requested challenge name(s) not found in ctf challenge YAML names: {}",
-            missing.join(", ")
+    let file_directory = root.join("files");
+    fs::create_dir(&file_directory)?;
+    let mut files = Vec::new();
+    for value in &challenge.manifest.files {
+        let source = FileReference::parse(value)?.resolve(&challenge.directory, &exports)?;
+        ensure!(
+            source.is_file(),
+            "participant artifact is not a file: {}",
+            source.display()
         );
+        let destination = file_directory.join(source.file_name().context("file has no name")?);
+        ensure!(!destination.exists(), "participant filenames collide");
+        fs::copy(&source, &destination).with_context(|| {
+            format!(
+                "could not export {} to {}",
+                source.display(),
+                destination.display()
+            )
+        })?;
+        files.push(destination);
     }
-
-    Ok(selected)
+    Ok(BuiltChallenge {
+        services,
+        exports,
+        files,
+    })
 }
 
-async fn build_selected_challenges(
-    selected: &[(PathBuf, Challenge)],
-    publish_registry: Option<&str>,
-    backend: Backend,
-) -> anyhow::Result<()> {
-    for (challenge_path, challenge) in selected {
-        let challenge_dir = challenge_path
-            .parent()
-            .context("challenge yaml must have parent directory")?
-            .to_path_buf();
-
-        for container in &challenge.containers {
-            if let ContainerImage::Dockerfile { path } = &container.image {
-                let dockerfile_path = challenge_dir.join(path);
-
-                if !dockerfile_path.exists() {
-                    bail!(
-                        "Container: {} Dockerfile not found at {}",
-                        container.name,
-                        dockerfile_path.display()
+pub async fn image(
+    source: &Image,
+    directory: &Path,
+    tag: &str,
+    export: Option<&Path>,
+    log: &Path,
+    ui: &Ui,
+) -> Result<String> {
+    let task = ui.task(format!("image {tag}"));
+    let result = async {
+        let mut command = Command::new("docker");
+        match source {
+            Image::Image { image } => {
+                ensure!(
+                    export.is_none(),
+                    "filesystem generation requires a Dockerfile source"
+                );
+                command.args(["pull", image]);
+                process::run(command, ui, &task, Format::Text, log).await?;
+                Ok(image.clone())
+            }
+            Image::Dockerfile {
+                context,
+                path,
+                target,
+            } => {
+                let context = directory.join(context).canonicalize()?;
+                let dockerfile = context.join(path).canonicalize()?;
+                command.args(["buildx", "build", "--progress=rawjson", "--file"]);
+                command.arg(&dockerfile);
+                if let Some(target) = target {
+                    command.args(["--target", target]);
+                }
+                if let Some(destination) = export {
+                    let destination = destination.to_str().context("export path must be UTF-8")?;
+                    ensure!(
+                        !destination.contains(','),
+                        "export path cannot contain a comma"
                     );
+                    command.args(["--output", &format!("type=local,dest={destination}")]);
+                } else {
+                    command.args(["--load", "--tag", tag]);
                 }
-
-                let context_dir = dockerfile_path
-                    .parent()
-                    .context("Dockerfile must have parent directory")?;
-
-                let local_tag = format!("{}/{}:latest", challenge.name, container.name);
-                let publish_tag = publish_registry.map(|registry| {
-                    format!("{registry}/{}/{}:latest", challenge.name, container.name)
-                });
-
-                println!("Building container {} with {backend:?}", container.name);
-
-                match backend {
-                    Backend::Docker => {
-                        docker_build(
-                            &dockerfile_path,
-                            context_dir,
-                            &local_tag,
-                            publish_tag.as_deref(),
-                        )
-                        .await?;
-                    }
-                    Backend::Buildah => {
-                        buildah_build(
-                            &dockerfile_path,
-                            context_dir,
-                            &local_tag,
-                            publish_tag.as_deref(),
-                        )
-                        .await?;
-                    }
-                    Backend::Podman => {
-                        podman_build(
-                            &dockerfile_path,
-                            context_dir,
-                            &local_tag,
-                            publish_tag.as_deref(),
-                        )
-                        .await?;
-                    }
-                }
+                command.arg(context);
+                process::run(command, ui, &task, Format::BuildKit, log).await?;
+                Ok(tag.to_owned())
             }
         }
     }
-
-    Ok(())
-}
-
-/// Run a command and stream stdout/stderr to the current terminal.
-/// Returns error if exit status != 0.
-async fn run_streamed(mut cmd: Command) -> anyhow::Result<()> {
-    cmd.stdin(std::process::Stdio::null());
-    cmd.stdout(std::process::Stdio::inherit());
-    cmd.stderr(std::process::Stdio::inherit());
-
-    let status = cmd
-        .status()
-        .await
-        .with_context(|| format!("failed to spawn command: {cmd:?}"))?;
-
-    if !status.success() {
-        bail!("command failed with exit status: {status}");
+    .await;
+    match &result {
+        Ok(_) => task.pass("Ready"),
+        Err(error) => task.fail(format!("{error:#}")),
     }
-
-    Ok(())
-}
-
-/// Build an image using Docker.
-/// Equivalent to: `docker build -f <Dockerfile> -t <tag> <context>`
-pub async fn docker_build(
-    dockerfile_path: &Path,
-    context_dir: &Path,
-    local_tag: &str,
-    publish_tag: Option<&str>,
-) -> anyhow::Result<()> {
-    let mut cmd = Command::new("docker");
-    cmd.arg("build")
-        .arg("-f")
-        .arg(dockerfile_path)
-        .arg("-t")
-        .arg(local_tag)
-        .arg(context_dir);
-
-    run_streamed(cmd).await?;
-
-    if let Some(publish_tag) = publish_tag {
-        if publish_tag != local_tag {
-            let mut cmd = Command::new("docker");
-            cmd.arg("tag").arg(local_tag).arg(publish_tag);
-            run_streamed(cmd).await?;
-        }
-
-        let mut cmd = Command::new("docker");
-        cmd.arg("push").arg(publish_tag);
-
-        run_streamed(cmd).await?;
-    }
-
-    Ok(())
-}
-
-/// Build an image using Buildah.
-/// Equivalent to: `buildah bud -f <Dockerfile> -t <tag> <context>`
-pub async fn buildah_build(
-    dockerfile_path: &Path,
-    context_dir: &Path,
-    local_tag: &str,
-    publish_tag: Option<&str>,
-) -> anyhow::Result<()> {
-    let mut cmd = Command::new("buildah");
-    cmd.arg("bud")
-        .arg("-f")
-        .arg(dockerfile_path)
-        .arg("-t")
-        .arg(local_tag)
-        .arg(context_dir);
-
-    run_streamed(cmd).await?;
-
-    if let Some(publish_tag) = publish_tag {
-        if publish_tag != local_tag {
-            let mut cmd = Command::new("buildah");
-            cmd.arg("tag").arg(local_tag).arg(publish_tag);
-            run_streamed(cmd).await?;
-        }
-
-        let mut cmd = Command::new("buildah");
-        cmd.arg("push")
-            .arg(publish_tag)
-            .arg(format!("docker://{publish_tag}"));
-
-        run_streamed(cmd).await?;
-    }
-
-    Ok(())
-}
-
-pub async fn podman_build(
-    dockerfile_path: &Path,
-    context_dir: &Path,
-    local_tag: &str,
-    publish_tag: Option<&str>,
-) -> anyhow::Result<()> {
-    let mut cmd = Command::new("podman");
-    cmd.arg("build")
-        .arg("-f")
-        .arg(dockerfile_path)
-        .arg("-t")
-        .arg(local_tag)
-        .arg(context_dir);
-
-    run_streamed(cmd).await?;
-
-    if let Some(publish_tag) = publish_tag {
-        if publish_tag != local_tag {
-            let mut cmd = Command::new("podman");
-            cmd.arg("tag").arg(local_tag).arg(publish_tag);
-            run_streamed(cmd).await?;
-        }
-
-        let mut cmd = Command::new("podman");
-        cmd.arg("push").arg(publish_tag);
-        run_streamed(cmd).await?;
-    }
-
-    Ok(())
+    result
 }
