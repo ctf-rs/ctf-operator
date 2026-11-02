@@ -443,7 +443,6 @@ dependencies = [
  "crossterm_winapi",
  "derive_more",
  "document-features",
- "futures-core",
  "mio",
  "parking_lot 0.12.5",
  "rustix",
@@ -497,7 +496,6 @@ dependencies = [
  "anyhow",
  "base64 0.22.1",
  "clap",
- "crossterm",
  "ctf-core",
  "futures",
  "k8s-openapi",
@@ -512,6 +510,7 @@ dependencies = [
  "serde-saphyr",
  "serde_json",
  "tokio",
+ "unicode-width",
  "url",
 ]
 
