@@ -1426,9 +1426,35 @@ fn build_container(
                 ..Default::default()
             }
         }),
+        readiness_probe: readiness_probe(container),
         volume_mounts,
         ..Default::default()
     }
+}
+
+/// Marks a container ready only once it accepts TCP connections on its primary port (the first
+/// exposed port, else the first port), so instances do not report Ready while a service such as
+/// a database is still initializing. Timings are Kubernetes' defaults, spelled out so the applied
+/// spec matches the stored one.
+fn readiness_probe(
+    container: &ctf_core::k8s::ChallengeService,
+) -> Option<k8s_openapi::api::core::v1::Probe> {
+    let port = container
+        .ports
+        .iter()
+        .find(|port| port.expose)
+        .or_else(|| container.ports.first())?;
+    Some(k8s_openapi::api::core::v1::Probe {
+        tcp_socket: Some(k8s_openapi::api::core::v1::TCPSocketAction {
+            port: IntOrString::Int(i32::from(port.container_port)),
+            ..Default::default()
+        }),
+        period_seconds: Some(10),
+        timeout_seconds: Some(1),
+        success_threshold: Some(1),
+        failure_threshold: Some(3),
+        ..Default::default()
+    })
 }
 
 async fn ensure_services(
@@ -1890,6 +1916,32 @@ mod tests {
         );
 
         assert!(metadata.owner_references.is_none());
+    }
+
+    #[test]
+    fn readiness_probe_targets_the_exposed_port() {
+        let port = |name: &str, number, expose| ctf_core::models::ContainerPort {
+            name: name.to_string(),
+            container_port: number,
+            expose,
+            port_type: ctf_core::models::ChallengePortType::HTTP,
+            env: None,
+        };
+        let mut service = ctf_core::k8s::ChallengeService {
+            name: "web".to_string(),
+            image: "web".to_string(),
+            env: vec![],
+            flags: vec![],
+            ports: vec![port("admin", 8080, false), port("http", 3000, true)],
+            kata: None,
+        };
+        let probe = readiness_probe(&service).expect("probe for a service with ports");
+        assert_eq!(
+            probe.tcp_socket.map(|tcp| tcp.port),
+            Some(IntOrString::Int(3000))
+        );
+        service.ports.clear();
+        assert!(readiness_probe(&service).is_none());
     }
 
     #[test]
