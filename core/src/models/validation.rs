@@ -14,6 +14,8 @@ pub enum ValidationError {
     InstancingWithoutServices,
     #[error("Static flag {0} cannot declare randomization; bind it to a service first")]
     RandomStaticFlag(String),
+    #[error("Flag {0} is baked into the challenge, so every instance would share it; inject it into a service or disable instancing")]
+    InstancedStaticFlag(String),
     #[error("There are multiple services with same name")]
     DuplicateContainerName,
     #[error("Container contains duplicate flag name")]

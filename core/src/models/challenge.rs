@@ -387,8 +387,13 @@ impl Challenge {
             if !flag_names.insert(flag.name.as_str()) {
                 return Err(ValidationError::DuplicateFlagName);
             }
-            if flag.random.is_some() && self.flag_binding(&flag.name) == FlagBinding::Static {
-                return Err(ValidationError::RandomStaticFlag(flag.name.clone()));
+            if self.flag_binding(&flag.name) == FlagBinding::Static {
+                if flag.random.is_some() {
+                    return Err(ValidationError::RandomStaticFlag(flag.name.clone()));
+                }
+                if self.instancing {
+                    return Err(ValidationError::InstancedStaticFlag(flag.name.clone()));
+                }
             }
         }
 
@@ -552,5 +557,44 @@ mod tests {
             challenge.validate_strict(),
             Err(ValidationError::RandomStaticFlag(_))
         ));
+    }
+
+    #[test]
+    fn instanced_challenges_must_inject_every_flag() {
+        let service = ChallengeService {
+            name: "app".into(),
+            image: ContainerImage::Image {
+                image: "app".into(),
+            },
+            env: Vec::new(),
+            flags: Vec::new(),
+            ports: Vec::new(),
+            kata: None,
+        };
+        let mut challenge = Challenge {
+            name: "hosted".into(),
+            full_name: "Hosted".into(),
+            instancing: true,
+            flags: vec![ChallengeFlag {
+                name: "main".into(),
+                body: "literal".into(),
+                ..ChallengeFlag::default()
+            }],
+            services: vec![service],
+            ..Challenge::default()
+        };
+        assert!(matches!(
+            challenge.validate_strict(),
+            Err(ValidationError::InstancedStaticFlag(_))
+        ));
+        challenge.services[0].flags.push(ContainerFlag {
+            name: "main".into(),
+            env: Some("FLAG".into()),
+            file: None,
+        });
+        assert_eq!(challenge.validate_strict(), Ok(()));
+        challenge.services[0].flags.clear();
+        challenge.instancing = false;
+        assert_eq!(challenge.validate_strict(), Ok(()));
     }
 }
