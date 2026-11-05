@@ -411,14 +411,14 @@ impl Challenge {
 
             let mut container_flag_names = HashSet::<&str>::new();
             let mut container_env_names = HashSet::<&str>::new();
+            for env in &container.env {
+                if !container_env_names.insert(&env.name) {
+                    return Err(ValidationError::DuplicateContainerEnv);
+                }
+            }
             for flag in &container.flags {
                 if !container_flag_names.insert(flag.name.as_str()) {
                     return Err(ValidationError::DuplicateContainerFlagName);
-                }
-                for env in &container.env {
-                    if !container_env_names.insert(&env.name) {
-                        return Err(ValidationError::DuplicateContainerEnv);
-                    }
                 }
 
                 if flag.env.is_none() && flag.file.is_none() {
@@ -596,5 +596,95 @@ mod tests {
         challenge.services[0].flags.clear();
         challenge.instancing = false;
         assert_eq!(challenge.validate_strict(), Ok(()));
+    }
+
+    #[test]
+    fn container_env_uniqueness_is_checked_once_not_once_per_flag() {
+        // Regression test: a service with 2+ flags plus any service-level
+        // env: entries used to falsely trigger DuplicateContainerEnv,
+        // because the env-name uniqueness check was nested inside the
+        // per-flag loop and re-inserted the same env names on every flag
+        // iteration instead of once per container.
+        let service = ChallengeService {
+            name: "app".into(),
+            image: ContainerImage::Image {
+                image: "app".into(),
+            },
+            env: vec![ContainerEnv {
+                name: "BOT_ORIGIN".into(),
+                value: "http://localhost".into(),
+            }],
+            flags: vec![
+                ContainerFlag {
+                    name: "flag1".into(),
+                    env: Some("FLAG1".into()),
+                    file: None,
+                },
+                ContainerFlag {
+                    name: "flag2".into(),
+                    env: Some("FLAG2".into()),
+                    file: None,
+                },
+            ],
+            ports: Vec::new(),
+            kata: None,
+        };
+        let challenge = Challenge {
+            name: "multi-flag".into(),
+            full_name: "Multi Flag".into(),
+            instancing: true,
+            flags: vec![
+                ChallengeFlag {
+                    name: "flag1".into(),
+                    body: "literal1".into(),
+                    ..ChallengeFlag::default()
+                },
+                ChallengeFlag {
+                    name: "flag2".into(),
+                    body: "literal2".into(),
+                    ..ChallengeFlag::default()
+                },
+            ],
+            services: vec![service],
+            ..Challenge::default()
+        };
+        assert_eq!(challenge.validate_strict(), Ok(()));
+    }
+
+    #[test]
+    fn duplicate_container_env_names_are_still_rejected() {
+        let service = ChallengeService {
+            name: "app".into(),
+            image: ContainerImage::Image {
+                image: "app".into(),
+            },
+            env: vec![ContainerEnv {
+                name: "DUPLICATE".into(),
+                value: "a".into(),
+            }],
+            flags: vec![ContainerFlag {
+                name: "main".into(),
+                env: Some("DUPLICATE".into()),
+                file: None,
+            }],
+            ports: Vec::new(),
+            kata: None,
+        };
+        let challenge = Challenge {
+            name: "dup-env".into(),
+            full_name: "Dup Env".into(),
+            instancing: true,
+            flags: vec![ChallengeFlag {
+                name: "main".into(),
+                body: "literal".into(),
+                ..ChallengeFlag::default()
+            }],
+            services: vec![service],
+            ..Challenge::default()
+        };
+        assert_eq!(
+            challenge.validate_strict(),
+            Err(ValidationError::DuplicateContainerEnv)
+        );
     }
 }
