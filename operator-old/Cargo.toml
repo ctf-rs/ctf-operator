@@ -12,7 +12,7 @@ telemetry = ["opentelemetry-otlp"]
 anyhow = "1.0.102"
 cfg-if = "1.0.4"
 clap = { version = "4.5.60", features = ["derive", "env", "std"] }
-parking_lot = "0.12.5"
+parking_lot = "0.13.0"
 thiserror = "2.0.18"
 schemars = { version = "1.2.1", features = ["uuid1"] }
 jiff = "0.2.23"
