@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
-base64 = "0.22.1"
+base64 = "0.23.0"
 clap = { workspace = true, features = ["derive"] }
 ctf-core = { path = "../core" }
 futures = { workspace = true }
