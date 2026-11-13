@@ -1,4 +1,4 @@
-FROM rust:1.95 AS builder
+FROM rust:1.100 AS builder
 
 WORKDIR /usr/src/ctf-operator
 
